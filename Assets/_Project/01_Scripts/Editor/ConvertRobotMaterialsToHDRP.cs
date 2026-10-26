@@ -5,9 +5,16 @@ using System.Linq;
 using System.IO;
 
 /// <summary>
-/// Конвертирует встроенные Standard-материалы в Robot.fbx и ScaraRobot.fbx
-/// в отдельные HDRP/Lit материалы.
+/// Конвертирует встроенные Standard/Legacy-материалы моделей (Robot.fbx, ScaraRobot.fbx)
+/// в отдельные Lit-материалы ТЕКУЩЕГО конвейера проекта.
 /// НЕ трогает материалы ангара (ROOMS/HQ Hangar Free).
+///
+/// ЧТО ИЗМЕНИЛОСЬ В §29. Раньше здесь жёстко брался шейдер `HDRP/Lit`: при работе редактора
+/// на URP инструмент создавал бы материалы чужого конвейера, то есть РОЗОВЫЕ. Решение [D9]
+/// держит в проекте два конвейера сразу (URP для шлема, HDRP для компьютера), поэтому шейдер
+/// берётся у `KvRenderPipelineShaders` — той же фабрики, что и в рантайм-коде, — а свойства
+/// цвета/текстур пишутся по факту их наличия (`_BaseColor`/`_Color`, `_BaseMap`/`_BaseColorMap`).
+/// Имя класса и пункт меню оставлены узнаваемыми, но теперь это «под текущий конвейер».
 /// </summary>
 public class ConvertRobotMaterialsToHDRP : EditorWindow
 {
@@ -17,20 +24,20 @@ public class ConvertRobotMaterialsToHDRP : EditorWindow
         "Assets/Robots/ScaraRobot.fbx"
     };
 
-    [MenuItem("Tools/Robots/Convert Materials to HDRP/Lit")]
+    [MenuItem("Tools/Robots/Convert Materials to Pipeline Lit (HDRP/URP)")]
     public static void ShowWindow()
     {
         GetWindow<ConvertRobotMaterialsToHDRP>("Convert Robot Materials");
     }
 
-    [MenuItem("Tools/Robots/Convert Materials to HDRP/Lit", true)]
+    [MenuItem("Tools/Robots/Convert Materials to Pipeline Lit (HDRP/URP)", true)]
     public static bool ValidateConvert()
     {
         // FBX загружается как GameObject, поэтому проверяем тип Object.
         return TARGET_FBX_PATHS.All(path => AssetDatabase.LoadAssetAtPath<Object>(path) != null);
     }
 
-    [ContextMenu("Convert Embedded Materials to HDRP/Lit")]
+    [ContextMenu("Convert Embedded Materials to Pipeline Lit")]
     public static void Convert()
     {
         int convertedCount = 0;
@@ -153,65 +160,88 @@ public class ConvertRobotMaterialsToHDRP : EditorWindow
             return AssetDatabase.LoadAssetAtPath<Material>(matPath);
         }
 
-        // Create new HDRP/Lit material
-        Shader hdrpLitShader = Shader.Find("HDRP/Lit");
-        if (hdrpLitShader == null)
+        // МАТЕРИАЛ СОЗДАЁТСЯ ПОД ТЕКУЩИЙ КОНВЕЙЕР ПРОЕКТА, а не под жёстко названный HDRP:
+        // в проекте их два (решение [D9]), и шейдер чужого конвейера — это розовая модель.
+        Shader litShader = KazistovVvFeatures.KvRenderPipelineShaders.FindLit();
+        if (litShader == null)
         {
-            Debug.LogError("[ConvertRobotMaterials] HDRP/Lit shader not found! Make sure HDRP is installed.");
+            Debug.LogError("[ConvertRobotMaterials] Lit-шейдер текущего конвейера не найден — " +
+                           "материал не создан. Проверьте пакеты URP/HDRP.");
             return null;
         }
 
-        Material newMat = new Material(hdrpLitShader);
+        Material newMat = new Material(litShader);
         newMat.name = newMatName;
 
-        // Base color: у Standard свойство _Color, у HDRP/Lit — _BaseColor
-        if (oldMat.HasProperty("_Color"))
-            newMat.SetColor("_BaseColor", oldMat.GetColor("_Color"));
-        else if (oldMat.HasProperty("_BaseColor"))
-            newMat.SetColor("_BaseColor", oldMat.GetColor("_BaseColor"));
-        else
-            newMat.SetColor("_BaseColor", Color.white);
+        // Цвет: у Standard он в `_Color`, у URP/HDRP Lit — в `_BaseColor`. Кладётся тем же
+        // способом, что и в рантайме: по факту наличия свойства, без угадывания имени.
+        Color baseColor = oldMat.HasProperty("_Color") ? oldMat.GetColor("_Color")
+            : (oldMat.HasProperty("_BaseColor") ? oldMat.GetColor("_BaseColor") : Color.white);
+        if (!KazistovVvFeatures.KvRenderPipelineShaders.ApplyColor(newMat, baseColor, false))
+            Debug.LogWarning("[ConvertRobotMaterials] у шейдера " + litShader.name +
+                             " нет свойства цвета — цвет не перенесён.");
 
         // Metallic — только скаляр (у Standard нет упакованной карты)
-        newMat.SetFloat("_Metallic", oldMat.HasProperty("_Metallic") ? oldMat.GetFloat("_Metallic") : 0f);
+        if (newMat.HasProperty("_Metallic"))
+            newMat.SetFloat("_Metallic", oldMat.HasProperty("_Metallic") ? oldMat.GetFloat("_Metallic") : 0f);
 
         // Smoothness: _Glossiness (Standard) или _Smoothness
-        if (oldMat.HasProperty("_Glossiness"))
-            newMat.SetFloat("_Smoothness", oldMat.GetFloat("_Glossiness"));
-        else
-            newMat.SetFloat("_Smoothness", oldMat.HasProperty("_Smoothness") ? oldMat.GetFloat("_Smoothness") : 0.5f);
+        if (newMat.HasProperty("_Smoothness"))
+        {
+            float smoothness = oldMat.HasProperty("_Glossiness") ? oldMat.GetFloat("_Glossiness")
+                : (oldMat.HasProperty("_Smoothness") ? oldMat.GetFloat("_Smoothness") : 0.5f);
+            newMat.SetFloat("_Smoothness", smoothness);
+        }
 
-        // Normal map
-        if (oldMat.HasProperty("_BumpMap") && oldMat.GetTexture("_BumpMap") != null)
-            newMat.SetTexture("_NormalMap", oldMat.GetTexture("_BumpMap"));
-        if (oldMat.HasProperty("_BumpScale"))
-            newMat.SetFloat("_NormalScale", oldMat.GetFloat("_BumpScale"));
+        // Normal map: у HDRP/Lit это `_NormalMap`, у URP/Lit — `_BumpMap` (как у Standard).
+        Texture normal = oldMat.HasProperty("_BumpMap") ? oldMat.GetTexture("_BumpMap") : null;
+        if (normal == null && oldMat.HasProperty("_NormalMap")) normal = oldMat.GetTexture("_NormalMap");
+        if (normal != null)
+        {
+            if (newMat.HasProperty("_NormalMap")) newMat.SetTexture("_NormalMap", normal);
+            if (newMat.HasProperty("_BumpMap")) newMat.SetTexture("_BumpMap", normal);
+        }
+        float normalScale = oldMat.HasProperty("_BumpScale") ? oldMat.GetFloat("_BumpScale")
+            : (oldMat.HasProperty("_NormalScale") ? oldMat.GetFloat("_NormalScale") : 1f);
+        if (newMat.HasProperty("_NormalScale")) newMat.SetFloat("_NormalScale", normalScale);
+        if (newMat.HasProperty("_BumpScale")) newMat.SetFloat("_BumpScale", normalScale);
 
-        // Albedo texture
-        if (oldMat.HasProperty("_MainTex") && oldMat.GetTexture("_MainTex") != null)
-            newMat.SetTexture("_BaseColorMap", oldMat.GetTexture("_MainTex"));
-        if (oldMat.HasProperty("_BaseColorMap") && oldMat.GetTexture("_BaseColorMap") != null)
-            newMat.SetTexture("_BaseColorMap", oldMat.GetTexture("_BaseColorMap"));
+        // Текстура альбедо: `_MainTex` (Standard), `_BaseColorMap` (HDRP/Lit), `_BaseMap` (URP/Lit).
+        Texture albedo = oldMat.HasProperty("_MainTex") ? oldMat.GetTexture("_MainTex") : null;
+        if (albedo == null && oldMat.HasProperty("_BaseColorMap")) albedo = oldMat.GetTexture("_BaseColorMap");
+        if (albedo == null && oldMat.HasProperty("_BaseMap")) albedo = oldMat.GetTexture("_BaseMap");
+        KazistovVvFeatures.KvRenderPipelineShaders.ApplyTexture(newMat, albedo, false);
 
-        // Emission
+        // Emission: ключи у конвейеров разные (`_ENABLE_EMISSION` у HDRP, `_EMISSION` у URP
+        // и встроенного) — включаются оба, лишний ключ у шейдера просто не существует.
         if (oldMat.HasProperty("_EmissionColor") && oldMat.GetColor("_EmissionColor") != Color.black)
         {
-            newMat.SetColor("_EmissiveColor", oldMat.GetColor("_EmissionColor"));
+            Color emission = oldMat.GetColor("_EmissionColor");
+            if (newMat.HasProperty("_EmissiveColor")) newMat.SetColor("_EmissiveColor", emission);
+            if (newMat.HasProperty("_EmissionColor")) newMat.SetColor("_EmissionColor", emission);
+            newMat.EnableKeyword("_EMISSION");
             newMat.EnableKeyword("_ENABLE_EMISSION");
         }
 
-        // Cutoff
+        // Cutoff: `_AlphaCutoff` (HDRP) / `_Cutoff` + `_AlphaClip` (URP и Standard).
         if (oldMat.HasProperty("_Cutoff"))
-            newMat.SetFloat("_AlphaCutoff", oldMat.GetFloat("_Cutoff"));
+        {
+            float cutoff = oldMat.GetFloat("_Cutoff");
+            if (newMat.HasProperty("_AlphaCutoff")) newMat.SetFloat("_AlphaCutoff", cutoff);
+            if (newMat.HasProperty("_Cutoff")) newMat.SetFloat("_Cutoff", cutoff);
+        }
 
-        // Double-sided
+        // Double-sided: `_DoubleSidedEnable` (HDRP) / `_Cull` = 0 (URP).
         if (oldMat.doubleSidedGI)
-            newMat.SetFloat("_DoubleSidedEnable", 1f);
+        {
+            if (newMat.HasProperty("_DoubleSidedEnable")) newMat.SetFloat("_DoubleSidedEnable", 1f);
+            if (newMat.HasProperty("_Cull")) newMat.SetFloat("_Cull", 0f);
+        }
 
         AssetDatabase.CreateAsset(newMat, matPath);
         AssetDatabase.SaveAssets();
 
-        Debug.Log("[ConvertRobotMaterials] Created HDRP/Lit material: " + matPath);
+        Debug.Log("[ConvertRobotMaterials] Создан материал конвейера " + litShader.name + ": " + matPath);
         return newMat;
     }
 

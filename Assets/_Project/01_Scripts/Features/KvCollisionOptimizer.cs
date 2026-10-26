@@ -480,10 +480,11 @@ namespace KazistovVvFeatures
                 previewLines.useWorldSpace = true;
                 previewLines.numCapVertices = 0;
                 previewLines.widthMultiplier = 0.006f;
-                Shader sh = Shader.Find("Sprites/Default");
-                if (sh != null)
+                Material proxyMaterial = KazistovVvFeatures.KvRenderPipelineShaders.CreateLine(
+                    "Материал_капсул", Color.white);
+                if (proxyMaterial != null)
                 {
-                    previewLines.material = new Material(sh);
+                    previewLines.material = proxyMaterial;
                     previewLines.startColor = new Color(0.2f, 0.95f, 1f, 0.9f);
                     previewLines.endColor = new Color(0.2f, 0.95f, 1f, 0.5f);
                 }

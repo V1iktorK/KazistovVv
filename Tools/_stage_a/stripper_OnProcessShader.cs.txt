@@ -1,0 +1,35 @@
+        public void OnProcessShader(Shader shader, ShaderSnippetData snippet, IList<ShaderCompilerData> data)
+        {
+            if (shader == null || data == null || data.Count == 0) return;
+
+            bool postProcessing = IsPostProcessingShader(shader.name);
+            bool stripUrpKeywords = KvUrpKeywordPolicy.StrippedKeywords.Count > 0;
+            if (!postProcessing && !stripUrpKeywords) return;
+
+            // Постобработку не трогаем, если её кто-то рисует (проверка — по файлам сцен).
+            bool postProcessingStrippable = postProcessing && ProjectHasNoPostProcessingCameras();
+
+            if (!_policyLogged)
+            {
+                _policyLogged = true;
+                Debug.Log("[KvStrip] ПОЛИТИКА ОТСЕЧЕНИЯ КЛЮЧЕВЫХ СЛОВ:\n" + KvUrpKeywordPolicy.Describe());
+            }
+
+            int before = data.Count;
+            for (int i = data.Count - 1; i >= 0; i--)
+            {
+                List<string> names = KeywordNames(data[i].shaderKeywordSet);
+
+                bool strip = stripUrpKeywords && KvUrpKeywordPolicy.ShouldStrip(names);
+                if (!strip && postProcessingStrippable) strip = ShouldStripVariant(false, names);
+                if (strip) data.RemoveAt(i);
+            }
+
+            int removed = before - data.Count;
+            if (removed > 0)
+            {
+                Debug.Log("[KvStrip] " + shader.name + " · проход " + snippet.passType +
+                          ": вариантов " + before + " → " + data.Count + " (снято " + removed +
+                          " — слова, которых эта сборка не исполняет)");
+            }
+        }

@@ -181,10 +181,12 @@ namespace KazistovVvFeatures
             {
                 surfaceRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 surfaceRenderer.receiveShadows = false;
-                material = new Material(Shader.Find("HDRP/Lit"));
+                material = KvRenderPipelineShaders.CreateLit("Материал_теплокарты", new Color(1f, 1f, 1f));
                 GhostMaterial.MakeGhost(material, new Color(1f, 1f, 1f), 1f);
-                if (material.HasProperty("_BaseColorMap")) material.SetTexture("_BaseColorMap", texture);
-                if (material.HasProperty("_UnlitColorMap")) material.SetTexture("_UnlitColorMap", texture);
+                // Текстура кладётся в ПРАВИЛЬНОЕ для конвейера свойство: у HDRP/Lit это
+                // `_BaseColorMap`, у URP/Lit — `_BaseMap`. Раньше имя было жёстко HDRP-шным,
+                // и под URP теплокарта осталась бы белой (запись в чужое свойство молчит).
+                KvRenderPipelineShaders.ApplyTexture(material, texture, false);
                 if (material.HasProperty("_EmissiveColorMap")) material.SetTexture("_EmissiveColorMap", texture);
                 if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", 0f);
                 if (material.HasProperty("_Metallic")) material.SetFloat("_Metallic", 0f);
@@ -511,7 +513,7 @@ namespace KazistovVvFeatures
             line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             line.receiveShadows = false;
 
-            Material mat = new Material(Shader.Find("HDRP/Unlit"));
+            Material mat = KvRenderPipelineShaders.CreateUnlit("Материал_линии_теплокарты", color);
             GhostMaterial.MakeGhost(mat, color, 0.95f);
             // Неоновый вид: линия светится и видна поверх «колбасок».
             GhostMaterial.SetGhostGlow(mat, color, 0.95f, 2.2f);

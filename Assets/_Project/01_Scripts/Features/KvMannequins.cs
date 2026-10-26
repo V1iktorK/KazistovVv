@@ -158,11 +158,9 @@ namespace KazistovVvFeatures
                 {
                     if (material == null)
                     {
-                        material = new Material(Shader.Find("HDRP/Lit"));
-                        if (material.HasProperty("_BaseColor"))
-                            material.SetColor("_BaseColor", new Color(0.95f, 0.72f, 0.18f));
-                        if (material.HasProperty("_Metallic")) material.SetFloat("_Metallic", 0.05f);
-                        if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", 0.25f);
+                        material = KvRenderPipelineShaders.CreateLit("Материал_манекена", new Color(0.95f, 0.72f, 0.18f));
+                        if (material != null && material.HasProperty("_Metallic")) material.SetFloat("_Metallic", 0.05f);
+                        if (material != null && material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", 0.25f);
                     }
                     renderer.sharedMaterial = material;
                 }

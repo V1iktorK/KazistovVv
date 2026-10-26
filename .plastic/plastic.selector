@@ -1,4 +1,0 @@
-repository "KavistovVv/KazistovVv@10171608534945@cloud"
-  path "/"
-    br "/main"
-    co "/main"

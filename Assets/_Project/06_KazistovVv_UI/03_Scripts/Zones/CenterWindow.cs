@@ -253,7 +253,9 @@ namespace KazistovVvUI
             {
                 foreach (Renderer r in preview.GetComponentsInChildren<Renderer>())
                 {
-                    r.material = new Material(Shader.Find("Sprites/Default"));
+                    Material previewMaterial = KazistovVvFeatures.KvRenderPipelineShaders.CreateLine(
+                        "Материал_превью", Color.white);
+                    if (previewMaterial != null) r.material = previewMaterial;
                 }
                 previewRenderer = preview.GetComponentInChildren<Renderer>();
             }

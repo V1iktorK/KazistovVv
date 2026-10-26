@@ -600,8 +600,9 @@ public class WorkspaceVisualizer : MonoBehaviour
         lr.loop = true;
         lr.numCapVertices = 0;
         lr.widthMultiplier = Mathf.Max(0.002f, workspaceLineWidth);
-        Shader sh = Shader.Find("Sprites/Default");
-        if (sh != null) lr.material = new Material(sh);
+        Material zoneLineMaterial = KazistovVvFeatures.KvRenderPipelineShaders.CreateLine(
+            "Материал_зоны", Color.white);
+        if (zoneLineMaterial != null) lr.material = zoneLineMaterial;
         if (lr.material != null) z.lineMats.Add(lr.material);
         Color c = new Color(color.r, color.g, color.b, Mathf.Clamp01(alpha));
         lr.startColor = c;
@@ -631,8 +632,9 @@ public class WorkspaceVisualizer : MonoBehaviour
         lr.useWorldSpace = true;
         lr.numCapVertices = 0;
         lr.widthMultiplier = Mathf.Max(0.002f, workspaceLineWidth) * 0.8f;
-        Shader sh = Shader.Find("Sprites/Default");
-        if (sh != null) lr.material = new Material(sh);
+        Material zoneLineMaterial = KazistovVvFeatures.KvRenderPipelineShaders.CreateLine(
+            "Материал_зоны", Color.white);
+        if (zoneLineMaterial != null) lr.material = zoneLineMaterial;
         if (lr.material != null) z.lineMats.Add(lr.material);
         Color c = new Color(color.r, color.g, color.b, Mathf.Clamp01(alpha));
         lr.startColor = c;
@@ -747,12 +749,10 @@ public class WorkspaceVisualizer : MonoBehaviour
     /// </summary>
     private static Material CreateZoneMaterial(Color color, float alpha, bool throughGeometry)
     {
-        Shader sh = Shader.Find("HDRP/Unlit");
-        if (sh == null) sh = Shader.Find("HDRP/Lit");
-        if (sh == null) sh = Shader.Find("Standard");
-        if (sh == null) sh = Shader.Find("Sprites/Default");
-        var m = new Material(sh);
+        // Материал зоны — под ТЕКУЩИЙ конвейер проекта (в §29 их два: URP и HDRP).
         Color c = new Color(color.r, color.g, color.b, Mathf.Clamp01(alpha));
+        Material m = KazistovVvFeatures.KvRenderPipelineShaders.CreateUnlit("Материал_зоны", c);
+        if (m == null) return null;
         GhostMaterial.MakeGhost(m, color, alpha);
         if (m.HasProperty("_ZTestTransparent")) m.SetFloat("_ZTestTransparent", throughGeometry ? 8f : 4f);
         if (m.HasProperty("_ZTestMode")) m.SetFloat("_ZTestMode", throughGeometry ? 8f : 4f);
@@ -814,8 +814,9 @@ public class WorkspaceVisualizer : MonoBehaviour
             ring.edge.loop = true;
             ring.edge.numCapVertices = 0;
             ring.edge.widthMultiplier = Mathf.Max(0.004f, jointRingRadius * 0.06f);
-            Shader sh = Shader.Find("Sprites/Default");
-            if (sh != null) ring.edge.material = new Material(sh);
+            Material edgeMaterial = KazistovVvFeatures.KvRenderPipelineShaders.CreateLine(
+                "Материал_кольца", Color.white);
+            if (edgeMaterial != null) ring.edge.material = edgeMaterial;
             ring.edgeMat = ring.edge.material;
             int segs = 48;
             ring.edge.positionCount = segs;

@@ -14,6 +14,7 @@
 2. [Требования](#2-требования)
 3. [Как открыть проект](#3-как-открыть-проект)
 4. [Как собрать и запустить](#4-как-собрать-и-запустить)
+   * [4.5 Сборка APK под шлем (Android) и проверка идентификатора](#45-сборка-apk-под-шлем-android-и-проверка-идентификатора)
 5. [Карта репозитория](#5-карта-репозитория)
 6. [Зависимости](#6-зависимости)
 7. [Каталоги с данными во время выполнения](#7-каталоги-с-данными-во-время-выполнения)
@@ -36,7 +37,7 @@
 | Что | Как есть в проекте |
 |---|---|
 | Роботы | ровно **два** на сцену: **робот** (`Робот_6ос_Стенд1`, `SixAxisController`, 6 осей) и **SCARA** (`SCARA_Стенд2`, `SCARAController`, 3 оси: J1, J2, Z — призматическая) |
-| Рендер | **HDRP 17.5.0** (URP 17.5.0 тоже в проекте), линейное цветовое пространство |
+| Рендер | **два конвейера (решение [D9], §29)**: **URP 17.5.0 — глобальное умолчание графики** (сборка под шлем, Android), **HDRP 17.5.0 — уровень качества «PC»** (компьютер). Линейное цветовое пространство. Материалы, создаваемые кодом, обязаны идти через `KvRenderPipelineShaders` |
 | Интерфейс | десктопный, **в стиле FreeCAD**, на **uGUI**, строится кодом в рантайме (сцена не переделывается): строка меню, тулбар-иконки, dock-панели, дерево моделей, свойства, статус-бар |
 | VR / MR | ветка `Input/VRInputProvider`, `VR/*`, `Spatial/*`, XR Interaction Toolkit 3.5.1, AR Foundation 6.5.0, OpenXR-лоадер + Meta X API layer; **VR-интерфейс делается отдельно** — текущий UI десктопный |
 | LLM | **в рантайме не используется**: только кинематика, коллизии, планировщик, IK, safety |
@@ -72,8 +73,15 @@ m_EditorVersionWithRevision: 6000.5.6f1 (0e0577a1a2ac)
 
 ### 2.2 Обязательные пакеты и модули
 
-Обязателен пакет **HDRP** (`com.unity.render-pipelines.high-definition` 17.5.0) — на нём стоят
-материалы, свет и томы сцены. Остальные пакеты перечислены в §6.
+Обязательны **оба** пакета конвейеров:
+
+* **URP** (`com.unity.render-pipelines.universal` 17.5.0) — **глобальное умолчание графики** проекта
+  и конвейер сборки под шлем (Android). Пакет HDRP не поддерживает Android вообще, поэтому без URP
+  сборка APK невозможна (это и была карточка Б1, закрытая в §29).
+* **HDRP** (`com.unity.render-pipelines.high-definition` 17.5.0) — уровень качества «PC»: на нём
+  стоят материалы, свет и томы десктопной сцены.
+
+Остальные пакеты перечислены в §6.
 
 ### 2.3 Требуемые SDK и платформы
 
@@ -83,6 +91,7 @@ m_EditorVersionWithRevision: 6000.5.6f1 (0e0577a1a2ac)
 | **Windows Build Support (IL2CPP)** в Unity Hub | сборка Standalone-плеера | `ProjectSettings.asset` → `scriptingBackend` |
 | **Android Build Support** | сборка под шлем (Quest/PICO): `AndroidMinSdkVersion: 32`, `AndroidTargetSdkVersion: 34` | `ProjectSettings.asset` |
 | **OpenXR-лоадер + слой Meta X** | MR-контур | `Assets/XR/Loaders/OpenXRLoader.asset`, `Assets/XR/APILayers~/WindowsLayers/x64/XrApiLayer_METAX_operator.dll` |
+| **OpenXR-фичи для Android** | шлем PICO 4 Ultra (§31): рантайм `com.pico.xr.openxr_runtime` | включены `SpaceWarpFeature`, **`KHRSimpleControllerProfile`**, `OculusTouchControllerProfile` — `Logs/s31-readiness.log`; включение профиля — `Logs/s31-profile.log` |
 | **Пакет Unity Recorder** | запись видео (MP4) — редакторский API под `#if UNITY_EDITOR` | `Packages/packages-lock.json` (`com.unity.recorder`), код в `Features/KvCaptures.cs` |
 | **ROS 2 (внешне)** | `com.unity.robotics.ros-tcp-connector` подключён, но ROS-сторона в этом проекте не запускается | `Packages/manifest.json` |
 
@@ -98,7 +107,7 @@ m_EditorVersionWithRevision: 6000.5.6f1 (0e0577a1a2ac)
 | `activeInputHandler` | `2` — **Both**: legacy `Input` и new Input System работают одновременно (на этом построены «мосты» ввода) |
 | `apiCompatibilityLevel` | `6` (Unity-сгенерированные `*.csproj` — `netstandard2.1`, C# 9) |
 | `defaultScreenWidth` / `Height` | 1024 × 768 |
-| `applicationIdentifier` | значения шаблона URP-blank (`com.Unity-Technologies.com.unity.template.urp-blank`) — **перед сборкой плеера их надо заменить** на свои |
+| `applicationIdentifier` | **`com.KazistovVv.app`** — для **Android и Standalone** (применено в §31; до этого стояли значения шаблона URP-blank — APK с ними для приёмки не годился) |
 | `runInBackground` | `1` |
 
 ### 2.5 Место на диске и время
@@ -153,12 +162,38 @@ dotnet build Assembly-CSharp-Editor.csproj
 * **Обязательное условие:** в проекте уже должна существовать `Library/ScriptAssemblies`. Иначе
   сборка выдаст `CS0246` на `Text`/`Image`/`Button` — это **не ошибки кода**, а отсутствие ссылок
   на `UnityEngine.UI.dll`. Лечится одним запуском Unity (он пересоберёт `Library`).
+* **НОВОЕ (найдено 13.10.2026, сессия §32): `csproj` содержит ЯВНЫЙ список файлов.** В файле лежат
+  строки `<Compile Include="Assets\…\Имя.cs" />`, а укрупнённый обход (`**/*.cs`) отключён. Значит
+  **новый `.cs` не проверяется `dotnet build`, пока Unity не откроет проект** — сборка молча проходит
+  «успешно», не увидев новый файл. Пока редактор не открывался, добавьте файл в список вручную
+  (одна строка рядом с другими `<Compile Include=…>`) либо не доверяйте отчёту «0 ошибок»
+  для новых файлов. Unity перегенерирует `.csproj` при следующем открытии — правка временная.
 * После проверки удалить артефакты: `bin/`, `obj/`, `Temp/bin/`, `Temp/obj/`.
 * `*.csproj` **в `.gitignore`**, поэтому `git status`/`git diff` по ним всегда пусты и как контроль
   «вернул ли я файл» не годятся — сверяйте содержимое.
 * **Проверки только через `dotnet build` недостаточно**: часть ошибок видит лишь компилятор Unity
   (пример: `Object.GetInstanceID()` в Unity 6.5 — ошибка `CS0619`, а `dotnet build` её не видит).
   Поэтому нужен хотя бы один прогон Unity (§4.3).
+* **Память для batch-прогона.** Unity в batch-режиме на этом проекте требует нескольких гигабайт
+  свободной памяти. Замерено 13.10.2026: при 0,7–1,4 ГБ свободных редактор **зависает на этапе
+  IL Post Processor** (`Connectivity with IL Post Processor runner cannot be established yet.
+  Retrying.` — строка повторяется бесконечно, процесс держит ~30 МБ и не доходит до компиляции
+  скриптов). Перед прогоном закройте MATLAB (до ~4,8 ГБ), браузер (~1,6 ГБ) и Discord (~0,8 ГБ).
+  Признак живой работы: в логе растут строки, процесс Unity занимает сотни МБ памяти.
+* **ЧИСТИТЕ АРТЕФАКТЫ `dotnet build` ПЕРЕД ПРОГОНОМ UNITY (замерено 13.10.2026).** Если после
+  `dotnet build` оставить `Temp/bin`, `Temp/obj` или `obj`, Unity считает сборки изменившимися
+  и пересобирает IL-код **с нуля**: в замерах это `Tundra build success (622 s)` и
+  `AssetDatabase: script compilation time: 1019.9 s` — **17 минут** на каждый прогон вместо 40 секунд
+  при чистом состоянии. Порядок такой: `dotnet build` → удалить `bin/ obj/ Temp/bin/ Temp/obj/` →
+  прогон Unity.
+* **Процесс Unity не завершается сам (замерено 13.10.2026).** После `Shut down.` в логе процесс
+  остаётся жить; скрипты `Tools\*.ps1` снимают его по таймауту и возвращают ненулевой код.
+  **Провалом это не является:** судить надо по числам в логе (`error CS`, `warning CS`,
+  `Missing (Mono Script)`, `ProjectSettings`) и по `Logs\editmode-*.xml`. Признак выполненной
+  работы — строка `Shut down.` и ноль ошибок компиляции.
+* **Долгий прогон нельзя запускать «в лоб» из оболочки с лимитом 10 минут.** Компиляция IL после
+  правок редакторской сборки занимает до 10–17 минут, и процесс снимается вместе с оболочкой.
+  Запускайте прогон фоновой задачей (или через `Tools\stage-a-verify.ps1`) и ждите результат по логу.
 
 ### 4.3 Batch-запуск Unity
 
@@ -224,6 +259,157 @@ Unity.exe -batchmode -nographics -projectPath "<путь к проекту>" -ex
 > **Особенность окружения.** В OneDrive файл отчёта **во время PlayMode может не дописываться** —
 > в этом случае итог читают из лога Unity (`_dsh_*.log`), а не из `_dsh_*.txt`.
 
+### 4.5 Сборка APK под шлем (Android) и проверка идентификатора
+
+**Внимание: сборка меняет `Assets` на время работы** — папка тестов убирается из проекта
+(см. ниже). Не правьте `Assets` и не запускайте вторую сборку, пока идёт первая.
+
+#### Как запускать
+
+```powershell
+# 1) Штатный способ с доказательствами (рекомендуется) — сам соберёт строки-доказательства в лог:
+powershell -ExecutionPolicy Bypass -File Tools\stage-a-build-apk.ps1       # таймаут 720 минут
+# параметры: -Project C:\KazistovVv_Build  -LogName xr-build-apk-s31.log  -TimeoutMinutes 720
+
+# 2) Напрямую редакторским методом:
+Unity.exe -batchmode -nographics -quit -projectPath "C:\KazistovVv_Build" `
+          -executeMethod KazistovVvXrEditor.KvXrTools.BuildAndroidApk `
+          -logFile "C:\KazistovVv_Build\Logs\xr-build-apk-s31.log"
+```
+
+Скрипт `Tools\stage-a-build-apk.ps1` — обёртка вокруг `KazistovVvXrEditor.KvXrTools.BuildAndroidApk`
+(метод живёт в `Assets/_Project/01_Scripts/Editor/KvXrTools.cs`). Возврат: **0** — APK собран,
+**1** — сборка не удалась (причина в логе).
+
+**Что скрипт задаёт дополнительно (без этого сборка упадёт):**
+
+* **`GRADLE_USER_HOME=C:\gradle_home`** — латинский путь вместо профиля пользователя
+  (`C:\Users\Ольга\.gradle`). Иначе Gradle падает на задаче
+  `:unityLibrary:configureCMakeRelWithDebInfo[arm64-v8a]`: `C++ build system [prefab] failed`,
+  `Error: Could not find or load main class com.google.prefab.cli.AppKt` / `ClassNotFoundException` —
+  потому что в отчёте Gradle путь к кэшу приходит **искажённым** (`C:\Users\╬ы№ур\.gradle\…`).
+  Это тот же класс проблемы, что «путь проекта с не-ASCII символами» (карточка A6 в `PROBLEMS.md`),
+  только теперь путь **кэша**.
+* **таймаут 720 минут** (`-TimeoutMinutes 720`) — сборка долгая: шейдеры + IL2CPP + Gradle.
+
+**Сколько это заняло на практике (08.10.2026): 70,3 мин.** Итог в логе:
+`[KvXr] APK собран: C:\KazistovVv_Build\KazistovVv.apk · 1345,6 МБ · Android · предупреждений 8 · ошибок 0`
+(число в строке — общий размер сборки из отчёта Unity; сам файл APK — **90,8 МБ**).
+
+**Если после сборки проект «остался на Android»:** `finally` возвращает платформу на
+`StandaloneWindows64` только если переключала её **именно эта** сборка. Три прерванные сборки
+оставили Android «исходным», поэтому успешная сборка платформу не вернула. Лечение — меню
+**`Tools/KazistovVv XR/9. Вернуть платформу на компьютер`**
+(`KazistovVvXrEditor.KvXrTools.RestoreStandalonePlatform`); проверка — проба §4.5/A4
+(`[KvA] активная платформа: StandaloneWindows64`).
+
+#### Что происходит с тестами на время сборки (дефекты A2 и инцидент с `Temp` — закрыты)
+
+Тесты не компилируются в сборке плеера (`KvFlowPlayModeTests.cs` использует
+`UnityPlatformAttribute`, которого в плеере нет — было `CS0246`), поэтому папка
+`Assets/_Project/08_Tests` на время сборки **убирается** в **`_tests_parked_for_build`
+в КОРНЕ проекта** и **возвращается** после.
+
+> ⚠️ **Почему НЕ в `Temp`.** Сначала парковка делалась в `Temp\_tests_parked_for_build`,
+> а Unity **при запуске вычищает `Temp`** — так были **уничтожены 30 файлов тестов**.
+> Парковка перенесена в корень проекта (+ запись в `.gitignore`). `Temp` для хранения
+> не годится принципиально — не возвращайте её туда.
+
+Раньше возврат был сломан: он срабатывал **только если папки в `Assets` нет**, но Unity
+**пересоздаёт пустую** папку (её `.meta` остаётся) — файлы тестов остались бы в парковке
+**навсегда, и в журнале об этом не было ни строки**. Теперь парковка и возврат — отдельные методы
+`KvXrTools.ParkTestsForBuild` / `KvXrTools.RestoreParkedTests`, разбираются четыре случая
+(парковки нет / папки нет / папка есть и **пуста** — её пересоздала Unity / папка **не пуста** —
+перенос пофайлово, ничего не затирается, конфликты называются числом), плюс самолечение остатка
+**убитой** сборки (прежде он уничтожался).
+
+**Что смотреть в логе — числа, а не «должно работать»** (сборка 08.10.2026, 32 файла / 15 тестов):
+
+```
+[KvXr] Тесты убраны из сборки APK: тесты обработаны: перенесено файлов 32 (тестов .cs 15),
+       конфликтов 0, осталось в Temp 0 · убрано из Assets 32 файлов в …\_tests_parked_for_build
+[KvXr] тесты возвращены в Assets (папку пересоздала Unity, пустую сняли): перенесено файлов 32
+       (тестов .cs 15), конфликтов 0, осталось в Temp 0
+```
+
+**Проверить, что тесты вернулись:**
+
+```powershell
+Get-ChildItem "C:\KazistovVv_Build\_tests_parked_for_build" -ErrorAction SilentlyContinue  # ожидается: пусто/нет
+Get-ChildItem "C:\KazistovVv_Build\Assets\_Project\08_Tests" -Recurse -File -Filter *.cs     # файлы тестов на месте (15)
+powershell -ExecutionPolicy Bypass -File Tools\stage-a-restore-tests.ps1   # возврат со сверкой по SHA256
+```
+
+Отчёт возврата с числами (совпало/расхождения/новые): `Logs\stage-a-restore-tests.txt`.
+
+#### Где окажется APK и как проверить идентификатор
+
+APK кладётся в **корень проекта** (`KazistovVv.apk`) и **копией в `Builds\KazistovVv.apk`**
+(метод собирает в ASCII-путь и копирует результат в `Builds\`; при неудаче копирования в лог идёт
+`[KvXr] APK собран, но скопировать его в Builds не удалось: …`).
+
+**Сборка 08.10.2026 (эталон):** файл **90,8 МБ**, SHA256
+`E9B181BEC22030467FCD06F04664D5AEFC6D1703C77F259E72343B473EE3F53A` — у обеих копий хеш совпадает.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File Tools\stage-a-apk-check.ps1 -ExpectedPackage com.KazistovVv.app
+```
+
+Скрипт берёт `aapt.exe` из Android-модуля Unity и разбирает `aapt dump badging`: печатает
+идентификатор пакета, а при `-ExpectedPackage` **расхождение даёт код возврата 1** (без
+`-ExpectedPackage` печатает то, что есть).
+
+**Подтверждено разбором этой сборки:** пакет **`com.KazistovVv.app`**, метка `KazistovVv`,
+sdkVersion **32**, targetSdkVersion **34**, native-code **`arm64-v8a`**, активность
+`com.unity3d.player.UnityPlayerGameActivity`.
+
+**Ожидаемый идентификатор — `com.KazistovVv.app`** (для Android и Standalone; применён в §31).
+Прежнее значение было шаблонным (`com.UnityTechnologies.com.unity.template.urpblank`) — APK с ним
+для приёмки не годился. Доказательство применения: `Logs/s31-identifier.log` →
+`… → com.KazistovVv.app · ПРИМЕНЕНО`.
+
+**Дальше — установка на шлем:** `Tools\device-install-and-log.ps1` (сам находит `adb`, ждёт шлем,
+ставит APK, запускает приложение и пишет лог устройства в `Logs/device-<дата>.log`).
+На 08.10.2026 **приложение в шлем ещё не устанавливалось**.
+
+#### Почему сборка идёт часами и что с этим сделано
+
+Длительность сборки определяет **компиляция вариантов шейдеров URP** (карточка Б2). Сделано
+**четыре** вещи: выключены шейдеры террейна (`m_IncludeTerrainShaders: 0`), из
+`DefaultVolumeProfile.asset` убран мусор, добавлен свой проход отсечения
+`KvShaderVariantStripper` (`IPreprocessShaders`) и — **главное** — написана своя политика
+ключевых слов **`KvUrpKeywordPolicy.cs`**.
+
+**Настоящая причина долгих сборок** оказалась не в постобработке, а в шейдере
+**`Universal Render Pipeline/Lit`, проход `ForwardLit`**: полный набор **36 238 786 560** →
+фильтрация **113 246 208** → встроенное отсечение **442 368** — и URP это **не срезал**, потому что
+в `Assets/Settings/Mobile_RPAsset.asset` значения предфильтрации остались по умолчанию
+(`m_PrefilterModeMainLightShadows: 4` = SelectAll, `m_PrefilteringModeAdditionalLight: 5` = SelectAll,
+остальные — Select), то есть «оставлять всё» — при том что мягкие тени выключены
+(`m_SoftShadowsSupported: 0`), тени доп. света выключены (`m_AdditionalLightShadowsSupported: 0`),
+доп. свет повершинный (`m_AdditionalLightsRenderingMode: 1`), каскад один (`m_ShadowCascadeCount: 1`),
+SSAO в мобильном рендерере нет, тумана (`m_Fog: 0`) и карт освещения (`m_Lightmaps: []`) в сценах нет.
+
+Политика снимает ключевые слова, которых проект **не исполняет**, **с причиной для каждого слова**,
+и **если настройка не прочиталась — слово НЕ снимается** («не знаю» никогда не превращается
+в «отсекаем»). Результат: `URP/Lit ForwardLit` **442 368 → 1 536** (обработка **18,9 с**),
+`ClusterDeferred` 1 536 → 64, `FinalPost` 2 560 → 192, `UberPost` 46 080 → 48; шейдеров террейна
+в сборке нет. **Две опровергнутые гипотезы** (не проверять снова): `-nographics` **не** причина
+(без него те же 442 368 вариантов), и вывод §28 «виновата подмена глобального умолчания графики»
+**не подтвердился**.
+
+**Честная оговорка:** на сборке №2 помог и **прогретый кэш** `Library\ShaderCache` — он **частично
+заменял** компиляцию, поэтому цена «холодной» сборки (без кэша) числами пока не подтверждена.
+Таблица проходов шейдеров с ценами — `Logs\stage-a-shader-variants.md`.
+
+⚠️ **Перед сборкой закройте браузер** (и выключите в нём аппаратное ускорение). На этой машине
+видеодрайвер сбрасывается: за 8 суток в журнале Windows — **1 306** событий `Windows Error Reporting`
+Id 1001 с подписью `LiveKernelEvent`, код **141**, последние во время сборки — каждые 5–10 минут
+(04:56, 05:05, 05:10, 05:16); драйвер Intel UHD — `32.0.101.7088` от 17.06.2026. Из-за этого
+компиляция шейдеров идёт медленнее возможного (замер: **8 вариантов за 70 с** против **4 за 60 с**),
+а браузер с аппаратным ускорением держит **~1,9 ядра из 4**. Обновление драйвера Intel — отдельная
+задача владельца. Подробно — `PROBLEMS.md` Б7.1.
+
 ---
 
 ## 5. Карта репозитория
@@ -248,14 +434,14 @@ Unity.exe -batchmode -nographics -projectPath "<путь к проекту>" -ex
 | Папка | Фактическое содержимое |
 |---|---|
 | `00_Scenes/` | **4 сцены**: `MainScene.unity` (6254 строки, единственная в Build Settings; именно её правим только построчно), `Boot.unity`, `Main Menu.unity`, `Simulation.unity` + их `.meta` |
-| `01_Scripts/` | **134 `.cs`** в 10 подпапках (см. §5.3) |
+| `01_Scripts/` | **164 `.cs`** в 11 подпапках (см. §5.3) |
 | `02_Editor/` | **пусто** (только `.meta` самой папки) — редакторские скрипты лежат в `01_Scripts/Editor` и `06_KazistovVv_UI/03_Scripts/Editor` |
 | `02_Prefabs/` | **пусто по содержимому**: 4 подпапки-заготовки `Environment`, `FX`, `Robot`, `UI` (в них файлов нет). Префабов роботов нет — роботы стоят в сцене как instance из FBX |
 | `03_Models/` | **пусто по содержимому**: подпапки `Environment`, `Props`, `Robot` без файлов. Модели роботов лежат в `Assets/Robots/Robot.fbx` и `Assets/Robots/ScaraRobot.fbx` |
-| `04_Materials/` | 1 материал: `Props/IndicatorMat.mat` (+ `.meta`, + 3 пустые подпапки/`.meta`: `Environment`, `Props`, `Robot`) |
+| `04_Materials/` | 1 материал-ассет паков (`Props/IndicatorMat.mat`) + **материалы, созданные в §29/§30**: `URP/` (7 копий для шлема) и `Robot/` (`Robot_HDRP.mat`, `Robot_URP.mat`) |
 | `05_Textures/` | **пусто по содержимому**: подпапки `Environment`, `Props`, `Robot` без файлов |
 | `06_Animations/` | **пусто по содержимому**: подпапки `Robot`, `UI` без файлов |
-| `06_KazistovVv_UI/` | **модуль интерфейса: 35 `.cs`** в `03_Scripts/{Core,Zones,Data,Camera,Editor}` (см. §5.4) |
+| `06_KazistovVv_UI/` | **модуль интерфейса: 37 `.cs`** в `03_Scripts/{Core,Zones,Data,Camera,Editor}` (см. §5.4) |
 | `06_Lighting/` | **пусто** (только `.meta`) |
 | `07_Audio/` | **пусто по содержимому**: подпапки `Music`, `SFX` без файлов (звуки в проекте **синтезируются кодом**, файлов-ассетов нет) |
 | `08_Resources/` | **пусто** (только `.meta`) |
@@ -265,13 +451,16 @@ Unity.exe -batchmode -nographics -projectPath "<путь к проекту>" -ex
 | `10_StreamingAssets/` | **пусто** (только `.meta`). Внешние данные лежат в **`Assets/StreamingAssets`** (см. §5.5) |
 | `Docs/` | 1 файл: `TrajectoryAlgorithmPlan.md` — исходный план вычислительного алгоритма траекторий (капсульная модель, BiRRT, деградация) |
 
-### 5.3 `Assets/_Project/01_Scripts/` — 134 скрипта
+### 5.3 `Assets/_Project/01_Scripts/` — 164 скрипта
+
+_Числа сверены 08.10.2026 (§31): прежние 134 устарели — код вырос на XR-слой (§28), инструменты
+конвейера (§29–§31) и проверки. Пересчитывать при каждой большой правке: `glob **/*.cs` по папке._
 
 | Подпапка | Файлов | Расшифровка |
 |---|---|---|
 | `Core/` | 9 | модели роботов и оператор: `RobotController` (+`RobotInventory` в конце файла), `SixAxisController`, `SCARAController`, `RobotDH` (namespace `KazistovVvKinematics`), `FreeFlyCameraController`, `InverseKinematics`, `RobotSelfCollision`, `SixAxisAutoSetup`, `HDRPAutoLighting` |
-| `Editor/` | 14 | редакторские утилиты и **диагностика**: `StandsMenu`, `HierarchyPhantomCleaner`, `HierarchyAutoRefresh`, `ConvertRobotMaterialsToHDRP`, `Dsh*Diag.cs` (×10) |
-| `Features/` | **60** | модуль «Функции»: `FeatureHub`, `KvStageHub`…`KvStageHub4` и сервисы 36 этапов (см. `ARCHITECTURE.md`) |
+| `Editor/` | **24** | редакторские утилиты и **диагностика**: `StandsMenu`, `HierarchyPhantomCleaner`, `HierarchyAutoRefresh`, `ConvertRobotMaterialsToHDRP` (с §29 создаёт материал ТЕКУЩЕГО конвейера), **`KvRenderPipelineTools`** (§29: отчёт, аудит материалов, начинка XR-сцены, материалы робота), **`KvXrTools`** (§28: лоадеры, сцена, сборка APK; §31: парковка тестов), **`KvXrDeviceTools`** (§31: идентификатор и профиль контроллеров), **`KvUrpKeywordPolicy`** + **`KvShaderVariantStripper`** (§31: отсечение вариантов, Б2), `Dsh*Diag.cs` (×10) |
+| `Features/` | **67** | модуль «Функции»: `FeatureHub`, `KvStageHub`…`KvStageHub4` и сервисы 36 этапов (см. `ARCHITECTURE.md`); здесь же **`KvRenderPipelineShaders`** (§29: единый выбор шейдера/материала под конвейер) |
 | `Input/` | 8 | `InputManager`, `InputProvider`, `KeyboardMouseInputProvider`, `GamepadInputProvider`, `VRInputProvider`, `MRInputProvider`, `KeyboardController`, `InputDeviceType` |
 | `Integration/` | 3 | `CollisionGuard`, `RobotSelector`, `TargetMarker` |
 | `Recording/` | 4 | `KvTrajectoryRecord`, `KvRecordingService` (рабочие) + `TrajectoryRecorder`, `TrajectoryPlayer` (старая VR-заготовка на `InputManager`, в потоке не используется) |
@@ -279,6 +468,7 @@ Unity.exe -batchmode -nographics -projectPath "<путь к проекту>" -ex
 | `Trajectory/` | **25** | ядро: `TrajectoryFlowController`, `Planner`, `IkSolver`, `PoseValidator`, `CollisionWorld`, `SafetyGate`, `ReachabilityOracle`, `MotionExecutor`, `TrajectoryExecutor`, `PlanMetrics`, `KinematicsJacobian`, `PostureSelector`, `PostureControl`, `NarrowPhase`, `ToolAlign`, `LaserAndPhantomManagers` (`LaserManager`+`PhantomManager`+`GhostMaterial`), `AimIndicator`, `TrajectoryTube`, `GhostView`, `SelectionTypes`, `PointMoveHud`, `TrajectoryMetricsPanel`, `WorkspaceVisualizer`, `StandBuilder`, `TrajectoryPlannerController` |
 | `UI/` | 4 | старая заготовка UI на `InputManager`: `MainMenu`, `SettingsMenu`, `SettingsData`, `SettingsSaver` |
 | `VR/` | 5 | `VRInputManager`, `VRHandTracker`, `PoseSelector`, `PlacementController`, `ARInputProvider` |
+| **`Xr/`** | **13** | **XR-слой (§28)**: `KvXrRig`, `KvXrRigConfig`, `KvXrInputSource`, `KvXrLocomotion`, `KvXrUiPointer`, `KvXrUiPanel`, `KvXrPanelAnchor`, `KvXrSettings`, `KvXrSettingsChanged`, `KvXrCameraGuard`, `KvXrMrRoom`, `KvXrMrPlacement`, `KvXrSceneContent` |
 
 **Namespaces:** `TrajectoryCore` — большинство файлов `Trajectory/`; `KazistovVvFeatures` — `Features/*`
 и `Recording/Kv{TrajectoryRecord,RecordingService}.cs`; `KazistovVvKinematics` — `Core/RobotDH.cs`;
@@ -287,7 +477,7 @@ Unity.exe -batchmode -nographics -projectPath "<путь к проекту>" -ex
 `SCARAController` и др.) лежат в **глобальном** пространстве имён — так исторически сложилось,
 менять это без нужды не надо.
 
-### 5.4 `Assets/_Project/06_KazistovVv_UI/03_Scripts/` — 35 скриптов
+### 5.4 `Assets/_Project/06_KazistovVv_UI/03_Scripts/` — 37 скриптов
 
 | Папка | Файлы |
 |---|---|
@@ -649,6 +839,10 @@ KvCommands.Register(new KvCommand {
 
 ### 11.1 Unit-тесты (появились 15.09.2026): `Assets/_Project/08_Tests/Editor/`
 
+> **Состояние набора на 08.10.2026: 317 тестов** (`stage-a-final`: `317 / 315 / 0 / 2`, прогон
+> воспроизведён дважды — `stage-a-restored` и `stage-a-final`). Таблица ниже — первая партия
+> тестов 15.09.2026 (215 из 317); остальные описаны в §11.3 и §11.4.
+
 | Файл | Тестов | Что проверяет |
 |---|---:|---|
 | `KvTrajMathTests.cs` | 44 | длины, кривизна, время, сглаживание, S-профиль, jerk, вырожденные и экстремальные входы |
@@ -681,6 +875,49 @@ Esc → аварийный стоп → запись → позы → интер
 и пишут отчёт `_dsh_*.txt`. Перечень — в §4.4. Именно эти прогоны проверяют проект «в сборе»;
 unit-тесты (§11.1) дополняют их, проверяя математику по отдельности.
 
+### 11.3 Тесты конвейера рендера (§29): `KvRenderPipelineTests.cs` — 18 тестов
+
+Появились вместе с закрытием Б1 (URP глобальным умолчанием). Проверяют то, что нельзя проверить
+глазами и что молча ломается:
+
+| Что проверяется | Почему именно так |
+|---|---|
+| глобальное умолчание графики — **URP**, уровень «PC» — **HDRP**, уровень «Mobile» — URP, Android стартует на «Mobile» | иначе либо сборка под Android снова обрывается валидатором, либо компьютер теряет свой вид |
+| оба набора глобальных настроек (HDRP и URP) привязаны | пропажа записи HDRP ломает десктопный вид молча |
+| **настройка читается из ФАЙЛА проекта**, а не «из памяти редактора» | `SerializedObject` на словарях Unity 6 значений не отдаёт: проверка «в памяти» ничего не проверяла |
+| цепочки запасных шейдеров **не пересекают конвейеры** | запас вида «URP → HDRP/Lit» — это тот же розовый материал, только другим путём |
+| материал, созданный фабрикой, совместим с активным конвейером и получает заданный цвет | цвет пишется в `_BaseColor`/`_Color` — угадать имя нельзя, ошибка молчит |
+| **в исходниках нет прямых `Shader.Find("HDRP/…")`** (кроме самой фабрики) | сторож против возврата к прежнему способу; комментарии при этом не считаются |
+| в XR-сцене есть `KvXrSceneContent` и модели роботов; материалы XR-сцены совместимы с URP и без пропавших ссылок; материалы десктопной сцены — с HDRP | именно этого не хватало: §28 отчитался о начинке сцены, а сцена была пустой |
+
+Запуск — как в §11.1. Дополнительно есть инструменты `Tools/KazistovVv Рендер/` в редакторе:
+отчёт о конвейерах, аудит материалов («что станет розовым»), переключение умолчания, начинка
+XR-сцены и перевод её материалов на URP; пункт **`7. Отсечь лишние варианты шейдеров (Б2)`** —
+свой проход отсечения вариантов (§4.5).
+
+### 11.4 Тесты Этапа А (08.10.2026): сборка, варианты шейдеров, политика URP, устройство
+
+| Файл | Тестов | Что проверяет |
+|---|---:|---|
+| `KvBuildTests.cs` | 6 | возврат тестов из парковки (дефекты A2/A20): папка, пересозданная Unity **пустой**; папка с посторонними файлами — ничего не затирается; остаток **убитой** сборки не уничтожается |
+| `KvShaderVariantTests.cs` | 5 | инварианты отсечения вариантов (Б2): в `DefaultVolumeProfile.asset` нет тестовых и потерявших скрипт компонентов; в сценах сборки нет камер с постобработкой; террейн-шейдеры выключены, а террейнов в проекте нет |
+| **`KvUrpKeywordPolicyTests.cs`** | **4** | политика ключевых слов URP: проект сохраняет **используемые** слова; у **каждого** снятого слова есть причина; слова тумана и карт освещения снимаются только когда сцены их не используют; тени и доп. свет снимаются только когда это выключает сам ассет URP |
+| `KvQualityLevelTests.cs` | 3 | разбор уровней качества: `m_PerPlatformDefaultQuality` — **словарь** (`Android: 0`, `Standalone: 1`), чтение и запись обеих форм; Android остаётся без HDRP-уровней |
+| `KvDeviceTests.cs` | 4 | §31: идентификатор приложения — проектный (`com.KazistovVv.app`), XR-лоадер только OpenXR, профиль контроллеров для Android, состав XR-сцены для первого входа |
+
+**Полный набор Этапа А — 317 тестов.** Числа прогонов (всего / прошло / упало / пропущено):
+RED A2 `305 / 299 / 4 / 2` → GREEN A2 `308 / 305 / 1 / 2` → RED Б2 `313 / 307 / 4 / 2` →
+GREEN Б2 `313 / 310 / 1 / 2` → после §31 `313 / 311 / 0 / 2` → `stage-a-restored` `317 / 315 / 0 / 2` →
+**`stage-a-final` (повтор после сборки) `317 / 315 / 0 / 2`**. Гейт «чистой консоли» во всех
+прогонах: `error CS` 0 · `warning CS` 0 · `Missing (Mono Script)` 0. Доказательства —
+`Logs\editmode-stage-a-*.xml`, `Logs\ci-stage-a-*.log`, `Logs\ci-console-summary.json`.
+
+**Проба состояния после сборки (A4):** `Tools/KazistovVv XR/8. Отчёт: состояние после сборки
+(Этап А)` (`KazistovVvXrEditor.KvXrTools.ReportBuildReturnState`) печатает активную платформу,
+умолчание графики, графический API Android, уровни качества с исключениями платформ и умолчаниями
+по платформам, лоадеры XR, сцены сборки и где лежат тесты. Вывод — `Logs\stage-a-return-state.log`.
+Одна команда «всё сразу»: `Tools\stage-a-verify.ps1` (проба A4 + гейт + EditMode-тесты).
+
 ---
 
 ## 12. Типовые проблемы и решения
@@ -698,6 +935,11 @@ unit-тесты (§11.1) дополняют их, проверяя матема�
   Сцена, столы, роботы, материалы и `ProjectSettings` при синхронизации **не** переносятся.
 * После синхронизации у второй копии может быть устаревший `Assembly-CSharp.csproj` — Unity
   перегенерирует его при следующем refresh.
+* **Решение владельца 08.10.2026:** работать в **латинской** копии `C:\KazistovVv_Build`,
+  а **в конце работ синхронизировать ИЗМЕНЁННЫЕ файлы** во вторую копию
+  (`…\новое пространство\KazistovVv`). Копию не удалять (карточка Б10 в `PROBLEMS.md`).
+  Для правок Этапа А путь проектных настроек сверялся снимком 57 файлов
+  (`Logs\stage-a-snapshot-before.txt`), сверка — `Tools\stage-a-closeout.ps1 -Mode Compare`.
 
 ### 12.2 «Missing (Mono Script)» в сцене / скрипт не виден Unity
 
@@ -761,7 +1003,7 @@ unit-тесты (§11.1) дополняют их, проверяя матема�
 | В консоли `[RobotInventory] Роботов в сцене: 3 …` | в открытой сцене есть лишние копии роботов (кнопка «Добавить робота» или сцена из `_Recovery`). Инвариант: **ровно 2** робота, рантайм их не создаёт |
 | Кнопка «не работает» | (1) это заглушка (`KvCommand.Stub` — серая кнопка, по ТЗ); (2) команда недоступна по `IsEnabled` («Запуск/пауза» и «Остановка» — только когда робот едет); (3) интерфейс скрыт (`TAB`) |
 | Сворачивание/раскладка панелей «сбилась» | команда **«Вид → Панели → Сбросить раскладку»** (`ui.resetlayout`) или кнопка в настройках: чистит и раскладку окон, и свёрнутые группы тулбара в `PlayerPrefs` |
-| Сборка плеера падает/жалуется на ID приложения | в `ProjectSettings.asset` стоят шаблонные `applicationIdentifier` (`…urp-blank`) — заменить на свои перед релизной сборкой |
+| Сборка плеера падает/жалуется на ID приложения | **закрыто в §31:** идентификатор — свой, `com.KazistovVv.app` (для Android и Standalone). Если ID снова окажется шаблонным (`…urp-blank`) — проверить `ProjectSettings.asset` и перезапустить настройку `Tools/KazistovVv XR/5..7`, затем `Tools\stage-a-apk-check.ps1 -ExpectedPackage com.KazistovVv.app` |
 
 ---
 
@@ -785,3 +1027,8 @@ unit-тесты (§11.1) дополняют их, проверяя матема�
 | `Assets/_Project/Docs/TrajectoryAlgorithmPlan.md` | исходный план алгоритма траекторий |
 | `.gitignore`, `.gitattributes`, `ignore.conf` | правила VCS |
 | перечень файлов в `Assets/_Project/*`, `Assets/*`, `Packages/*`, корне проекта | фактическая карта репозитория (включая пустые папки и остатки `*.csproj`) |
+| `Assets/_Project/01_Scripts/Editor/KvXrTools.cs`, `KvRenderPipelineTools.cs`, `KvShaderVariantStripper.cs`, `KvXrDeviceTools.cs` | сборка APK, парковка/возврат тестов, проба состояния (A4), отсечение вариантов шейдеров (Б2), настройки §31 |
+| `Tools/stage-a-*.ps1`, `Tools/xr-checks.ps1` | инструменты Этапа А: сборка с доказательствами (в `stage-a-build-apk.ps1` — `GRADLE_USER_HOME` латиницей), проверка APK, возврат тестов, снимок/сверка состояния, шаги §31, гейт + EditMode-тесты |
+| `Tools/_stage_a/СОСТОЯНИЕ_ЭТАПА_А.md` | рабочее состояние сессии «Этап А»: что сделано, что осталось, чем доказано (плюс черновики отчёта и текстов инструментов) |
+| `Assets/_Project/01_Scripts/Editor/KvUrpKeywordPolicy.cs` | политика отсечения ключевых слов URP с причиной для каждого слова (настоящее решение Б2: `URP/Lit` 442 368 → 1 536) |
+| `Logs/xr-build-apk-s30.log`, `Logs/xr-build-apk-s31.log`, `Logs/stage-a-*.txt/.md`, `Logs/s31-*.log`, `Logs/platform-return.log`, `Logs/ci-stage-a-*.log`, `Logs/ci-console-summary.json` | числа Этапа А: варианты шейдеров до/после отсечения, возврат тестов, состояние после сборки, идентификатор и профиль §31, возврат платформы, гейт «чистой консоли» |

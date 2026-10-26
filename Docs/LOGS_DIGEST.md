@@ -1,0 +1,131 @@
+# LOGS_DIGEST.md — конспект стенограмм и отчётов прошлых сессий
+
+_Создано: 03.10.2026; дополнено 08.10.2026 (раздел 5 — логи сессии «Этап А», §30/§31).
+Файлы §1–§4 лежат в `C:\KazistovVv_Build\_logs_archive\` (142 файла, 51,1 МБ);
+логи сессий §28–§32 — в самом проекте, `C:\KazistovVv_Build\Logs\`._
+_Зачем этот документ: сами логи — машинный текст на тысячи строк, читать их целиком бессмысленно.
+Здесь сказано, **что в них есть**, **что искать** и **что уже извлечено** в документацию._
+
+---
+
+## 1. Что где лежит
+
+| Папка | Файлов | МБ | Что внутри |
+|---|---|---|---|
+| `dsh_diagnostics/` | 88 | 46,2 | **стенограммы прогонов диагностики `Dsh*`** (batch-mode Unity): проверки роботов, SCARA, фантомов, прицела, стадий 1–4, смоук-тесты |
+| `compile_and_validation/` | 28 | 2,9 | **логи компиляции**: `_compile_r2…r10`, `_compile_clean`, `_cfinal`, `_dh_validate1…8`, `_dsh_compile1…12` |
+| `run_series/` | 20 | 1,4 | **серии прогонов** `_f1…f5`, `_g1…g8`, `_h1…h4` и финальные `_ffinal`/`_gfinal`/`_hfinal` |
+| `manifests/` | 2 | 0,6 | манифесты резервов копий (`_backup_tabcursor_…_manifest.txt`) |
+| `scripts/` | 3 | — | вспомогательные скрипты того времени: `scene_tree.ps1`, `_dsh_s22_backup.ps1`, `_dsh_sync15.ps1` |
+| `MOVE_LOG.txt` | 1 | — | протокол переноса (откуда что взято) |
+
+**Самые крупные** (в них больше всего данных, но и больше шума):
+`_dsh_scara.log` (15,8 МБ) — сквозной прогон SCARA;
+`_dsh_stage2.log` (10,7 МБ) — прогон стадии 2;
+`_dsh_s4d.log` (2,4 МБ) — прогон стадий 2–4.
+
+---
+
+## 2. Что означают имена файлов
+
+| Шаблон | Что это |
+|---|---|
+| `_dsh_<имя>.log` | стенограмма прогона диагностики агента (класс `Dsh<Имя>Diag.cs` в `Assets/_Project/01_Scripts/Editor/`) |
+| `_dsh_s<N>…` | прогон, относящийся к сессии §N |
+| `_dsh_smoke*.log` | быстрая проверка «живой ли контур» после правки |
+| `_compile_r<N>.log` | N-я попытка компиляции в ходе правок |
+| `_dh_validate<N>.log` | проверка данных разработки (серия из 8) |
+| `_f*`, `_g*`, `_h*` | серии прогонов при доводке (по 4–8 итераций в серии) |
+| `_dsh_*_verify.txt` | **итоговые отчёты** прогонов: «38 [OK], ни одного [FAIL]» и подобное |
+| `_*_manifest.txt` | опись содержимого резерва (путь · размер · время) |
+
+---
+
+## 3. Что в логах ценного (и уже извлечено в документацию)
+
+Логи — **первичные доказательства** выводов проекта. Всё существенное из них уже перенесено
+в читаемые документы, и при необходимости можно вернуться к стенограмме за подробностями:
+
+| Вывод | Где читать по-человечески | Где доказательство в логах |
+|---|---|---|
+| Плавность движения: ступенька скорости 0,9 → 0,2 °/с (6-осевой), 2,3 → 1,0 (SCARA) | `Docs/AUDIT_S27_SMOOTHNESS_COLLISION_UI.md`, `PROJECT_CONTEXT.md` §27 | `_dsh_s27_diag.txt`, `_dsh_s27*` (в старой папке проекта) |
+| Коллизия SCARA: не проверялось плечо J1→J2 (0,325 м) | то же | `_dsh_scara*.log`, `_dsh_scara_smoke.txt` |
+| S-профиль вместо итеративного ограничения рывка; превышений лимитов 0 | `PROJECT_CONTEXT.md` §16.1, §20.1 | `_dsh_s3_run*.log`, `_dsh_stage2*.log` |
+| Планировщик и постобработка дают одинаковое время (отношение 1,000) | `PROJECT_CONTEXT.md` §20.2 | `_dsh_s20_diag.txt` |
+| Прицел и глубина шарика, «пятак» по нормали, режим перемещения точки | `PROJECT_CONTEXT.md` §5.6–§5.11 | `_dsh_pointmove*.log/.txt`, `_dsh_probe.log` |
+| Фантомы: удаление старых, движение по траектории | `PROJECT_CONTEXT.md` §5.3–§5.5 | `_dsh_phantom_smoke.log/.txt` |
+| Робот 6 осей: 8 уникальных траекторий SCARA | `PROJECT_CONTEXT.md` §16.14 | `_dsh_scara8*.log` |
+| Компиляция и «чистая консоль» на каждом шаге | `PROJECT_CONTEXT.md` §0.9.3, §18–§27 | `compile_and_validation/`, `_dsh_compile*.log` |
+
+**Правило работы с логами (как в проекте):** вывод принимается, только если он в стенограмме
+виден строкой («[OK]», число, отчёт), а не «должно работать». Поэтому логи и хранятся.
+
+---
+
+## 4. Чего в этих логах НЕТ
+
+| Что | Почему |
+|---|---|
+| Прогоны **PlayMode** на живой сцене | редактор на рабочей копии почти всегда был занят; PlayMode-тесты отмечены платформой и запускаются только в живом редакторе |
+| Прогоны на **шлеме** | устройства нет физически (см. `Docs/PROBLEMS.md` Б7) |
+| Замеры **производительности на шлеме** | то же; измеримая база — только эта машина (4 ядра, Intel UHD) |
+| Стенограммы сессии **§28 (XR-этап)** | они в самом проекте: `Logs/ci-xr-*.log`, `Logs/editmode-xr-*.log`, `Logs/xr-build-*.log` |
+| Логи сессий **§29–§32** (конвейер URP, сборка APK, Этап А) | в самом проекте, `Logs/` — разбор в §5 этого документа |
+
+---
+
+## 5. Логи сессии «Этап А» (§30/§31, 08.10.2026) — где живут и что в них искать
+
+В отличие от логов из §1 (они лежат в архиве `_logs_archive\`), эти логи — **в самом проекте**,
+в `C:\KazistovVv_Build\Logs\` (не в архиве). Разбор ниже — по факту содержимого файлов.
+
+| Файл | Что это | Что в нём искать |
+|---|---|---|
+| `Logs\xr-build-apk-s30.log` | **сборка №1** — та, что шла **46 часов** и была снята **намеренно** 08.10.2026 | `[168970s] 44018 / 46080 variants ready` — точка остановки на проходе `UberPost`; `Full variant space: 92.160 → After settings filtering: 23.040 → After built-in stripping: 46.080` (**встроенное отсечение не уменьшает набор, а удваивает**); шейдеры террейна `Hidden/TerrainEngine/…` — `ForwardLit` 13 824 варианта за **18 836 с**; `FinalPost`/`FinalPostXR` — по 2 560 вариантов и 8 127 / 8 104 с. Всего ≈122 000 вариантов. Сводная таблица 196 проходов — `Logs\stage-a-shader-variants.md` |
+| `Logs\xr-build-apk-s31.log` | **сборка №2** (после правок Б2 + §31) и **успешный финал** | строки отсекателя **`[KvStrip] … UberPost · проход Normal: вариантов 46080 → 48 (снято 46032 …)`** и **`FinalPost: 2560 → 192 (снято 2368 …)`** — доказательство эффекта Б2; максимальный набор вариантов — **1024** (против 46 080 прежде), строк прогресса **13** (против 2 418 в сборке №1); шейдеров террейна **нет вовсе** (`TerrainEngine`, `WavingDoublePass` не встречаются); `[KvXr] Тесты убраны из сборки APK: … перенесено файлов 32 (тестов .cs 15), конфликтов 0, осталось в Temp 0 · убрано из Assets 32 файлов в …\_tests_parked_for_build` и `[KvXr] тесты возвращены в Assets (папку пересоздала Unity, пустую сняли)…` — живое доказательство исправления A2/A20; **`[KvXr] APK собран: C:\KazistovVv_Build\KazistovVv.apk · 1345,6 МБ · Android · предупреждений 8 · ошибок 0`** и `[KvXr] Копия APK для владельца: …\Builds\KazistovVv.apk`; `[KvXr] Android: уровень качества по умолчанию уже индекс 0 (URP) — правка не нужна`; `Gradle Version: '9.1.0' Android Plugin Version: '9.0.0'`. **Файл APK: 90,8 МБ, SHA256 `E9B181…3F53A`; сборка 70,3 мин** |
+| `Logs\b2-apply-nographics-off.log` | **опровержение гипотезы про `-nographics`** | без `-nographics` набор вариантов тот же — **442 368**; вывод §28 «виновата подмена глобального умолчания графики» **не подтвердился** |
+| `Logs\ci-stage-a-*.log` (точки `red`, `green`, `b2-red`, `b2-green`, `s31`, `policy`, `restored`, `final`) | **гейт «чистой консоли»** на каждой точке прогона | `error CS` 0 · `warning CS` 0 · `Missing (Mono Script)` 0; сводка в машинном виде — `Logs\ci-console-summary.json` (`"errors": 0, "warningsCs": 0, "missingScripts": 0, "projectSettingsChanged": [], "ok": true`), история — `Logs\ci-console-history.jsonl` |
+| `Logs\editmode-stage-a-*.xml` (+ `.log`; точки `red`, `green`, `b2-red`, `b2-green`, `s31`, `policy`, `restored`, `final`) | **числа EditMode-тестов** (формат NUnit, атрибуты корневого `test-run`) | RED A2 `305 / 299 / 4 / 2`, GREEN A2 `308 / 305 / 1 / 2`, RED Б2 `313 / 307 / 4 / 2`, GREEN Б2 `313 / 310 / 1 / 2`, после §31 `313 / 311 / 0 / 2`, `restored` `317 / 315 / 0 / 2`, **`final` (повтор после сборки) `317 / 315 / 0 / 2`** (всего / прошло / упало / пропущено). Два пропуска во всех прогонах — `KvPayloadCalculatorTests.Api_IsNotTestableWithoutRefactoring`, `KvTimeOptimalTests.SProfile_SymmetryIsNotHeld_Characterized` |
+| `Logs\stage-a-restore-tests.txt` | **возврат тестов A3** (версии отчёта: первая — 23 файла, вторая — после инцидента с `Temp`) | первая версия: `в Temp файлов до возврата: 23`, `перенесено файлов: 23`, `осталось в Temp файлов: 0`, сверка с бэкапом `urp_switch_2026-10-05_2114` по SHA256 — **совпало 20, расхождений 0**. Вторая (после инцидента A20): `ПАРКОВКИ НЕТ … возвращать нечего`, 3 файла в `Assets`, **20 «ПРОПАЛ»** — это и есть след потери; тесты затем восстановлены из `git checkout`, бэкапа и второй копии |
+| `Logs\stage-a-snapshot-before.txt` | **снимок 57 файлов ДО сборки** (эталон возврата состояния, A4) | формат: SHA256 · размер · путь; сверка — `Tools\stage-a-closeout.ps1 -Mode Compare`; **итог сверки: 53 файла из 57 совпали**, изменились ровно четыре и все **намеренно** — `Assets/Settings/DefaultVolumeProfile.asset`, `Assets/Settings/UniversalRenderPipelineGlobalSettings.asset`, `Assets/XR/Settings/OpenXR Package Settings.asset`, `ProjectSettings/ProjectSettings.asset`. `GraphicsSettings.asset`, `QualitySettings.asset`, `XrMain.unity`, `MainScene.unity` — **не изменились** |
+| `Logs\stage-a-return-state.log` | **проба A4** — состояние после сборки | строки `[KvA]`: `активная платформа: StandaloneWindows64`, `умолчание графики: Mobile_RPAsset · URP`, `графический API Android: Vulkan`, уровни качества (`Mobile[0]` URP, `PC[1]` HDRP, умолчание Android — индекс 0) с исключениями платформ, `лоадеры XR: OpenXR активен · Standalone: [OpenXRLoader] · Android: [OpenXRLoader]`, сцены сборки (2: `XrMain.unity`, `MainScene.unity`), где лежат тесты (в `Assets` 15 файлов, в `Temp` 0) |
+| `Logs\platform-return.log` | **возврат платформы на компьютер** | `[KvXr] Возврат платформы на StandaloneWindows64: переключение выполнено · активная платформа сейчас: StandaloneWindows64` |
+| `Logs\stage-a-sync-second-copy.txt` | **синхронизация второй копии проекта** (решение владельца) | 88 строк отчёта: **27** «ИЗМЕНЁН», **54** «НОВЫЙ», итог `перезаписано = 27 · добавлено новых = 54 · сохранено версий владельца = 27`; версии приёмника — в `_backups_consolidated\onedrive_before_sync_2026-10-08` |
+| `Logs\s31-identifier.log` | **§31, шаг 1** — идентификатор приложения | `UnityEditor.Build.NamedBuildTarget: com.UnityTechnologies.com.unity.template.urpblank → com.KazistovVv.app · ПРИМЕНЕНО` (и вторая форма шаблонного значения — `com.Unity-Technologies…`) |
+| `Logs\s31-profile.log` | **§31, шаг 2** — профиль контроллеров | `профиль «KHRSimpleControllerProfile Android»: выключен` → `ВКЛЮЧЁН: KHRSimpleControllerProfile Android` → `ИТОГ: KHRSimpleControllerProfile ВКЛЮЧЁН для Android (подтверждено)` |
+| `Logs\s31-readiness.log` | **§31, шаг 3** — отчёт готовности к приёмке | `min / target SDK: AndroidApiLevel32 / AndroidApiLevel34`, `архитектуры: ARM64`, `графический API: Vulkan`, `сцен в сборке: 2`, OpenXR-фичи Android: `SpaceWarpFeature`, `KHRSimpleControllerProfile`, `OculusTouchControllerProfile` |
+
+**Что из этих логов НЕ следует** (чтобы не вывести лишнего): проверка на шлеме (приложение
+**не устанавливалось**), цена «холодной» сборки (в сборке №2 помог прогретый кэш
+`Library\ShaderCache` — он **частично заменял** компиляцию, поэтому эффект отсечения «с нуля»
+числами не подтверждён), версия §30 файла `KvRenderPipelineTests.cs` (40 120 байт) — **утрачена**
+при инциденте с `Temp` и восстановлена версией §29.
+
+---
+
+## 6. Нужны ли эти 51 МБ?
+
+Логи — **доказательства**, а не рабочие файлы. Разумно:
+
+1. **Оставить** `*_verify.txt` (итоговые отчёты), `manifests/`, `scripts/`, `MOVE_LOG.txt` —
+   это маленькие и содержательные файлы.
+2. **Оставить одну-две показательные стенограммы** крупных прогонов
+   (`_dsh_s27*`, `_dsh_scara8*`) — на случай спора «а что там было».
+3. **Остальное можно удалить** — 50 МБ машинного текста, чьи выводы уже перенесены в
+   `PROJECT_CONTEXT.md` и аудиты. Решение за владельцем.
+
+---
+
+## 7. Куда смотреть, если понадобится лог сессии §N
+
+| Сессия | Основные файлы |
+|---|---|
+| §0.5–§0.7 (полная проверка, документация, аудиты) | `compile_and_validation/_compile_*`, `run_series/_f*` |
+| §5 (прицел, фантомы, точка, коллизия) | `dsh_diagnostics/_dsh_pointmove*`, `_dsh_phantom_smoke*`, `_dsh_probe*` |
+| §11–§15 (запись, позы, гриппер, pick&place, этапы 13–36) | `dsh_diagnostics/_dsh_stage2*`, `_dsh_s3_*`, `_dsh_s4*` |
+| §16–§19 (закрытие хвостов, SCARA) | `dsh_diagnostics/_dsh_scara*`, `_dsh_robot6_verify*` |
+| §20–§23 (ядро планировщика, UI-баги) | `run_series/_g*`, `_h*`, `compile_and_validation/_dh_validate*` |
+| §26–§27 (курсор, плавность) | `run_series/_hfinal`, `manifests/_backup_tabcursor_*` |
+| **§28 (XR-этап)** | `C:\KazistovVv_Build\Logs\ci-xr-*.log`, `editmode-xr-*.log`, `xr-build-*.log` |
+| §29–§30 (конвейер URP, материал робота, сборка №1) | `Logs\ci-s29-*.log`, `Logs\editmode-s29-*.log/.xml`, `Logs\s29-*.log`, `Logs\editmode-s30-*.log/.xml`, `Logs\s30-robot-materials*.log`, `Logs\xr-build-apk-s30.log` |
+| **§30/§31 «Этап А» (08.10.2026)** | `Logs\xr-build-apk-s30.log`, `Logs\xr-build-apk-s31.log`, `Logs\ci-stage-a-*.log`, `Logs\editmode-stage-a-*.log/.xml`, `Logs\stage-a-*.txt/.md`, `Logs\s31-*.log`, `Logs\b2-apply.log` — разбор в §5 этого документа |

@@ -642,6 +642,7 @@ MonoBehaviour:
   joint3Name: LS10-B702S_z_5
   ZMin: -0.06
   ZMax: 0.18
+  zLowerOffsetM: 0.02
 --- !u!1 &341221731
 GameObject:
   m_ObjectHideFlags: 0
@@ -909,6 +910,15 @@ MonoBehaviour:
   rightHandEnabled: 0
   rightHandOffset: 0.35
   rightColor: {r: 0.1, g: 1, b: 0.3, a: 1}
+  scrollStep: 0.08
+  maxDistance: 20
+  minDistance: 0.25
+  stickyToSurface: 1
+  surfaceLayer:
+    serializedVersion: 2
+    m_Bits: 4294967291
+  scrollSmoothSpeed: 16
+  surfaceStickTolerance: 0.005
   enableCameraCollision: 1
   bodyRadius: 0.25
   bodyHeight: 1.6
@@ -920,6 +930,10 @@ MonoBehaviour:
   flashlightRange: 18
   flashlightAngle: 38
   flashlightInnerAngle: 140
+  flashlightRadius: 0.025
+  flashlightColorTemperature: 4500
+  flashlightSoftShadows: 1
+  flashlightFadeTime: 0
   suppressDirectTeleop: 1
 --- !u!1 &369353709
 GameObject:
@@ -2608,6 +2622,13 @@ MonoBehaviour:
   lightBoostAlbedo: 1.25
   lightBoostSmoothness: 0.08
   lightBoostEmissive: 0.35
+  treePanelWidth: 272
+  propertiesPanelWidth: 296
+  settingsPanelHeight: 224
+  statusInterval: 0.1
+  propertiesInterval: 0.2
+  treeInterval: 0.4
+  logUiEvents: 1
 --- !u!4 &877965895
 Transform:
   m_ObjectHideFlags: 0
@@ -3000,6 +3021,34 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 2300000, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 288bf616b7a4b7840b4e6a1e4b5c316c, type: 2}
+    - target: {fileID: 2300002, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 288bf616b7a4b7840b4e6a1e4b5c316c, type: 2}
+    - target: {fileID: 2300004, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 288bf616b7a4b7840b4e6a1e4b5c316c, type: 2}
+    - target: {fileID: 2300006, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 288bf616b7a4b7840b4e6a1e4b5c316c, type: 2}
+    - target: {fileID: 2300008, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 288bf616b7a4b7840b4e6a1e4b5c316c, type: 2}
+    - target: {fileID: 2300010, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 288bf616b7a4b7840b4e6a1e4b5c316c, type: 2}
+    - target: {fileID: 2300012, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 288bf616b7a4b7840b4e6a1e4b5c316c, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -3106,6 +3155,7 @@ MonoBehaviour:
   enableSelfCollisionGuard: 1
   linkRadius: 0.07
   selectiveRollback: 1
+  selfCollisionStopTime: 0.25
 --- !u!1 &1083612743
 GameObject:
   m_ObjectHideFlags: 0

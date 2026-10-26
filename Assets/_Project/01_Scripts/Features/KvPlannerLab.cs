@@ -527,10 +527,11 @@ namespace KazistovVvFeatures
             treeLines.useWorldSpace = true;
             treeLines.numCapVertices = 0;
             treeLines.widthMultiplier = 0.0035f;
-            Shader sh = Shader.Find("Sprites/Default");
-            if (sh != null)
+            Material treeMaterial = KazistovVvFeatures.KvRenderPipelineShaders.CreateLine(
+                "Материал_дерева_RRT", Color.white);
+            if (treeMaterial != null)
             {
-                treeLines.material = new Material(sh);
+                treeLines.material = treeMaterial;
                 treeLines.startColor = new Color(0.35f, 1f, 0.75f, 0.85f);
                 treeLines.endColor = new Color(1f, 0.6f, 0.15f, 0.35f);
             }

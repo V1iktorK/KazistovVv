@@ -20,7 +20,9 @@ public class TargetMarker : MonoBehaviour
         
             gameObject.AddComponent<MeshFilter>().sharedMesh = mesh;
             rend = gameObject.AddComponent<MeshRenderer>();
-            rend.material = new Material(Shader.Find("Standard"));
+            Material markerMaterial = KazistovVvFeatures.KvRenderPipelineShaders.CreateLit(
+                "Материал_маркера", Color.magenta);
+            if (markerMaterial != null) rend.material = markerMaterial;
         }
     }
     

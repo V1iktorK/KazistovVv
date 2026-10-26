@@ -158,8 +158,9 @@ namespace KazistovVvFeatures
                 lr.useWorldSpace = true;
                 lr.numCapVertices = 4;
                 lr.widthMultiplier = 0.012f;
-                Shader sh = Shader.Find("Sprites/Default");
-                if (sh != null) lr.material = new Material(sh);
+                Material arrowMaterial = KazistovVvFeatures.KvRenderPipelineShaders.CreateLine(
+                    "Материал_стрелки_сил", Color.white);
+                if (arrowMaterial != null) lr.material = arrowMaterial;
                 lr.positionCount = 0;
                 arrows.Add(lr);
             }
@@ -426,10 +427,8 @@ namespace KazistovVvFeatures
                 root = go.transform;
                 filter = go.AddComponent<MeshFilter>();
                 renderer = go.AddComponent<MeshRenderer>();
-                Shader sh = Shader.Find("HDRP/Unlit");
-                if (sh == null) sh = Shader.Find("Unlit/Color");
-                if (sh == null) sh = Shader.Find("Sprites/Default");
-                material = sh != null ? new Material(sh) : null;
+                // Unlit-материал под ТЕКУЩИЙ конвейер проекта (в §29 их два: URP и HDRP).
+                material = KvRenderPipelineShaders.CreateUnlit("Материал_теплокарты_времени", Color.white);
                 if (material != null)
                 {
                     material.hideFlags = HideFlags.HideAndDontSave;
