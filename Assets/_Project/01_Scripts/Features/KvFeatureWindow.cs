@@ -122,6 +122,19 @@ namespace KazistovVvFeatures
         public int VisibleTab { get { return visible ? tab : -1; } }
         public bool EtaPanelEnabled = true;
 
+        /// <summary>Идентификатор окна в реестре пояса ([D22]) — один на всё приложение.</summary>
+        public const string WindowId = "panel.features";
+
+        /// <summary>Свёрнуто ли окно (чёрточка в заголовке, решение владельца [D21]).</summary>
+        private bool collapsed;
+
+        /// <summary>Строка вкладок и область содержимого — их прячет сворачивание.</summary>
+        private GameObject tabsRoot;
+        private GameObject scrollRoot;
+
+        /// <summary>Свёрнуто ли окно: заголовок остаётся, содержимое скрыто ([D21]).</summary>
+        public bool Collapsed { get { return collapsed; } }
+
         /// <summary>
         /// ЭТАП 2 (мультиязычность): обновить подписи окна после смены языка — заголовок и
         /// полосу вкладок. Окно не пересоздаётся, состояние и выбранная вкладка сохраняются.
@@ -220,6 +233,17 @@ namespace KazistovVvFeatures
             closeRect.sizeDelta = new Vector2(22f, 18f);
             closeRect.anchoredPosition = new Vector2(-3f, 0f);
 
+            // --- «СВЕРНУТЬ» (чёрточка) рядом с «ЗАКРЫТЬ» — решение владельца [D21].
+            // Закрытие уводит окно НА ПОЯС ([D22], см. Hide ниже), сворачивание оставляет его на месте.
+            Button collapseButton = KvTheme.CreateSmallButton(header, "Collapse", "—",
+                delegate { ToggleCollapse(); });
+            RectTransform collapseRect = collapseButton.GetComponent<RectTransform>();
+            collapseRect.anchorMin = new Vector2(1f, 0.5f);
+            collapseRect.anchorMax = new Vector2(1f, 0.5f);
+            collapseRect.pivot = new Vector2(1f, 0.5f);
+            collapseRect.sizeDelta = new Vector2(22f, 18f);
+            collapseRect.anchoredPosition = new Vector2(-27f, 0f);
+
             // --- строка вкладок
             GameObject tabGo = new GameObject("Tabs", typeof(Image));
             tabGo.transform.SetParent(winGo.transform, false);
@@ -230,6 +254,7 @@ namespace KazistovVvFeatures
             tabBar.sizeDelta = new Vector2(0f, 24f);
             tabBar.anchoredPosition = new Vector2(0f, -22f);
             tabGo.GetComponent<Image>().color = KvTheme.PanelBg;
+            tabsRoot = tabGo;
 
             tabStrip = KvWidgets.Segmented(tabBar, "FeatureTabs", TabTitlesLocalized(), 0,
                 delegate (int index) { Show(index); }, 20f);
@@ -239,6 +264,7 @@ namespace KazistovVvFeatures
             // --- прокручиваемая область содержимого
             GameObject scrollGo = new GameObject("Scroll", typeof(ScrollRect));
             scrollGo.transform.SetParent(winGo.transform, false);
+            scrollRoot = scrollGo;
             RectTransform scrollRect = (RectTransform)scrollGo.transform;
             scrollRect.anchorMin = new Vector2(0f, 0f);
             scrollRect.anchorMax = new Vector2(1f, 1f);
@@ -285,7 +311,14 @@ namespace KazistovVvFeatures
 
             visible = false;
             window.gameObject.SetActive(false);
-            Debug.Log("[Features] панель функций собрана (вкладок " + TabTitles.Length + ")");
+            // РЕЕСТР ОКОН И ПОЯС ([D21]/[D22]): окно умеет показаться, скрыться (уйти на пояс)
+            // и свернуться. Действия передаются делегатами — реестру не нужны ни сцена, ни канвас.
+            KazistovVvXr.KvWindowBelt.Register(WindowId, this,
+                delegate { Show(tab); }, Hide, ToggleCollapse,
+                KazistovVvUI.KvLoc.T("panel.features", "Панель функций"));
+
+            Debug.Log("[Features] панель функций собрана (вкладок " + TabTitles.Length + ") · " +
+                      KazistovVvXr.KvWindowBelt.Describe());
         }
 
         private void BuildEtaPanel(RectTransform canvasRect)
@@ -387,6 +420,7 @@ namespace KazistovVvFeatures
             visible = true;
             if (window != null) window.gameObject.SetActive(true);
             SetTab(tabIndex);
+            KazistovVvXr.KvWindowBelt.NotifyShown(WindowId);   // показали — снять с пояса
         }
 
         public void Toggle(int tabIndex)
@@ -395,10 +429,57 @@ namespace KazistovVvFeatures
             else Show(tabIndex);
         }
 
+        /// <summary>
+        /// СКРЫТЬ ОКНО. По решению владельца [D22] скрытое окно уходит НА ПОЯС, а не исчезает:
+        /// его можно достать плиткой. Если на поясе нет места — окно ОСТАЁТСЯ ВИДИМЫМ, а в журнал
+        /// идёт строка «на поясе нет места»: молча потерять окно нельзя (иначе оператор решит,
+        /// что закрыл его, и не найдёт).
+        /// </summary>
         public void Hide()
         {
+            if (KazistovVvXr.KvWindowBelt.Find(WindowId) != null)
+            {
+                if (!KazistovVvXr.KvWindowBelt.SendToBelt(WindowId))
+                {
+                    if (hub != null)
+                        hub.Log.Add(KvLogKind.Ui, KazistovVvUI.KvLoc.T("xr.belt.full", "На поясе нет места"));
+                    return;
+                }
+                return;   // SendToBelt уже скрыл окно и положил плитку
+            }
+
             visible = false;
             if (window != null) window.gameObject.SetActive(false);
+        }
+
+        /// <summary>
+        /// СВЕРНУТЬ ИЛИ РАЗВЕРНУТЬ (чёрточка в заголовке, [D21]). Свёрнутое окно остаётся на месте:
+        /// заголовок и кнопки видны, содержимое скрыто, высота окна уменьшается до заголовка.
+        /// </summary>
+        public void ToggleCollapse()
+        {
+            SetCollapsed(!collapsed);
+        }
+
+        /// <summary>Задать свёрнутость явно (например, при возврате окна с пояса).</summary>
+        public void SetCollapsed(bool value)
+        {
+            collapsed = value;
+
+            if (scrollRoot != null) scrollRoot.SetActive(!collapsed);
+            if (tabsRoot != null) tabsRoot.SetActive(!collapsed);
+            if (window != null)
+            {
+                float height = collapsed ? 26f : windowHeight;
+                window.sizeDelta = new Vector2(window.sizeDelta.x, height);
+            }
+
+            KazistovVvXr.KvWindowBelt.NotifyCollapsed(WindowId, collapsed);
+            if (hub != null)
+                hub.Log.Add(KvLogKind.Ui, KazistovVvUI.KvLoc.T("panel.features", "Панель функций") + ": " +
+                    (collapsed
+                        ? KazistovVvUI.KvLoc.T("xr.window.collapse", "Свернуть")
+                        : KazistovVvUI.KvLoc.T("xr.window.expanded", "Открыто")));
         }
 
         public void ToggleEta()

@@ -115,8 +115,9 @@ namespace TrajectoryCore
                 line = go.AddComponent<LineRenderer>();
                 line.useWorldSpace = true;
                 line.numCapVertices = 2;
-                Shader sh = Shader.Find("Sprites/Default");
-                if (sh != null) line.material = new Material(sh);
+                Material lineMaterial = KazistovVvFeatures.KvRenderPipelineShaders.CreateLine(
+                    "Материал_линии_траектории", Color.white);
+                if (lineMaterial != null) line.material = lineMaterial;
             }
             if (dashLine == null)
             {
@@ -126,8 +127,9 @@ namespace TrajectoryCore
                 dashLine = go.AddComponent<LineRenderer>();
                 dashLine.useWorldSpace = true;
                 dashLine.numCapVertices = 0;
-                Shader sh = Shader.Find("Sprites/Default");
-                if (sh != null) dashLine.material = new Material(sh);
+                Material dashMaterial = KazistovVvFeatures.KvRenderPipelineShaders.CreateLine(
+                    "Материал_пунктира", Color.white);
+                if (dashMaterial != null) dashLine.material = dashMaterial;
             }
             if (tubeFilter == null)
             {
@@ -136,11 +138,10 @@ namespace TrajectoryCore
                 go.transform.SetParent(transform, false);
                 tubeFilter = go.AddComponent<MeshFilter>();
                 tubeRenderer = go.AddComponent<MeshRenderer>();
-                Shader sh = Shader.Find("HDRP/Lit");
-                if (sh == null) sh = Shader.Find("Standard");
-                if (sh == null) sh = Shader.Find("Sprites/Default");
-                Material m = new Material(sh);
-                if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", new Color(baseColor.r, baseColor.g, baseColor.b, 0.12f));
+                // Материал трубы — под ТЕКУЩИЙ конвейер проекта (в §29 их два: URP и HDRP).
+                Material m = KazistovVvFeatures.KvRenderPipelineShaders.CreateLit("Материал_трубы",
+                    new Color(baseColor.r, baseColor.g, baseColor.b, 0.12f));
+                if (m == null) return;
                 if (m.HasProperty("_Smoothness")) m.SetFloat("_Smoothness", 0.2f);
                 tubeRenderer.material = m;
                 tubeRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;

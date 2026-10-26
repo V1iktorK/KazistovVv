@@ -102,10 +102,11 @@ namespace KazistovVvFeatures
             // а в CollisionWorld он не попадёт: объекты под RobotController там пропускаются.
             go.hideFlags = HideFlags.None;
 
-            material = new Material(Shader.Find("HDRP/Lit"));
-            if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", new Color(0.35f, 0.36f, 0.40f));
-            if (material.HasProperty("_Metallic")) material.SetFloat("_Metallic", 0.75f);
-            if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", 0.45f);
+            // Материал — под ТЕКУЩИЙ конвейер проекта (в §29 их два: URP для шлема, HDRP для
+            // компьютера): жёсткий `Shader.Find("HDRP/Lit")` под URP давал бы розовый захват.
+            material = KvRenderPipelineShaders.CreateLit("Материал_захвата", new Color(0.35f, 0.36f, 0.40f));
+            if (material != null && material.HasProperty("_Metallic")) material.SetFloat("_Metallic", 0.75f);
+            if (material != null && material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", 0.45f);
 
             fingerA = MakeFinger("Палец_A", 1f);
             fingerB = MakeFinger("Палец_B", -1f);
@@ -357,11 +358,14 @@ namespace KazistovVvFeatures
             Renderer r = cube.GetComponent<Renderer>();
             if (r != null)
             {
-                Material m = new Material(Shader.Find("HDRP/Lit"));
-                if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", new Color(0.95f, 0.62f, 0.15f));
-                if (m.HasProperty("_Metallic")) m.SetFloat("_Metallic", 0.1f);
-                if (m.HasProperty("_Smoothness")) m.SetFloat("_Smoothness", 0.35f);
-                r.sharedMaterial = m;
+                // Материал кубика — тоже под текущий конвейер (см. пояснение выше).
+                Material m = KvRenderPipelineShaders.CreateLit("Материал_кубика", new Color(0.95f, 0.62f, 0.15f));
+                if (m != null)
+                {
+                    if (m.HasProperty("_Metallic")) m.SetFloat("_Metallic", 0.1f);
+                    if (m.HasProperty("_Smoothness")) m.SetFloat("_Smoothness", 0.35f);
+                    r.sharedMaterial = m;
+                }
             }
 
             cubeBody = cube.AddComponent<Rigidbody>();

@@ -1,0 +1,149 @@
+// ============================================================================================
+// ЭТАП А, ПУНКТ A4 — БЛОК ДЛЯ ВСТАВКИ В KvXrTools.cs (отчёт «что сборка обязана была вернуть»)
+//
+// КУДА ВСТАВЛЯТЬ: в Assets/_Project/01_Scripts/Editor/KvXrTools.cs, в конец области
+//   // ================================================================== диагностика
+// то есть сразу после закрывающей скобки метода ReportXrState() и ПЕРЕД закрывающими
+// скобками класса `KvXrTools` и пространства имён.
+//
+// ЧТО ЕЩЁ НУЖНО: в начало файла, в список using, добавить
+//   using System.Text;
+// (нужен для StringBuilder; без него будет CS0246/CS0103).
+//
+// ЗАЧЕМ: активная платформа живёт в Library (не в текстовом файле проекта), поэтому «сборка
+// вернула исходное состояние» нельзя проверить ни хешем, ни глазами — только отчётом изнутри
+// Unity. Метод вызывается батчмодом:
+//   Unity.exe -batchmode -nographics -quit -projectPath C:\KazistovVv_Build ^
+//     -executeMethod KazistovVvXrEditor.KvXrTools.ReportBuildReturnState ^
+//     -logFile C:\KazistovVv_Build\Logs\stage-a-return-state.log
+// и печатает строки с префиксом [KvA], по которым скрипт Tools\stage-a-verify.ps1 и сверяет.
+// ============================================================================================
+
+        /// <summary>
+        /// ОТЧЁТ «ЧТО СБОРКА ОБЯЗАНА БЫЛА ВЕРНУТЬ» (Этап А, пункт A4).
+        ///
+        /// ЗАЧЕМ ОТДЕЛЬНЫЙ ОТЧЁТ. Сборка APK намеренно меняет проект: переключает активную
+        /// платформу на Android, правит графический API Android, убирает тесты из `Assets`.
+        /// «Сборка прошла» и «проект остался таким, как был» — ДВА разных утверждения, и второе
+        /// проверяется фактом. Активная платформа хранится в `Library`, а не в текстовом файле
+        /// проекта, поэтому честный ответ даёт только сам редактор — этим методом.
+        /// </summary>
+        [MenuItem(MenuRoot + "8. Отчёт: состояние после сборки (Этап А)", false, 45)]
+        public static void ReportBuildReturnState()
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("[KvA] === СОСТОЯНИЕ ПОСЛЕ СБОРКИ (Этап А, A4) ===");
+
+            sb.AppendLine("[KvA] активная платформа: " + EditorUserBuildSettings.activeBuildTarget +
+                          " (ожидание Этапа А: StandaloneWindows64)");
+
+            RenderPipelineAsset defaultPipeline = GraphicsSettings.defaultRenderPipeline;
+            sb.AppendLine("[KvA] умолчание графики: " +
+                (defaultPipeline != null
+                    ? defaultPipeline.name + " · " + ShortPipelineName(defaultPipeline)
+                    : "НЕ НАЗНАЧЕНО") +
+                " (ожидание: Mobile_RPAsset — URP, решение [D9])");
+
+            var apis = PlayerSettings.GetGraphicsAPIs(BuildTarget.Android);
+            sb.AppendLine("[KvA] графический API Android: " +
+                (apis != null ? string.Join(", ", System.Array.ConvertAll(apis, a => a.ToString())) : "нет") +
+                " (ожидание: Vulkan — решение [R2])");
+
+            sb.AppendLine("[KvA] уровни качества: " + DescribeQualityLevels());
+
+            string xrDetails;
+            sb.AppendLine("[KvA] лоадеры XR: " +
+                (VerifyOpenXrActive(out xrDetails) ? "OpenXR активен · " : "ПРОБЛЕМА · ") + xrDetails);
+
+            var scenes = new List<string>();
+            foreach (EditorBuildSettingsScene scene in EditorBuildSettings.scenes)
+                scenes.Add((scene.enabled ? "+" : "−") + scene.path);
+            sb.AppendLine("[KvA] сцены сборки (" + scenes.Count + "): " + string.Join(" | ", scenes));
+
+            sb.AppendLine("[KvA] тесты: " + DescribeTestsLocation());
+
+            Debug.Log(sb.ToString());
+        }
+
+        /// <summary>Короткое имя конвейера для отчёта: URP / HDRP / встроенный.</summary>
+        private static string ShortPipelineName(RenderPipelineAsset asset)
+        {
+            if (asset == null) return "нет";
+            string type = asset.GetType().Name;
+            if (type.IndexOf("Universal", StringComparison.OrdinalIgnoreCase) >= 0) return "URP";
+            if (type.IndexOf("HD", StringComparison.OrdinalIgnoreCase) >= 0) return "HDRP";
+            return type;
+        }
+
+        /// <summary>
+        /// УРОВНИ КАЧЕСТВА И ПЛАТФОРМЫ: имя, конвейер, для каких платформ исключён, какой уровень
+        /// по умолчанию у какой платформы. Читается из файла проекта (`ProjectSettings/QualitySettings.asset`),
+        /// а не из памяти редактора: §29 показал, что «в памяти» и «на диске» — разные ответы.
+        /// </summary>
+        public static string DescribeQualityLevels()
+        {
+            var assets = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/QualitySettings.asset");
+            if (assets == null || assets.Length == 0) return "QualitySettings.asset не прочитан";
+
+            var so = new SerializedObject(assets[0]);
+            SerializedProperty levels = so.FindProperty("m_QualitySettings");
+            SerializedProperty perPlatform = so.FindProperty("m_PerPlatformDefaultQuality");
+            if (levels == null) return "в QualitySettings.asset нет списка уровней";
+
+            var lines = new List<string>();
+            for (int i = 0; i < levels.arraySize; i++)
+            {
+                SerializedProperty level = levels.GetArrayElementAtIndex(i);
+                SerializedProperty nameProp = level.FindPropertyRelative("name");
+                SerializedProperty pipelineProp = level.FindPropertyRelative("customRenderPipeline");
+                SerializedProperty excluded = level.FindPropertyRelative("excludedTargetPlatforms");
+
+                var pipeline = pipelineProp != null ? pipelineProp.objectReferenceValue as RenderPipelineAsset : null;
+                var excludedNames = new List<string>();
+                if (excluded != null)
+                    for (int k = 0; k < excluded.arraySize; k++)
+                        excludedNames.Add(excluded.GetArrayElementAtIndex(k).stringValue);
+
+                lines.Add(string.Format("{0}[{1}] {2}{3}",
+                    nameProp != null ? nameProp.stringValue : ("уровень " + i),
+                    i,
+                    pipeline != null ? pipeline.name + " · " + ShortPipelineName(pipeline) : "встроенный конвейер",
+                    excludedNames.Count > 0 ? ", исключён для " + string.Join("/", excludedNames.ToArray()) : string.Empty));
+            }
+
+            if (perPlatform != null)
+            {
+                for (int i = 0; i < perPlatform.arraySize; i++)
+                {
+                    SerializedProperty entry = perPlatform.GetArrayElementAtIndex(i);
+                    SerializedProperty key = entry.FindPropertyRelative("key");
+                    SerializedProperty value = entry.FindPropertyRelative("value");
+                    lines.Add("по умолчанию для " + (key != null ? key.stringValue : "?") +
+                              " — индекс " + (value != null ? value.intValue : -1));
+                }
+            }
+            return string.Join(" · ", lines.ToArray());
+        }
+
+        /// <summary>
+        /// ГДЕ ЛЕЖАТ ТЕСТЫ — прямой ответ на вопрос пункта A3. Отдельно называется случай
+        /// «папка есть, а файлов нет»: это и есть след дефекта A2 (Unity пересоздала пустую папку).
+        /// </summary>
+        public static string DescribeTestsLocation()
+        {
+            string root = Directory.GetCurrentDirectory();
+            string testsPath = Path.Combine(root, "Assets", "_Project", "08_Tests");
+            string testsParked = Path.Combine(root, "Temp", "_tests_parked_for_build");
+
+            int inAssets = CountTestFilesIn(testsPath);
+            int parked = CountTestFilesIn(testsParked);
+            bool folderExists = Directory.Exists(testsPath);
+
+            return string.Format(
+                "в Assets {0} файлов тестов ({1}) · в Temp {2} · папка в Assets {3}{4}",
+                inAssets,
+                folderExists ? "папка есть" : "папки нет",
+                parked,
+                folderExists ? "есть" : "отсутствует",
+                folderExists && inAssets == 0 ? " — ПАПКА ПУСТА, её пересоздала Unity (дефект A2)" : string.Empty);
+        }

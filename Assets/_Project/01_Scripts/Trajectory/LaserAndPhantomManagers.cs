@@ -23,6 +23,11 @@ namespace TrajectoryCore
             m.SetOverrideTag("RenderType", "Transparent");
 
             if (m.HasProperty("_SurfaceType")) m.SetFloat("_SurfaceType", 1f);          // Transparent
+            // URP-признак прозрачности: у URP/Lit и URP/Unlit «прозрачный» материал — это
+            // `_Surface = 1` и `_Blend = 0` (Alpha). Без этих двух строк под URP призраки,
+            // зоны и теплокарты остались бы НЕПРОЗРАЧНЫМИ: `_SurfaceType` у URP-шейдеров нет.
+            if (m.HasProperty("_Surface")) m.SetFloat("_Surface", 1f);                   // URP: Transparent
+            if (m.HasProperty("_Blend")) m.SetFloat("_Blend", 0f);                       // URP: Alpha
             if (m.HasProperty("_BlendMode")) m.SetFloat("_BlendMode", 0f);             // Alpha
             if (m.HasProperty("_AlphaCutoffEnable")) m.SetFloat("_AlphaCutoffEnable", 0f);
             if (m.HasProperty("_AlphaCutoff")) m.SetFloat("_AlphaCutoff", 0f);
@@ -1240,9 +1245,8 @@ namespace TrajectoryCore
                 rootGo.hideFlags = GhostHideFlags;
                 container = rootGo.transform;
 
-                Shader sh = Shader.Find("HDRP/Unlit");
-                if (sh == null) sh = Shader.Find("Unlit/Color");
-                if (sh != null) material = new Material(sh);
+                // Материал контура — под ТЕКУЩИЙ конвейер проекта (в §29 их два: URP и HDRP).
+                material = KazistovVvFeatures.KvRenderPipelineShaders.CreateUnlit("Материал_контура", Color.white);
                 if (material != null)
                 {
                     material.hideFlags = GhostHideFlags;

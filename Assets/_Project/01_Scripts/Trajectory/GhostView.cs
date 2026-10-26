@@ -37,14 +37,13 @@ public class GhostView : MonoBehaviour
         if (c != null) Destroy(c);
         go.transform.localScale = Vector3.one * size;
         Renderer r = go.GetComponent<Renderer>();
-        Shader sh = Shader.Find("HDRP/Lit");
-        if (sh == null) sh = Shader.Find("Standard");
-        if (sh == null) sh = Shader.Find("Sprites/Default");
-        Material m = new Material(sh);
-        if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", color);
-        if (m.HasProperty("_EmissiveColor")) { m.SetColor("_EmissiveColor", color * 2f); m.EnableKeyword("_EMISSION"); }
-        if (m.HasProperty("_Color")) m.SetColor("_Color", color);
-        r.material = m;
+        // Материал призрака — под ТЕКУЩИЙ конвейер проекта (в §29 их два: URP и HDRP).
+        Material m = KazistovVvFeatures.KvRenderPipelineShaders.CreateLit("Материал_призрака", color);
+        if (m != null)
+        {
+            if (m.HasProperty("_EmissiveColor")) { m.SetColor("_EmissiveColor", color * 2f); m.EnableKeyword("_EMISSION"); }
+            r.material = m;
+        }
         r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         go.SetActive(false);
         return go;
@@ -60,8 +59,9 @@ public class GhostView : MonoBehaviour
             LineRenderer lr = go.AddComponent<LineRenderer>();
             lr.useWorldSpace = true;
             lr.widthMultiplier = 0.012f;
-            Shader sh = Shader.Find("Sprites/Default");
-            if (sh != null) lr.material = new Material(sh);
+            Material ghostMaterial = KazistovVvFeatures.KvRenderPipelineShaders.CreateLine(
+                "Материал_призрака", Color.white);
+            if (ghostMaterial != null) lr.material = ghostMaterial;
             lines.Add(lr);
         }
         return lines[index];

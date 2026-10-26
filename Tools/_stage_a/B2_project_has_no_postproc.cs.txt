@@ -1,0 +1,25 @@
+        public static bool ProjectHasNoPostProcessingCameras()
+        {
+            string root = Directory.GetCurrentDirectory();
+            int scenesRead = 0;
+
+            foreach (EditorBuildSettingsScene scene in EditorBuildSettings.scenes)
+            {
+                if (scene == null || !scene.enabled) continue;
+
+                string path = Path.Combine(root, scene.path.Replace('/', Path.DirectorySeparatorChar));
+                if (!File.Exists(path)) continue;
+
+                scenesRead++;
+                string text = File.ReadAllText(path);
+
+                // Признак включённой постобработки — флаг камеры. Достаточно ОДНОЙ такой камеры,
+                // чтобы отсечение оказалось запрещено: эффекты рисуются, варианты нужны.
+                if (text.IndexOf("m_RenderPostProcessing: 1", System.StringComparison.Ordinal) >= 0)
+                    return false;
+            }
+
+            // Сцены не прочитались — решения нет. Молчаливое «нет данных» здесь означало бы
+            // «отсекаем всё» и могло бы убрать эффекты, которые рисуются, — поэтому НЕ отсекаем.
+            return scenesRead > 0;
+        }

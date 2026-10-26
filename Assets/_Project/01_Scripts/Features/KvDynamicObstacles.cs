@@ -196,15 +196,13 @@ namespace KazistovVvFeatures
 
         private static Material MakeMaterial(Color color)
         {
-            Shader sh = Shader.Find("HDRP/Lit");
-            if (sh == null) sh = Shader.Find("HDRP/Unlit");
-            if (sh == null) sh = Shader.Find("Standard");
-            Material m = sh != null ? new Material(sh) : null;
+            // ПАЙПЛАЙН БЕРЁТСЯ У ПРОЕКТА, А НЕ ЖЁСТКО. В проекте их два (решение [D9]: URP для
+            // шлема, HDRP для компьютера), и шейдер чужого конвейера даёт розовую поверхность.
+            // Фабрика выбирает шейдер и запасные варианты ТОГО ЖЕ конвейера и сама кладёт цвет
+            // в правильное свойство (`_BaseColor` у URP/HDRP, `_Color` у встроенного Standard).
+            Material m = KvRenderPipelineShaders.CreateLit("Материал_препятствия", color);
             if (m == null) return null;
             m.hideFlags = HideFlags.HideAndDontSave;
-            if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", color);
-            if (m.HasProperty("_Color")) m.SetColor("_Color", color);
-            if (m.HasProperty("_UnlitColor")) m.SetColor("_UnlitColor", color);
             if (m.HasProperty("_EmissiveColor") && color.r > 0.9f)
             {
                 m.SetColor("_EmissiveColor", color * 2.5f);

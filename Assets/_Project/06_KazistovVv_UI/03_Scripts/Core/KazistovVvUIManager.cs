@@ -328,6 +328,15 @@ namespace KazistovVvUI
             KvLoc.Changed += OnLanguageChanged;
             Log("Язык интерфейса: " + KvLoc.CurrentName + " · " + KvLoc.Status);
 
+            // Б15: на устройстве (Android) словари лежат ВНУТРИ пакета, и обычное чтение файла
+            // их не видит. Догружаем их асинхронно и после загрузки пересобираем подписи —
+            // на компьютере этот путь не выполняется (папка видна, словари уже прочитаны).
+            if (KazistovVvUI.KvLoc.NeedsAsyncFileLoad())
+            {
+                Log("Словари в пакете: догружаю с устройства (UnityWebRequest)");
+                StartCoroutine(KazistovVvUI.KvLoc.LoadFilesAsync());
+            }
+
             BuildShell();
 
             // ЭТАП 9: роутер геймпада живёт на объекте интерфейса и НЕ пересобирается вместе

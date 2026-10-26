@@ -160,7 +160,7 @@ namespace KazistovVvFeatures
             {
                 if (material == null)
                 {
-                    material = new Material(Shader.Find("HDRP/Lit"));
+                    material = KvRenderPipelineShaders.CreateLit("Материал_запретной_зоны", new Color(1f, 0.15f, 0.15f));
                     GhostMaterial.MakeGhost(material, new Color(1f, 0.15f, 0.15f), 0.28f);
                 }
                 bodyRenderer.sharedMaterial = material;

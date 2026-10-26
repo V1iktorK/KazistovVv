@@ -1,0 +1,137 @@
+        // ---- ПРАВКА ЭТАПА А (A2): НАЧАЛО БЛОКА ДЛЯ ЗАМЕНЫ (зелёная версия) ----
+
+        /// <summary>
+        /// УБРАТЬ ТЕСТЫ ИЗ СБОРКИ — перенос папки тестов в `Temp` на время сборки APK.
+        ///
+        /// ЗДЕСЬ ЛЕЧИТСЯ ВТОРОЙ ДЕФЕКТ ТОГО ЖЕ МЕСТА, найденный при написании тестов: прежний код
+        /// начинался с `Directory.Delete(testsParked, true)`. Если прошлая сборка была убита
+        /// (таймаут, снятие процесса) и тесты остались в `Temp`, следующая сборка УНИЧТОЖАЛА их
+        /// навсегда и парковала на их место пустую папку. Теперь сначала идёт САМОЛЕЧЕНИЕ —
+        /// возврат остатка на место, — и только потом парковка. Если вернуть не удалось,
+        /// парковка ОТМЕНЯЕТСЯ: потерять файлы тестов хуже, чем не собрать APK.
+        /// </summary>
+        public static TestParkingReport ParkTestsForBuild(string testsPath, string testsParked)
+        {
+            var report = new TestParkingReport();
+
+            // ШАГ 1. САМОЛЕЧЕНИЕ: остаток прошлой (убитой) парковки возвращаем на место.
+            if (Directory.Exists(testsParked))
+            {
+                TestParkingReport healing = RestoreParkedTests(testsPath, testsParked);
+                report.Detail = "самолечение: " + healing.Detail;
+
+                if (Directory.Exists(testsParked) && CountFilesIn(testsParked) > 0)
+                {
+                    report.Success = false;
+                    report.FilesLeftInTemp = CountFilesIn(testsParked);
+                    report.Detail += " · ПАРКОВКА ОТМЕНЕНА: в Temp остались файлы прошлой парковки, " +
+                                     "перенесите их в Assets вручную";
+                    return report;
+                }
+            }
+
+            if (!Directory.Exists(testsPath))
+            {
+                report.Success = true;
+                report.NothingToDo = true;
+                report.Detail += " · папки тестов в Assets нет — парковать нечего";
+                return report;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(testsParked));
+            if (Directory.Exists(testsParked)) Directory.Delete(testsParked, true);
+            Directory.Move(testsPath, testsParked);
+
+            report.Success = true;
+            report.FilesMoved = CountFilesIn(testsParked);
+            report.TestFilesMoved = CountTestFilesIn(testsParked);
+            report.Detail += string.Format(" · убрано из Assets {0} файлов в {1}", report.FilesMoved, testsParked);
+            return report;
+        }
+
+        /// <summary>
+        /// ВЕРНУТЬ ТЕСТЫ ИЗ `Temp` В `Assets` — вызывается из `finally`, то есть при ЛЮБОМ исходе сборки.
+        ///
+        /// ДЕФЕКТ A2 И ЕГО ЛЕЧЕНИЕ. Прежний возврат был условием «перенести, если папки в `Assets`
+        /// НЕТ». Unity пересоздаёт папку (её `.meta` остаётся), поэтому на живой сборке §30 условие
+        /// не выполнилось, и 23 файла тестов остались бы в `Temp` навсегда — молча, без строки
+        /// в журнале. Теперь разбираются ЧЕТЫРЕ случая явно:
+        ///   1) парковки нет — работы не было (не ошибка);
+        ///   2) папки в `Assets` нет — переносится папка целиком (быстрый путь);
+        ///   3) папка есть и ПУСТА (её пересоздала Unity) — пустую снимаем, содержимое переносим:
+        ///      ЭТО И ЕСТЬ ДЕФЕКТ, из-за которого тесты не возвращались;
+        ///   4) папка есть и НЕ пуста — переносим ПОФАЙЛОВО и ничего не затираем; совпавшие имена
+        ///      считаются конфликтами и ОСТАЮТСЯ в `Temp` (потерять файл теста хуже, чем доложить
+        ///      о конфликте), поэтому такой исход честно помечается как неполный.
+        /// </summary>
+        public static TestParkingReport RestoreParkedTests(string testsPath, string testsParked)
+        {
+            var report = new TestParkingReport();
+
+            // 1. Возвращать нечего.
+            if (!Directory.Exists(testsParked))
+            {
+                report.Success = true;
+                report.NothingToDo = true;
+                report.Detail = "возвращать нечего: в Temp нет запаркованных тестов";
+                return report;
+            }
+
+            // 2. Цели нет — переносим папку целиком.
+            if (!Directory.Exists(testsPath))
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(testsPath));
+                Directory.Move(testsParked, testsPath);
+                report.Success = true;
+                report.FilesMoved = CountFilesIn(testsPath);
+                report.TestFilesMoved = CountTestFilesIn(testsPath);
+                report.Detail = string.Format("перенесена папка целиком: файлов {0} (тестов {1})",
+                    report.FilesMoved, report.TestFilesMoved);
+                return report;
+            }
+
+            // 3. ЦЕЛЬ ПЕРЕСОЗДАНА UNITY И ПУСТА — это и есть дефект A2. Пустая папка не данные.
+            if (CountFilesIn(testsPath) == 0)
+            {
+                Directory.Delete(testsPath, true);
+                Directory.Move(testsParked, testsPath);
+                report.TargetRecreated = true;
+                report.Success = true;
+                report.FilesMoved = CountFilesIn(testsPath);
+                report.TestFilesMoved = CountTestFilesIn(testsPath);
+                report.Detail = string.Format("снята пустая папка, пересозданная Unity; перенесено файлов {0} (тестов {1})",
+                    report.FilesMoved, report.TestFilesMoved);
+                return report;
+            }
+
+            // 4. ЦЕЛЬ НЕПУСТА — переносим пофайлово, ничего не затирая.
+            string[] files = Directory.GetFiles(testsParked, "*", SearchOption.AllDirectories);
+            foreach (string file in files)
+            {
+                string relative = file.Substring(testsParked.Length).TrimStart(Path.DirectorySeparatorChar);
+                string destination = Path.Combine(testsPath, relative);
+
+                string folder = Path.GetDirectoryName(destination);
+                if (!string.IsNullOrEmpty(folder) && !Directory.Exists(folder)) Directory.CreateDirectory(folder);
+
+                if (File.Exists(destination)) { report.Conflicts++; continue; }
+
+                File.Move(file, destination);
+                report.FilesMoved++;
+                if (file.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)) report.TestFilesMoved++;
+            }
+
+            // Опустевшую парковку убираем целиком — но ТОЛЬКО если файлов в ней не осталось.
+            // Рекурсивное удаление здесь безопасно именно поэтому: удалять нечего, кроме пустых папок.
+            if (CountFilesIn(testsParked) == 0) Directory.Delete(testsParked, true);
+
+            report.FilesLeftInTemp = CountFilesIn(testsParked);
+            report.Success = report.FilesLeftInTemp == 0;
+            report.Detail = report.Success
+                ? "папка в Assets была не пуста: перенесено пофайлово, затираний нет"
+                : string.Format("ВНИМАНИЕ: конфликтов {0}, не разобрано файлов {1} — они оставлены в {2}",
+                    report.Conflicts, report.FilesLeftInTemp, testsParked);
+            return report;
+        }
+
+        // ---- ПРАВКА ЭТАПА А (A2): КОНЕЦ БЛОКА ДЛЯ ЗАМЕНЫ (зелёная версия) ----

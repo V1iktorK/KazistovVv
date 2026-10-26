@@ -686,11 +686,9 @@ namespace KazistovVvFeatures
                     MeshRenderer mr = go.GetComponent<MeshRenderer>();
                     mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                     mr.receiveShadows = false;
-                    Material mat = new Material(Shader.Find("HDRP/Unlit"));
-                    if (mat.HasProperty("_UnlitColor"))
-                        mat.SetColor("_UnlitColor", h == 0 ? new Color(0.35f, 0.85f, 1f) : new Color(1f, 0.65f, 0.25f));
-                    if (mat.HasProperty("_EmissiveColor"))
-                        mat.SetColor("_EmissiveColor", h == 0 ? new Color(0.35f, 0.85f, 1f) : new Color(1f, 0.65f, 0.25f));
+                    Color jointColor = h == 0 ? new Color(0.35f, 0.85f, 1f) : new Color(1f, 0.65f, 0.25f);
+                    Material mat = KvRenderPipelineShaders.CreateUnlit("Материал_сустава", jointColor);
+                    if (mat != null && mat.HasProperty("_EmissiveColor")) mat.SetColor("_EmissiveColor", jointColor);
                     mr.sharedMaterial = mat;
                     go.transform.localScale = Vector3.one * 0.012f;
                     markers[h, j] = go.transform;
@@ -703,7 +701,8 @@ namespace KazistovVvFeatures
                     lr.positionCount = 2;
                     lr.startWidth = 0.006f;
                     lr.endWidth = 0.006f;
-                    lr.material = new Material(Shader.Find("HDRP/Unlit"));
+                    lr.material = KvRenderPipelineShaders.CreateUnlit(
+                        "Материал_кости", h == 0 ? new Color(0.35f, 0.85f, 1f) : new Color(1f, 0.65f, 0.25f));
                     lr.startColor = lr.endColor = h == 0 ? new Color(0.35f, 0.85f, 1f) : new Color(1f, 0.65f, 0.25f);
                     lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                     bones[h, b] = lr;
@@ -1012,10 +1011,9 @@ namespace KazistovVvFeatures
             template.hideFlags = HideFlags.HideAndDontSave;
             UnityEngine.Object.DontDestroyOnLoad(template);
 
-            Material mat = new Material(Shader.Find("HDRP/Unlit"));
             Color color = new Color(1f, 0.35f, 0.85f);
-            if (mat.HasProperty("_UnlitColor")) mat.SetColor("_UnlitColor", color);
-            if (mat.HasProperty("_EmissiveColor")) mat.SetColor("_EmissiveColor", color);
+            Material mat = KvRenderPipelineShaders.CreateUnlit("Материал_фиксации", color);
+            if (mat != null && mat.HasProperty("_EmissiveColor")) mat.SetColor("_EmissiveColor", color);
 
             for (int i = 0; i < 24; i++)
             {
@@ -1044,7 +1042,8 @@ namespace KazistovVvFeatures
             lr.positionCount = 48;
             lr.startWidth = 0.004f;
             lr.endWidth = 0.004f;
-            lr.material = new Material(Shader.Find("HDRP/Unlit"));
+            lr.material = KvRenderPipelineShaders.CreateUnlit("Материал_маски_периферии",
+                new Color(0.4f, 0.9f, 1f, 0.7f));
             Color c = new Color(0.4f, 0.9f, 1f, 0.7f);
             lr.startColor = lr.endColor = c;
             for (int i = 0; i < 48; i++)

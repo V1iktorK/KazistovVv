@@ -1,0 +1,53 @@
+ЭТАП 2 (ЗЕЛЁНАЯ ПРАВКА) КАРТОЧКИ Б2 — что именно заменить после красной точки.
+
+ФАЙЛ 1: Assets\_Project\01_Scripts\Editor\KvShaderVariantStripper.cs
+
+(1) В список using добавить `using UnityEditor;` — нужен для EditorBuildSettings/EditorBuildSettingsScene.
+
+(2) Заменить ТЕЛО метода-заглушки целиком:
+
+--- БЫЛО (этап 1, заглушка) ----------------------------------------------------------------
+
+        public static bool ProjectHasNoPostProcessingCameras()
+        {
+            return false;
+        }
+
+--- СТАЛО ---------------------------------------------------------------------------------
+
+        public static bool ProjectHasNoPostProcessingCameras()
+        {
+            string root = Directory.GetCurrentDirectory();
+            int scenesRead = 0;
+
+            foreach (EditorBuildSettingsScene scene in EditorBuildSettings.scenes)
+            {
+                if (scene == null || !scene.enabled) continue;
+
+                string path = Path.Combine(root, scene.path.Replace('/', Path.DirectorySeparatorChar));
+                if (!File.Exists(path)) continue;
+
+                scenesRead++;
+                string text = File.ReadAllText(path);
+
+                // Признак включённой постобработки — флаг камеры. Достаточно ОДНОЙ такой камеры,
+                // чтобы отсечение было запрещено: эффекты рисуются, варианты нужны.
+                if (text.IndexOf("m_RenderPostProcessing: 1", System.StringComparison.Ordinal) >= 0)
+                    return false;
+            }
+
+            // Сцены не прочитались — решения нет. Молчаливое «нет данных» здесь означало бы
+            // «отсекаем всё» и могло бы убрать эффекты, которые рисуются: поэтому НЕ отсекаем.
+            return scenesRead > 0;
+        }
+
+===============================================================================================
+ФАЙЛ 2: Assets\_Project\01_Scripts\Editor\KvRenderPipelineTools.cs
+
+(1) В список using добавить `using UnityEngine.Rendering.Universal;`
+    (нужен для URPTerrainShaderSetting).
+
+(2) Вставить блок ниже ПЕРЕД закрывающей скобкой класса `KvRenderPipelineTools`
+    (то есть перед строкой «    }», за которой идёт «}» — конец пространства имён).
+
+СОДЕРЖИМОЕ БЛОКА — в файле B2_tools_block.cs этого же каталога.

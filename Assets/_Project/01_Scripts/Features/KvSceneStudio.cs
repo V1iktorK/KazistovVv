@@ -209,11 +209,9 @@ namespace KazistovVvFeatures
 
         private static Material MakeMaterial(string name, Color color, float smoothness, float metallic)
         {
-            Shader shader = Shader.Find("HDRP/Lit") ?? Shader.Find("Standard");
-            Material material = new Material(shader);
-            material.name = "Окружение_" + name;
-            if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", color);
-            if (material.HasProperty("_Color")) material.SetColor("_Color", color);
+            // Материал окружения — под ТЕКУЩИЙ конвейер проекта (в §29 их два: URP и HDRP).
+            Material material = KvRenderPipelineShaders.CreateLit("Окружение_" + name, color);
+            if (material == null) return null;
             if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", Mathf.Clamp01(smoothness));
             if (material.HasProperty("_Metallic")) material.SetFloat("_Metallic", Mathf.Clamp01(metallic));
             if (material.HasProperty("_DoubleSidedEnable")) material.SetFloat("_DoubleSidedEnable", 1f);

@@ -1,0 +1,61 @@
+        // ==================================================== §30: материал робота (карточка Б11)
+
+        /// <summary>
+        /// РОБОТ РИСУЕТСЯ ПРОЕКТНЫМ МАТЕРИАЛОМ, А НЕ МАТЕРИАЛОМ КОНВЕЙЕРА «ПО УМОЛЧАНИЮ» (§30, карточка Б11).
+        ///
+        /// ЧТО БЫЛО. `Robot.fbx` переназначала свой материал на guid `b90d9d26…`, которого в проекте
+        /// нет (ассет утрачен). Поэтому 7 рендереров робота рисовались `DefaultHDMaterial` —
+        /// материалом конвейера «по умолчанию»: его нельзя ни настроить, ни перевести на URP
+        /// (в шлеме он был бы розовым), и он не принадлежит проекту.
+        ///
+        /// ЧТО ПРОВЕРЯЕТСЯ: (1) оба проектных материала существуют — `Robot_HDRP` (компьютер)
+        /// и `Robot_URP` (шлем); (2) в каждой сцене не меньше семи рендереров робота ссылаются
+        /// на «свой» материал конвейера; (3) битой ссылки в модели больше нет, а переназначение
+        /// в модели указывает на проектный материал. Числа — из §30.
+        /// </summary>
+        [Test]
+        public void RobotMaterials_AreProjectMaterialsNotPipelineDefaults()
+        {
+            const string hdrpMaterial = "Assets/_Project/04_Materials/Robot/Robot_HDRP.mat";
+            const string urpMaterial = "Assets/_Project/04_Materials/Robot/Robot_URP.mat";
+            const string modelMeta = "Assets/Robots/Robot.fbx.meta";
+            const string lostGuid = "b90d9d26a7b21ee4e93ad5a44c9333be";   // утраченный ассет, найденный в §29
+
+            string hdrpGuid = AssetDatabase.AssetPathToGUID(hdrpMaterial);
+            string urpGuid = AssetDatabase.AssetPathToGUID(urpMaterial);
+            Assert.IsFalse(string.IsNullOrEmpty(hdrpGuid), "нет проектного материала для компьютера: " + hdrpMaterial);
+            Assert.IsFalse(string.IsNullOrEmpty(urpGuid), "нет проектного материала для шлема: " + urpMaterial);
+
+            string mainScene = File.ReadAllText("Assets/_Project/00_Scenes/MainScene.unity");
+            string xrScene = File.ReadAllText("Assets/_Project/00_Scenes/XrMain.unity");
+
+            int inMain = CountOccurrences(mainScene, hdrpGuid);
+            int inXr = CountOccurrences(xrScene, urpGuid);
+
+            Assert.GreaterOrEqual(inMain, 7,
+                "в MainScene ссылок на проектный материал компьютера " + inMain + ", а в §30 их было 7 — " +
+                "значит, часть рендереров робота снова рисуется материалом конвейера «по умолчанию»");
+            Assert.GreaterOrEqual(inXr, 7,
+                "в XrMain ссылок на проектный материал шлема " + inXr + ", а в §30 их было 7 — " +
+                "в шлеме часть робота будет розовой");
+
+            string meta = File.ReadAllText(modelMeta);
+            StringAssert.DoesNotContain(lostGuid, meta,
+                "в " + modelMeta + " осталась ссылка на утраченный материал — любой новый экземпляр модели " +
+                "снова получит материал конвейера по умолчанию");
+            StringAssert.Contains(hdrpGuid, meta,
+                "переназначение материала в модели (" + modelMeta + ") не указывает на проектный " + hdrpMaterial);
+        }
+
+        /// <summary>Сколько раз строка встречается в тексте (для ссылок на guid в сценах).</summary>
+        private static int CountOccurrences(string text, string needle)
+        {
+            int count = 0;
+            int index = 0;
+            while ((index = text.IndexOf(needle, index, System.StringComparison.Ordinal)) >= 0)
+            {
+                count++;
+                index += needle.Length;
+            }
+            return count;
+        }

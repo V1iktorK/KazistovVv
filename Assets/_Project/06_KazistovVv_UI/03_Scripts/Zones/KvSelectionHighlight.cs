@@ -34,8 +34,12 @@ namespace KazistovVvUI
             root.hideFlags = HideFlags.HideInHierarchy;
             container = root.transform;
 
-            material = new Material(Shader.Find("HDRP/Unlit"));
-            if (material == null) material = new Material(Shader.Find("Unlit/Color"));
+            // НА УСТРОЙСТВЕ ЗДЕСЬ ПАДАЛО: 08.10.2026 в журнале шлема — ArgumentNullException
+            // в KvSelectionHighlight.Build из-за new Material(null). Прямой Shader.Find("HDRP/Unlit")
+            // под URP даёт null, а встроенный Unlit/Color мог быть вырезан стриппингом.
+            // Материал создаёт ТОЛЬКО фабрика; вернула null — материала просто не будет.
+            material = KazistovVvFeatures.KvRenderPipelineShaders.CreateUnlit(
+                "Материал_подсветки", KvTheme.Accent);
             if (material != null)
             {
                 material.hideFlags = HideFlags.HideAndDontSave;

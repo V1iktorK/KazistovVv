@@ -75,10 +75,9 @@ public class AimIndicator : MonoBehaviour
         }
         marker.transform.localScale = Vector3.one * markerSize;
 
-        Shader shader = Shader.Find("HDRP/Lit");
-        if (shader == null) shader = Shader.Find("Standard");
-        if (shader == null) shader = Shader.Find("Sprites/Default");
-        markerMaterial = new Material(shader);
+        // Материал метки — под ТЕКУЩИЙ конвейер проекта (в §29 их два: URP и HDRP).
+        markerMaterial = KazistovVvFeatures.KvRenderPipelineShaders.CreateLit(
+            "Материал_прицела", Color.white);
         markerRenderer = marker.GetComponent<Renderer>();
         if (markerRenderer != null)
         {

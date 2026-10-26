@@ -837,15 +837,10 @@ namespace KazistovVvFeatures
 
         private static Material MakeMaterial(Color color)
         {
-            Shader sh = Shader.Find("HDRP/Unlit");
-            if (sh == null) sh = Shader.Find("Unlit/Color");
-            if (sh == null) sh = Shader.Find("Sprites/Default");
-            Material m = sh != null ? new Material(sh) : null;
+            // Unlit-материал под ТЕКУЩИЙ конвейер проекта (в §29 их два: URP и HDRP).
+            Material m = KvRenderPipelineShaders.CreateUnlit("Материал_путевой_точки", color);
             if (m == null) return null;
             m.hideFlags = HideFlags.HideAndDontSave;
-            if (m.HasProperty("_UnlitColor")) m.SetColor("_UnlitColor", color);
-            if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", color);
-            if (m.HasProperty("_Color")) m.SetColor("_Color", color);
             if (m.HasProperty("_EmissiveColor"))
             {
                 m.SetColor("_EmissiveColor", color * 2.0f);

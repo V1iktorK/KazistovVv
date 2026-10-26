@@ -1,8 +1,10 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using UnityEngine;
+using UnityEngine.Networking;
 
 namespace KazistovVvUI
 {
@@ -69,6 +71,18 @@ namespace KazistovVvUI
         private static string preference = SystemCode;   // что выбрал оператор
         private static string current = "en";           // фактический язык
         private static string loadStatus = "не загружено";
+
+        /// <summary>Сколько словарей-файлов прочитано (накопительно: диск + устройство).</summary>
+        private static int fileCount;
+
+        /// <summary>Идёт ли асинхронная загрузка словарей с устройства (защита от повторного запуска).</summary>
+        private static bool asyncRunning;
+
+        /// <summary>
+        /// КОДЫ ФАЙЛОВ СЛОВАРЕЙ. На Android перечислить каталог нельзя (он внутри пакета),
+        /// поэтому файлы запрашиваются по имени — те семь, что лежат в проекте.
+        /// </summary>
+        public static readonly string[] KnownFileCodes = { "ru", "en", "zh", "es", "de", "fr", "ja" };
         private static Font cjkFont;
         private static string cjkFontName = "";
 
@@ -399,7 +413,7 @@ namespace KazistovVvUI
             catch { preference = SystemCode; }
 
             RegisterBuiltin();
-            int files = LoadFromDisk();
+            fileCount = LoadFromDisk();
             current = Resolve(preference);
 
             int total = 0;
@@ -408,8 +422,75 @@ namespace KazistovVvUI
                 l.strings = CountOf(l.code);
                 total += l.strings;
             }
-            loadStatus = "языков: " + langs.Count + " · файлов прочитано: " + files +
-                         " · строк всего: " + total + " · каталог: " + FolderPath;
+            loadStatus = "языков: " + langs.Count + " · файлов прочитано: " + fileCount +
+                         " · строк всего: " + total + " · каталог: " + FolderPath +
+                         (NeedsAsyncFileLoad() ? " · словари в пакете: читаются отдельно (UnityWebRequest)" : "");
+        }
+
+        /// <summary>
+        /// НУЖНА ЛИ АСИНХРОННАЯ ЗАГРУЗКА СЛОВАРЕЙ. На Android и WebGL
+        /// `Application.streamingAssetsPath` — это адрес ВНУТРИ пакета
+        /// (`jar:file:///data/app/…/base.apk!/assets`), а не папка: `Directory.Exists` его не
+        /// видит. Именно поэтому на шлеме 13.10.2026 в журнале было «файлов прочитано: 0»,
+        /// и интерфейс оставался на русских литералах. Такие адреса читает `UnityWebRequest`.
+        /// </summary>
+        public static bool NeedsAsyncFileLoad()
+        {
+            try { return !Directory.Exists(FolderPath); }
+            catch { return false; }
+        }
+
+        /// <summary>Адрес файла словаря: на устройстве он уже URL (`jar:`), на диске — путь.</summary>
+        private static string FileUrl(string fileName)
+        {
+            string path = Path.Combine(FolderPath, fileName);
+            if (path.IndexOf("://", StringComparison.Ordinal) >= 0) return path;
+            return "file://" + path.Replace("\\", "/");
+        }
+
+        /// <summary>
+        /// ДОГРУЗИТЬ СЛОВАРИ С УСТРОЙСТВА (Android/WebGL). Вызывается coroutine-ом из интерфейса
+        /// ПОСЛЕ сборки оболочки: файлы читаются по одному, затем подписи пересобираются
+        /// (событие <see cref="Changed"/>), поэтому оператор видит уже переведённый интерфейс.
+        /// Ничего не ломает, если файлов нет: язык остаётся на встроенных строках.
+        /// </summary>
+        public static IEnumerator LoadFilesAsync()
+        {
+            if (asyncRunning) yield break;
+            asyncRunning = true;
+
+            int loaded = 0;
+            int failed = 0;
+            for (int i = 0; i < KnownFileCodes.Length; i++)
+            {
+                string code = KnownFileCodes[i];
+                string url = FileUrl(code + ".json");
+                using (UnityWebRequest request = UnityWebRequest.Get(url))
+                {
+                    yield return request.SendWebRequest();
+
+                    if (request.result != UnityWebRequest.Result.Success)
+                    {
+                        failed++;
+                        Debug.LogWarning("[KvLoc] словарь " + code + " не прочитан с устройства: " +
+                                         request.error + " · " + url);
+                        continue;
+                    }
+                    string json = request.downloadHandler != null ? request.downloadHandler.text : null;
+                    if (string.IsNullOrEmpty(json)) continue;
+                    if (ApplyLanguageJson(json, code + ".json")) loaded++;
+                }
+            }
+
+            asyncRunning = false;
+            fileCount += loaded;
+            loadStatus = "языков: " + langs.Count + " · файлов прочитано: " + fileCount +
+                         " · с устройства: " + loaded + (failed > 0 ? " (не прочитано: " + failed + ")" : "") +
+                         " · каталог: " + FolderPath;
+            Debug.Log("[KvLoc] словари с устройства: прочитано " + loaded +
+                      (failed > 0 ? ", не удалось " + failed : "") + " · " + loadStatus);
+
+            if (loaded > 0 && Changed != null) Changed();   // пересобрать подписи на загруженных словарях
         }
 
         /// <summary>
@@ -448,6 +529,48 @@ namespace KazistovVvUI
         ///                 "cjk": false, "strings": [ { "key": "…", "text": "…" } ] }
         /// Незнакомый код файла автоматически становится новым языком в списке.
         /// </summary>
+        /// <summary>
+        /// ПРИМЕНИТЬ ОДИН СЛОВАРЬ ИЗ JSON. Общий путь для диска и для устройства: разбор один
+        /// и тот же, поэтому словарь, прочитанный из пакета, ведёт себя как прочитанный с диска.
+        /// Возвращает true, если язык добавлен и строки приняты.
+        /// </summary>
+        private static bool ApplyLanguageJson(string json, string fileLabel)
+        {
+            if (string.IsNullOrEmpty(json)) return false;
+
+            KvLangFile parsed;
+            try { parsed = JsonUtility.FromJson<KvLangFile>(json); }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[KvLoc] " + fileLabel + " — плохой JSON: " + e.Message);
+                return false;
+            }
+            if (parsed == null) return false;
+
+            string code = !string.IsNullOrEmpty(parsed.code)
+                ? parsed.code.Trim().ToLowerInvariant()
+                : Path.GetFileNameWithoutExtension(fileLabel).ToLowerInvariant();
+            if (string.IsNullOrEmpty(code)) return false;
+
+            bool cjk = parsed.cjk || code == "zh" || code == "ja" || code == "ko";
+            string name = string.IsNullOrEmpty(parsed.name) ? code : parsed.name;
+            string english = string.IsNullOrEmpty(parsed.english) ? name : parsed.english;
+            AddLang(code, name, english, cjk, true);
+
+            int added = 0;
+            if (parsed.strings != null)
+            {
+                foreach (KvLangString s in parsed.strings)
+                {
+                    if (s == null || string.IsNullOrEmpty(s.key)) continue;
+                    AddString(code, s.key, s.text);
+                    added++;
+                }
+            }
+            Debug.Log("[KvLoc] словарь " + code + " прочитан: " + added + " строк (" + fileLabel + ")");
+            return true;
+        }
+
         private static int LoadFromDisk()
         {
             int count = 0;
@@ -466,39 +589,7 @@ namespace KazistovVvUI
                         continue;
                     }
                     if (string.IsNullOrEmpty(json)) continue;
-
-                    KvLangFile parsed = null;
-                    try { parsed = JsonUtility.FromJson<KvLangFile>(json); }
-                    catch (Exception e)
-                    {
-                        Debug.LogWarning("[KvLoc] " + Path.GetFileName(file) + " — плохой JSON: " + e.Message);
-                        continue;
-                    }
-                    if (parsed == null) continue;
-
-                    string code = !string.IsNullOrEmpty(parsed.code)
-                        ? parsed.code.Trim().ToLowerInvariant()
-                        : Path.GetFileNameWithoutExtension(file).ToLowerInvariant();
-                    if (string.IsNullOrEmpty(code)) continue;
-
-                    bool cjk = parsed.cjk || code == "zh" || code == "ja" || code == "ko";
-                    string name = string.IsNullOrEmpty(parsed.name) ? code : parsed.name;
-                    string english = string.IsNullOrEmpty(parsed.english) ? name : parsed.english;
-                    AddLang(code, name, english, cjk, true);
-
-                    int added = 0;
-                    if (parsed.strings != null)
-                    {
-                        foreach (KvLangString s in parsed.strings)
-                        {
-                            if (s == null || string.IsNullOrEmpty(s.key)) continue;
-                            AddString(code, s.key, s.text);
-                            added++;
-                        }
-                    }
-                    count++;
-                    Debug.Log("[KvLoc] словарь " + code + " прочитан: " + added + " строк (" +
-                              Path.GetFileName(file) + ")");
+                    if (ApplyLanguageJson(json, Path.GetFileName(file))) count++;
                 }
             }
             catch (Exception e)

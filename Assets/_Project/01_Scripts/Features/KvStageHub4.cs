@@ -119,6 +119,9 @@ namespace KazistovVvFeatures
             // Строки раздела «Графика» (7 языков) + сам раздел: служба читает PlayerPrefs,
             // выполняет автоопределение при первом запуске и применяет настройки (ТЗ, этапы 1–5).
             KvLocExtra4.Install();
+            // Строки XR-оверлея: панель у руки, окна (свернуть/закрыть), пояс (7 языков) —
+            // решения владельца [D20]–[D22], сессия §32.
+            KvLocExtra5.Install();
             Graphics = KvGraphicsService.EnsureStarted();
 
             Proxies = new KvCollisionOptimizer();

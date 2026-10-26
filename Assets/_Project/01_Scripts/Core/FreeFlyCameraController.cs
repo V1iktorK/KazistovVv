@@ -709,14 +709,19 @@ public class FreeFlyCameraController : MonoBehaviour
         lr.endWidth = 0.004f;
         lr.enabled = false;
 
-        Shader shader = Shader.Find("Sprites/Default");
-        if (shader != null)
+        // Материал луча — через фабрику: она берёт шейдер ТЕКУЩЕГО конвейера и никогда —
+        // шейдер чужого (под URP это была бы розовая или вовсе невидимая линия).
+        Material laserMaterial = KazistovVvFeatures.KvRenderPipelineShaders.CreateLine(
+            "Материал_лазера", Color.white);
+        if (laserMaterial != null)
         {
-            lr.material = new Material(shader);
+            lr.material = laserMaterial;
         }
         else
         {
-            Debug.LogWarning("[FreeFlyCamera] Шейдер Sprites/Default не найден — лазер без материала.");
+            Debug.LogWarning("[FreeFlyCamera] Шейдер для лазера не найден (конвейер " +
+                KazistovVvFeatures.KvRenderPipelineShaders.ActiveKind() +
+                ") — лазер останется без материала. Проверьте шейдеры сборки: меню Tools/KazistovVv Рендер/8.");
         }
         return lr;
     }

@@ -1,0 +1,92 @@
+ЗАМЕНЫ В ТЕЛЕ `BuildAndroidApk` (KvXrTools.cs) — «провода» к выделенным методам.
+Одинаковы для красной и зелёной версий: меняется только поведение самих методов.
+
+===============================================================================================
+ЗАМЕНА 1 (парковка). Файл: Assets/_Project/01_Scripts/Editor/KvXrTools.cs
+===============================================================================================
+
+--- БЫЛО (внутри try, сразу после открывающей скобки try) -----------------------------------
+
+            if (Directory.Exists(testsPath))
+            {
+                try
+                {
+                    if (Directory.Exists(testsParked)) Directory.Delete(testsParked, true);
+                    Directory.CreateDirectory(Path.GetDirectoryName(testsParked));
+                    Directory.Move(testsPath, testsParked);
+                    testsMoved = true;
+                    Debug.Log("[KvXr] Тесты временно убраны из Assets на время сборки APK (в сборке плеера их нет).");
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning("[KvXr] Не удалось убрать тесты из сборки: " + e.Message);
+                }
+            }
+
+--- СТАЛО ------------------------------------------------------------------------------------
+
+            try
+            {
+                TestParkingReport parked = ParkTestsForBuild(testsPath, testsParked);
+                testsMoved = !parked.NothingToDo;
+
+                if (parked.Success)
+                    Debug.Log("[KvXr] Тесты убраны из сборки APK: " + parked.Describe());
+                else
+                    Debug.LogWarning("[KvXr] Тесты НЕ убраны из сборки APK: " + parked.Describe());
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[KvXr] Не удалось убрать тесты из сборки: " + e.Message);
+            }
+
+ПОЯСНЕНИЕ: `testsMoved` теперь означает «парковка состоялась, возврат нужен». Если папки
+тестов в Assets не было вовсе, `NothingToDo` = true и возвращать нечего — как и раньше.
+
+===============================================================================================
+ЗАМЕНА 2 (возврат). Тот же файл, блок `finally`.
+===============================================================================================
+
+--- БЫЛО ------------------------------------------------------------------------------------
+
+                if (testsMoved)
+                {
+                    try
+                    {
+                        if (Directory.Exists(testsParked) && !Directory.Exists(testsPath))
+                        {
+                            Directory.Move(testsParked, testsPath);
+                            Debug.Log("[KvXr] Тесты возвращены в Assets.");
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogError("[KvXr] НЕ УДАЛОСЬ вернуть тесты на место: " + e.Message +
+                            ". Они лежат в Temp/_tests_parked_for_build — перенесите вручную.");
+                    }
+                }
+
+--- СТАЛО ------------------------------------------------------------------------------------
+
+                if (testsMoved)
+                {
+                    try
+                    {
+                        TestParkingReport restored = RestoreParkedTests(testsPath, testsParked);
+                        if (restored.Success)
+                            Debug.Log("[KvXr] " + restored.Describe());
+                        else
+                            Debug.LogError("[KvXr] " + restored.Describe() +
+                                " Неразобранное осталось здесь: " + testsParked);
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogError("[KvXr] НЕ УДАЛОСЬ вернуть тесты на место: " + e.Message +
+                            ". Они лежат в Temp/_tests_parked_for_build — перенесите вручную.");
+                    }
+                }
+
+===============================================================================================
+ДОБАВИТЬ В using (нужно для отчёта A4)
+===============================================================================================
+    using System.Text;

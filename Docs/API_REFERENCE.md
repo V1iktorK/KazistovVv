@@ -7745,6 +7745,263 @@ _Публичных членов нет (или тип объявлен без �
 
 ---
 
+
+---
+
+## Дополнение 08.10.2026: XR-слой и конвейер рендера (§28–§31)
+
+_Этот раздел добавлен к справочнику, потому что снимок от 15.09.2026 не содержит
+ни одного типа XR-слоя (§28) и ни одного инструмента конвейера рендера (§29–§31).
+Собран из исходников скриптом `Tools\api-reference-add-xr.ps1`, формат — как у остальных
+разделов: файл, назначение, таблица публичных членов._
+
+## Пространство имён `KazistovVvFeatures`
+
+### `enum KvPipelineKind`
+
+- **Файл:** `Assets\_Project\01_Scripts\Features\KvRenderPipelineShaders.cs` (строка 8)
+- **Назначение:** —
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| значение | `BuiltIn` | `BuiltIn = 0` |  |
+| значение | `Urp` | `Urp = 1` |  |
+| значение | `Hdrp` | `Hdrp = 2` |  |
+| значение | `Unknown` | `Unknown = 3` |  |
+
+## Пространство имён `KazistovVvXr`
+
+### `class KvXrCameraGuard`
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvXrCameraGuard.cs` (строка 24)
+- **Назначение:** СТОРОЖ XR-КАМЕРЫ (сессия §28, этап 1–3 плана XR). ЗАЧЕМ ОТДЕЛЬНЫЙ КОМПОНЕНТ. Проект написан для компьютера, и в нём есть сервисы, которые считают, что камерой управляет МЫШЬ. В шлеме камерой управляет трекинг головы, и любой такой сервис становится дефектом. Самый опасный из них — `IdleCameraBrain` («режим простоя, как в Skyrim»): через десять минут бездействия он НАЧИНАЕТ ОБЛЕТАТЬ РОБОТА и переписывает `transform` камеры. В VR это не «красиво», а мгновенная дурнота у оператора, потому что картинка едет сама. ЧТО ДЕЛАЕТ СТОРОЖ: 1) убирает облёт простоя с камеры шлема (в VR он недопустим в принципе); 2) снимает захват системного курсора — в шлеме его нет, а захваченный курсор на компьютере ме…
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| поле | `freeSystemCursor` | `public bool freeSystemCursor = true;` |  |
+| поле | `disableIdleOrbit` | `public bool disableIdleOrbit = true;` |  |
+| свойство | `ActionsTaken` | `public string ActionsTaken { get; private set; } = "ничего (всё уже было выключено)";` |  |
+
+### `class KvXrInputSource`
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvXrInputSource.cs` (строка 28)
+- **Назначение:** СОСТОЯНИЕ КОНТРОЛЛЕРОВ И ГОЛОВЫ (сессия §28, этап 2 плана XR). ЗАЧЕМ. Позы, курок и стик надо читать из ОДНОГО места: и ввод для робота (<c>VRInputProvider</c>), и перемещение (<c>KvXrLocomotion</c>), и луч по интерфейсу (<c>KvXrUiPointer</c>) должны видеть одну и ту же картину кадра. Иначе получается классический дефект VR: «курок нажал два действия» — ровно та болезнь, которую в §27 лечили на десктопе арбитражем клавиш. ПОЧЕМУ НЕ XRI. Проект обходится без компонентов XR Interaction Toolkit: они требуют настроенного префаба рига, а собрать и проверить его без шлема нечем. Здесь читается сам <see cref="InputSystem"/> — он уже подключён (пакет 1.20.0, только new Input System), и устройство PI…
+
+### `class KvXrLocomotion`
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvXrLocomotion.cs` (строка 28)
+- **Назначение:** ПЕРЕМЕЩЕНИЕ ОПЕРАТОРА В ВИРТУАЛЬНОМ ПРОСТРАНСТВЕ (решение владельца [D2], этап 2 плана XR). ДВА СПОСОБА, ОБА — ПО РЕШЕНИЮ ВЛАДЕЛЬЦА: • ТЕЛЕПОРТ (по умолчанию) — прицел из контроллера, подтверждение курком, мгновенный перенос на выбранное место. Не укачивает: это главная причина, почему телепорт выбран основным для человека, который впервые надел шлем. • ПЛАВНЫЙ ХОД (включается в настройках) — непрерывное движение по стику. ЧТО ЗДЕСЬ ГЛАВНЫЙ РИСК. Плавный ход в VR — источник «укачивания»: движения не совпадают с тем, что чувствует вестибулярный аппарат. Поэтому скорость жёстко ограничена (0,5…3 м/с), а режим по умолчанию — телепорт. Это не перестраховка, а прямое следствие решения [D2]. ПОВОР…
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| поле | `snapTurnDegrees` | `public float snapTurnDegrees = 30f;` |  |
+| поле | `snapTurnThreshold` | `public float snapTurnThreshold = 0.7f;` |  |
+| поле | `snapTurnCooldown` | `public float snapTurnCooldown = 0.25f;` |  |
+| поле | `useRightStickForMove` | `public bool useRightStickForMove = false;` |  |
+| поле | `triggerThreshold` | `public float triggerThreshold = 0.5f;` |  |
+| поле | `groundMask` | `public LayerMask groundMask = ~0;` |  |
+| поле | `maxSlopeDegrees` | `public float maxSlopeDegrees = 45f;` |  |
+| поле | `validMarkerColor` | `public Color validMarkerColor = new Color(0.20f, 0.85f, 0.35f, 0.75f);` |  |
+| поле | `invalidMarkerColor` | `public Color invalidMarkerColor = new Color(0.90f, 0.25f, 0.20f, 0.60f);` |  |
+| свойство | `TeleportTargetValid` | `public bool TeleportTargetValid { get { return teleportValid; } }` |  |
+| свойство | `TeleportPoint` | `public Vector3 TeleportPoint { get { return teleportPoint; } }` |  |
+| свойство | `TeleportCount` | `public int TeleportCount { get; private set; }` |  |
+| свойство | `SnapTurnCount` | `public int SnapTurnCount { get; private set; }` |  |
+| свойство | `SmoothMovingSeconds` | `public float SmoothMovingSeconds { get; private set; }` |  |
+
+### `enum KvXrMoveMode`
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvXrSettings.cs` (строка 6)
+- **Назначение:** —
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| значение | `Teleport` | `Teleport = 0` |  |
+| значение | `Smooth` | `Smooth = 1` |  |
+
+### `class KvXrMrRoom`
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvXrMrRoom.cs` (строка 33)
+- **Назначение:** MR-КОМНАТА: РЕАЛЬНЫЙ СТОЛ, РОБОТ 1:1 И ВЫКЛЮЧАЕМЫЕ СЛОИ ВИРТУАЛЬНОГО (решения владельца [D5], [D7], [D8]; этап 4 плана XR, сессия §28). ЧТО ЗДЕСЬ ПРОИСХОДИТ. В MR оператор видит СВОЮ комнату, а виртуальный робот должен стоять на ЕГО столе — 100 см поперёк, 70 см в длину, столешница на 78 см от пола (решение [D7]). Этот компонент: 1) гасит виртуальную лабораторию (столы-стенды), чтобы она не перекрывала комнату; 2) ставит робота на реальный стол в масштабе 1:1; 3) включает и выключает слои виртуального ПО ТУМБЛЕРАМ ([D8]): панель интерфейса, сетка рабочей зоны, достижимость руки, виртуальные стенды. По умолчанию включена только панель — комната оператора не зарастает слоями, которые он не про…
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| поле | `headCamera` | `public Camera headCamera;` |  |
+| поле | `table` | `public KvXrTableSize table = new KvXrTableSize(1.00f, 0.70f, 0.78f);` |  |
+| поле | `room` | `public KvXrRoomSize room = new KvXrRoomSize(3.0f, 2.0f);` |  |
+| поле | `robotOffset` | `public Vector2 robotOffset = Vector2.zero;` |  |
+| поле | `robotYawDegrees` | `public float robotYawDegrees = 0f;` |  |
+| поле | `worldScale` | `public float worldScale = 1f;` |  |
+| поле | `hideVirtualStands` | `public bool hideVirtualStands = true;` |  |
+| поле | `workZoneRadiusMeters` | `public float workZoneRadiusMeters = 1.0f;` |  |
+| поле | `tableCenter` | `public Vector3 tableCenter = Vector3.zero;` |  |
+| поле | `robotOnTable` | `public Transform robotOnTable;` |  |
+| свойство | `RobotSize` | `public Vector3 RobotSize { get; private set; }` |  |
+| свойство | `MrActive` | `public bool MrActive { get { return KvXrSettings.GetPassthrough(); } }` |  |
+
+### `enum KvXrOriginMode`
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvXrRigConfig.cs` (строка 22)
+- **Назначение:** КОНФИГУРАЦИЯ XR-РИГА (сессия §28, этап 1 плана XR). ЗАЧЕМ ОТДЕЛЬНЫЙ ТИП. Все решения по ригу — уровень глаз, масштаб мира, способ стерео, отсчёт от пола или от устройства — должны быть ОДНИМ объектом, который можно посчитать, проверить тестом и показать в отчёте. Разбросанные по сцене числа проверить нельзя: в шлеме они выглядят «нормально» ровно до момента, когда оператор ростом 1,95 видит панель на уровне колен. ЧТО ЗДЕСЬ ЧИСТОЕ, А ЧТО НЕТ. Здесь только арифметика (никаких GameObject, сцен и устройств) — поэтому тип полностью покрыт EditMode-тестами, а сборку рига делает <c>KvXrRigBuilder</c>. Решения, на которые опирается тип: [R1] PICO 4 Ultra, [R2] HDRP низкий пресет, [R3] только OpenXR…
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| значение | `Floor` | `Floor = 0` |  |
+| значение | `Device` | `Device = 1` |  |
+| значение | `Scene` | `Scene = 2` |  |
+
+### `class KvXrPanelAnchor`
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvXrPanelAnchor.cs` (строка 31)
+- **Назначение:** ПЛОСКАЯ ПАНЕЛЬ ИНТЕРФЕЙСА В МИРОВОМ ПРОСТРАНСТВЕ (решение владельца [D1], этап 3). ПРОБЛЕМА, КОТОРУЮ ЭТО РЕШАЕТ. Интерфейс проекта — Canvas в режиме Screen Space Overlay: он рисуется ПОВЕРХ кадра, минуя камеры. В стерео это не работает: каждый глаз должен получить свою картинку, а overlay рисуется один раз на экран. В шлеме такой интерфейс либо не виден, либо виден плоско и «мимо глаз». РЕШЕНИЕ (вариант А, выбранный владельцем): канвас переводится в World Space и вешается перед оператором как накладной экран. Все панели, дерево, свойства, тулбар и настройки остаются ровно теми же объектами — меняется только способ их отображения. Это и есть «плоская панель» из решения [D1]. ПОЧЕМУ ГЕОМЕТРИЯ …
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| поле | `targetCamera` | `public Camera targetCamera;` |  |
+| поле | `followHead` | `public bool followHead = true;` |  |
+| поле | `followSmoothSeconds` | `public float followSmoothSeconds = 0.35f;` |  |
+| поле | `referenceWidth` | `public float referenceWidth = 1920f;` |  |
+| поле | `referenceHeight` | `public float referenceHeight = 1080f;` |  |
+| свойство | `Applied` | `public bool Applied { get { return applied; } }` |  |
+| свойство | `WidthMeters` | `public float WidthMeters { get; private set; }` |  |
+| свойство | `LastSettings` | `public KvXrUiPanelSettings LastSettings { get; private set; }` |  |
+
+### `class KvXrRig`
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvXrRig.cs` (строка 24)
+- **Назначение:** КАМЕРА ШЛЕМА (этап 1 плана XR, сессия §28). ЧТО ДЕЛАЕТ. Ставит камеру в правильное место и сообщает о состоянии XR одной строкой. Позу камеры в шлеме выставляет САМ РАНТАЙМ OpenXR (система трекинга пишет в `Camera.transform`) — здесь ничего не переписывается: попытка «двигать камеру руками» в VR даёт тряску и «плывущую» картинку. ЧТО ПРОВЕРЯЕТСЯ ПРИ СТАРТЕ и попадает в журнал: • активен ли OpenXR (без него в шлеме чёрный экран — и это первая причина, которую надо исключить); • включено ли стерео SinglePassInstanced (иначе картинка для двух глаз считается дважды и частота кадров падает почти вдвое); • обнаружен ли шлем и контроллеры. ПОЧЕМУ НЕ XROrigin ИЗ XRI. `XROrigin` тянет за собой соглаш…
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| поле | `headCamera` | `public Camera headCamera;` |  |
+| поле | `logOnStart` | `public bool logOnStart = true;` |  |
+| поле | `targetFrameRate` | `public int targetFrameRate = 72;` |  |
+| поле | `eyeTextureResolutionScale` | `public float eyeTextureResolutionScale = 1f;` |  |
+| свойство | `OpenXrActive` | `public bool OpenXrActive { get; private set; }` |  |
+| свойство | `SinglePassInstanced` | `public bool SinglePassInstanced { get; private set; }` |  |
+| свойство | `Status` | `public string Status { get; private set; }` |  |
+
+### `class KvXrSceneContent`
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvXrSceneContent.cs` (строка 28)
+- **Назначение:** НАЧИНКА XR-СЦЕНЫ: СТОЛЫ И РОБОТЫ (решение владельца: «добавить роботов и столы», сессия §28). ЗАЧЕМ ОТДЕЛЬНЫЙ КОМПОНЕНТ. По решению [D6] XR-сцена сделана ОТДЕЛЬНОЙ и сначала была пустой (риг, интерфейс, MR-комната) — начинку предполагалось подгружать. Проверка показала, что в `XrMain.unity` нет ни одного робота, то есть в шлеме было нечего показывать. Этот компонент создаёт начинку ТЕМ ЖЕ способом, что и десктопный проект — через <see cref="StandBuilder"/>, а не копированием объектов из `MainScene`. ПОЧЕМУ ЧЕРЕЗ StandBuilder. Три причины: 1) это ровно тот код, которым построены стенды в `MainScene` — значит геометрия, высоты и расположение роботов совпадают с проверенными; 2) он идемпотентен…
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| поле | `createStands` | `public bool createStands = true;` |  |
+| поле | `tableTopHeight` | `public float tableTopHeight = StandBuilder.TopHeight;` |  |
+| поле | `buildOnStart` | `public bool buildOnStart = true;` |  |
+| свойство | `RobotRoot` | `public Transform RobotRoot { get; private set; }` |  |
+| свойство | `RobotCount` | `public int RobotCount { get; private set; }` |  |
+
+### `class KvXrSettingsChanged`
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvXrSettingsChanged.cs` (строка 17)
+- **Назначение:** ОПОВЕЩЕНИЕ О СМЕНЕ XR-НАСТРОЕК (сессия §28). ЗАЧЕМ. Настройки XR — статическое хранилище (PlayerPrefs): у него нет ни событий, ни владельца. А применять их надо немедленно: переключил «плавный ход» — метка телепорта обязана исчезнуть в тот же кадр, а не после перезапуска. Ровно на такой несогласованности в проекте уже были дефекты (§23: «настройки не открывались», «курсор не восстанавливался»), поэтому здесь одна точка оповещения на весь XR-слой. Кто подписывается: локомоция, панель интерфейса, слои MR. Кто вызывает: панель настроек (и диагностика).
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| метод | `Notify` | `public static void Notify()` |  |
+
+### `struct KvXrTableSize`
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvXrMrPlacement.cs` (строка 6)
+- **Назначение:** —
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| поле | `WidthMeters` | `public float WidthMeters;` |  |
+| поле | `DepthMeters` | `public float DepthMeters;` |  |
+| поле | `HeightMeters` | `public float HeightMeters;` |  |
+
+### `struct KvXrUiPanelSettings`
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvXrUiPanel.cs` (строка 23)
+- **Назначение:** ПЛОСКАЯ ПАНЕЛЬ ИНТЕРФЕЙСА В VR (решение владельца [D1], сессия §28, этап 3). ЧТО ЭТО. Весь существующий интерфейс проекта (меню, тулбар, дерево, свойства, настройки, статус-строка) висит в воздухе перед оператором как один большой накладной экран и управляется лучом контроллера. Пространственный интерфейс (панели на руке, кнопки-плитки) — ОТДЕЛЬНЫЙ этап после того, как владелец поживёт в шлеме: строить его «по представлению» значит гарантированно переделать. ГДЕ ЗДЕСЬ ГЛАВНАЯ ОПАСНОСТЬ. Интерфейс проекта — Screen Space Overlay: он рисуется поверх кадра и в стерео НЕ РАБОТАЕТ (каждый глаз отрисовал бы свой). Поэтому канвас переводится в World Space и вешается перед камерой. Размеры при этом п…
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| поле | `position` | `public Vector3 position;` |  |
+| поле | `rotation` | `public Quaternion rotation;` |  |
+| поле | `worldScale` | `public float worldScale;` |  |
+| поле | `widthMeters` | `public float widthMeters;` |  |
+| свойство | `eulerAngles` | `public Vector3 eulerAngles { get { return rotation.eulerAngles; } }` |  |
+
+### `class KvXrUiPointer`
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvXrUiPointer.cs` (строка 32)
+- **Назначение:** ЛУЧ КОНТРОЛЛЕРА ПО ИНТЕРФЕЙСУ (решение владельца [D1], этап 2–3 плана XR). ЗАЧЕМ. В шлеме нет мыши, и весь проект, построенный вокруг системного курсора, перестаёт управляться. Здесь контроллер превращается в «мышь»: из руки идёт луч, он попадает в панель интерфейса, курок нажимает кнопку. Это и есть минимальный рабочий ввод, после которого шлем перестаёт быть кинозалом. КАК ЭТО РАБОТАЕТ БЕЗ XRI. Используется штатный `GraphicRaycaster` канваса: он умеет пускать луч в мировом пространстве (для Canvas в режиме World Space). Положение указателя передаётся в мировых координатах — этого достаточно, чтобы кнопки подсвечивались и нажимались. Ни одного нового пакета для этого не нужно. ПОЧЕМУ УЧАСТИ…
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| поле | `rayLength` | `public float rayLength = 10f;` |  |
+| поле | `rayWidth` | `public float rayWidth = 0.008f;` |  |
+| поле | `idleColor` | `public Color idleColor = new Color(0.55f, 0.75f, 1f, 0.55f);` |  |
+| поле | `hoverColor` | `public Color hoverColor = new Color(0.30f, 0.95f, 0.55f, 0.95f);` |  |
+| поле | `triggerThreshold` | `public float triggerThreshold = 0.5f;` |  |
+| свойство | `AimingAtUi` | `public bool AimingAtUi { get { return aimingAtUi; } }` |  |
+| свойство | `HoverName` | `public string HoverName { get { return currentHover != null ? currentHover.name : "—"; } }` |  |
+| свойство | `ClickCount` | `public int ClickCount { get; private set; }` |  |
+
+## Пространство имён `KazistovVvXrEditor`
+
+### `class KvPostProcessVariantStripper`
+
+- **Файл:** `Assets\_Project\01_Scripts\Editor\KvShaderVariantStripper.cs` (строка 41)
+- **Назначение:** ОТСЕЧЕНИЕ ВАРИАНТОВ ПОСТОБРАБОТКИ ПРИ СБОРКЕ — карточка Б2 (Этап А). ЧТО БЫЛО ИЗМЕРЕНО (сборка §30, лог `Logs\xr-build-apk-s30.log`): шейдер `Hidden/Universal Render Pipeline/UberPost` компилировался как **92 160 вариантов на каждый из двух проходов**, `FinalPost` — 2 560 × 4 прохода. Из ~122 000 вариантов всей сборки на постобработку пришлось ~105 000, и сборка шла 46 часов, не дойдя до конца. ПОЧЕМУ ШТАТНОЕ ОТСЕЧЕНИЕ URP НЕ ПОМОГЛО. В URP отсечение постобработки включено (`UniversalRenderPipelineGlobalSettings` → `m_StripUnusedPostProcessingVariants: 1`), но работает оно так (`URP/Editor/ShaderBuildPreprocessor.cs`, `GetSupportedFeaturesFromVolumes`): берутся ВСЕ профили объёма в `Assets/`…
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| свойство | `callbackOrder` | `public int callbackOrder { get { return 0; } }` |  |
+| константа | `UberPostShader` | `public const string UberPostShader = "Hidden/Universal Render Pipeline/UberPost";` |  |
+| константа | `FinalPostShader` | `public const string FinalPostShader = "Hidden/Universal Render Pipeline/FinalPost";` |  |
+| поле (только чтение) | `EffectKeywords` | `public static readonly string[] EffectKeywords =` |  |
+
+### `class KvRenderPipelineTools`
+
+- **Файл:** `Assets\_Project\01_Scripts\Editor\KvRenderPipelineTools.cs` (строка 37)
+- **Назначение:** ИНСТРУМЕНТЫ ПАЙПЛАЙНА РЕНДЕРА (сессия §29, карточка Б1: HDRP мешает сборке под шлем). ЗАЧЕМ ОТДЕЛЬНЫЙ ФАЙЛ. Решение [D9] — «шлем на URP, компьютер на HDRP» — требует ПЕРЕНЕСТИ глобальное умолчание графики с HDRP на URP. Это правка проектной настройки (`ProjectSettings/GraphicsSettings.asset`), а не сцены, поэтому: • делается кодом (воспроизводимо и проверяемо), а не «руками в окне»; • печатает состояние ДО и ПОСЛЕ — иначе нечем доказать, что десктоп не поехал; • ничего не сохраняет, пока не попросят (у инструмента чтения нет побочных эффектов). ЧТО ЗДЕСЬ ЕЩЁ И ПОЧЕМУ. «Готовые текстуры без ошибок» — это не только настройка пайплайна: материал, сделанный на шейдере HDRP, под URP рисуется РОЗО…
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| константа | `UrpAssetPath` | `public const string UrpAssetPath = "Assets/Settings/Mobile_RPAsset.asset";` |  |
+| константа | `HdrpAssetPath` | `public const string HdrpAssetPath = "Assets/ROOMS/HQ Hangar Free/Scene/HDRPHighQuality.asset";` |  |
+| метод | `Recon` | `public static void Recon()` |  |
+
+### `class KvUrpKeywordPolicy`
+
+- **Файл:** `Assets\_Project\01_Scripts\Editor\KvUrpKeywordPolicy.cs` (строка 25)
+- **Назначение:** ПОЛИТИКА ОТСЕЧЕНИЯ КЛЮЧЕВЫХ СЛОВ URP — ЧТО ПРОЕКТ НЕ ИСПОЛЬЗУЕТ, С ПРИЧИНОЙ. ЗАЧЕМ ЭТО ПОЯВИЛОСЬ. В сборке `Universal Render Pipeline/Lit` (проход `ForwardLit`) даёт **442 368 вариантов**, и URP их не срезает, хотя обязан: в его собственном коде (`Editor/ShaderBuildPreprocessor.cs`, `CreatePrefilteringSettings`) режимы отсечения вычисляются из настроек URP-ассета. Замерено 08.10.2026: в ассете `Assets/Settings/Mobile_RPAsset.asset` уже лежат ЗНАЧЕНИЯ ПО УМОЛЧАНИЮ (`mainLightShadows = SelectAll`, `additionalLights = SelectAll`, остальные `Select`) — то есть URP считает, что «оставить нужно всё»: мягкие тени выключены, тени дополнительного света выключены, дополнительный свет повершинный, каск…
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| константа | `UrpAssetPath` | `public const string UrpAssetPath = "Assets/Settings/Mobile_RPAsset.asset";` |  |
+| константа | `UrpRendererPath` | `public const string UrpRendererPath = "Assets/Settings/Mobile_Renderer.asset";` |  |
+| метод | `Describe` | `public static string Describe()` |  |
+
+### `class KvXrDeviceTools`
+
+- **Файл:** `Assets\_Project\01_Scripts\Editor\KvXrDeviceTools.cs` (строка 29)
+- **Назначение:** НАСТРОЙКИ ПРИЛОЖЕНИЯ ДЛЯ ЖИВОГО УСТРОЙСТВА (сессия §31: шлем PICO 4 Ultra приехал). ЗАЧЕМ ОТДЕЛЬНЫЙ ИНСТРУМЕНТ. Эти настройки нельзя «посмотреть глазами» в редакторе так, чтобы понять, что попадёт в APK: идентификатор приложения лежит в проектном файле, а состояние OpenXR-фич зависит от ПЛАТФОРМЫ (включённое для Standalone в сборку под Android не попадает). Ошибка здесь выглядит так: приложение поставилось, запустилось, но в шлеме не работают контроллеры — и непонятно, почему. ПОДТВЕРЖДЕНИЕ ФАКТА, А НЕ НАМЕРЕНИЯ. Оба метода печатают состояние ДО и ПОСЛЕ и перечитывают значение — как в §29 с глобальным умолчанием графики: правка считается сделанной только если её видно в сохранённом файле. ВН…
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| константа | `OwnIdentifier` | `public const string OwnIdentifier = "com.KazistovVv.app";` |  |
+| константа | `SimpleControllerProfile` | `public const string SimpleControllerProfile = "KHRSimpleControllerProfile";` |  |
+| метод | `ApplyOwnIdentifier` | `public static void ApplyOwnIdentifier()` |  |
+
+### `class KvXrTools`
+
+- **Файл:** `Assets\_Project\01_Scripts\Editor\KvXrTools.cs` (строка 33)
+- **Назначение:** ИНСТРУМЕНТЫ XR-ЭТАПА (сессия §28, этапы 0–4 плана XR). ПОЧЕМУ ВСЁ ДЕЛАЕТСЯ КОДОМ, А НЕ РУКАМИ В РЕДАКТОРЕ. Шлема нет, а собрать XR-сцену надо так, чтобы её можно было ПОВТОРИТЬ и ПРОВЕРИТЬ: сцена из кода проверяется повторным запуском и сравнением, сцена из ручных действий — только памятью. Плюс: проект ведётся в VCS, и воспроизводимая сборка сцены не создаёт конфликтов «а у меня сцена другая». ЧТО ЗДЕСЬ ГЛАВНОЕ (<see cref="ConfigureXrLoaders"/>) — НАЙДЕННЫЙ ДЕФЕКТ: в проекте активными лоадерами XR стояли **Mock HMD** и аркадный ARCore, а OpenXR — просто лежал ассетом. С таким набором собранное приложение в шлеме НЕ РАБОТАЛО БЫ вообще: Mock HMD — это заглушка для отладки без устройства. Имен…
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| константа | `XrSceneName` | `public const string XrSceneName = "XrMain";` |  |
+| константа | `ScenesFolder` | `public const string ScenesFolder = "Assets/_Project/00_Scenes";` |  |
+| метод | `ConfigureXrLoaders` | `public static void ConfigureXrLoaders()` |  |
+
+
 ## Источники
 
 Все файлы `*.cs` из `Assets\` (кроме `Assets\_Recovery\`), сгруппированные по пространствам имён:
@@ -7947,5 +8204,6 @@ _Публичных членов нет (или тип объявлен без �
 - `Assets\_Project\08_Tests\Editor\KvRobotExportTests.cs`
 - `Assets\_Project\08_Tests\Editor\KvTimeOptimalTests.cs`
 - `Assets\_Project\08_Tests\Editor\KvTrajMathTests.cs`
+
 
 

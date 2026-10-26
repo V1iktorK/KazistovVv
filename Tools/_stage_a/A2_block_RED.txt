@@ -1,0 +1,147 @@
+// ============================================================================================
+// ЭТАП А, ПУНКТ A2 — БЛОК ДЛЯ ВСТАВКИ В KvXrTools.cs (версия «КРАСНАЯ»: дефект сохранён)
+//
+// КУДА ВСТАВЛЯТЬ: в Assets/_Project/01_Scripts/Editor/KvXrTools.cs, ПЕРЕД строкой-разделителем
+//   // ================================================================== диагностика
+// то есть сразу после закрывающей скобки метода AddXrSceneToBuildSilent().
+//
+// ЗАЧЕМ ИМЕННО ТАК: правка выделяет парковку и возврат тестов из BuildAndroidApk в отдельные
+// методы, работающие только с путями (System.IO, без Unity API), НО СОХРАНЯЕТ прежнее
+// (дефектное) поведение возврата. Это даёт честную красную точку: тесты KvBuildTests.cs
+// обязаны упасть на этом коде (правило [K5]), и только после этого правится сам дефект
+// (см. A2_block_GREEN_methods.txt — замена между маркерами).
+// ============================================================================================
+
+        // ================================================================== парковка тестов
+
+        /// <summary>
+        /// ИТОГ ПАРКОВКИ ИЛИ ВОЗВРАТА ТЕСТОВ — числами и словами, а не «вроде вернули».
+        ///
+        /// ЗАЧЕМ ОТЧЁТ, А НЕ ПРОСТО `void`. Строка <see cref="Describe"/> попадает в журнал сборки,
+        /// и это единственное доказательство для владельца. «Тесты возвращены» без числа файлов
+        /// неотличимо от «возврат не сработал» — ровно так дефект возврата и прожил с §28 по §30:
+        /// в журнале не было ни одной строки о том, что возврат пропущен.
+        /// </summary>
+        public sealed class TestParkingReport
+        {
+            /// <summary>Работа выполнена полностью (или её и не требовалось).</summary>
+            public bool Success;
+
+            /// <summary>Работы не было: парковки нет либо парковать нечего.</summary>
+            public bool NothingToDo;
+
+            /// <summary>Папку в Assets пересоздала Unity — она была пуста, содержимое перенесено в неё.</summary>
+            public bool TargetRecreated;
+
+            /// <summary>Перенесено файлов (включая `.meta`).</summary>
+            public int FilesMoved;
+
+            /// <summary>Из перенесённых — файлов тестов (`*.cs`).</summary>
+            public int TestFilesMoved;
+
+            /// <summary>Файлы, которые уже были на месте и НЕ перезаписаны.</summary>
+            public int Conflicts;
+
+            /// <summary>Сколько файлов осталось в `Temp` (не разобрано).</summary>
+            public int FilesLeftInTemp;
+
+            /// <summary>Подробность для журнала: что именно произошло.</summary>
+            public string Detail = string.Empty;
+
+            /// <summary>Строка для журнала сборки: числа, а не намерение.</summary>
+            public string Describe()
+            {
+                string what = TargetRecreated
+                    ? "тесты возвращены в Assets (папку пересоздала Unity, пустую сняли)"
+                    : (NothingToDo ? "тесты: работы не было" : "тесты обработаны");
+                return string.Format(
+                    "{0}: перенесено файлов {1} (тестов .cs {2}), конфликтов {3}, осталось в Temp {4}{5}",
+                    what, FilesMoved, TestFilesMoved, Conflicts, FilesLeftInTemp,
+                    string.IsNullOrEmpty(Detail) ? string.Empty : " · " + Detail);
+            }
+        }
+
+        /// <summary>Сколько файлов лежит в папке (рекурсивно); 0, если папки нет.</summary>
+        private static int CountFilesIn(string path)
+        {
+            if (string.IsNullOrEmpty(path) || !Directory.Exists(path)) return 0;
+            return Directory.GetFiles(path, "*", SearchOption.AllDirectories).Length;
+        }
+
+        /// <summary>Сколько в папке именно файлов тестов (`*.cs`) — без `.meta`.</summary>
+        private static int CountTestFilesIn(string path)
+        {
+            if (string.IsNullOrEmpty(path) || !Directory.Exists(path)) return 0;
+            return Directory.GetFiles(path, "*.cs", SearchOption.AllDirectories).Length;
+        }
+
+        // ---- ПРАВКА ЭТАПА А (A2): НАЧАЛО БЛОКА ДЛЯ ЗАМЕНЫ (красная версия) ----
+
+        /// <summary>
+        /// УБРАТЬ ТЕСТЫ ИЗ СБОРКИ — перенос папки тестов в `Temp` на время сборки APK.
+        ///
+        /// Выделено из <see cref="BuildAndroidApk"/> ради проверяемости: саму сборку APK тестом
+        /// не проверить (она идёт часами), а правила парковки и возврата — можно и нужно.
+        /// Так тест проверяет РОВНО тот код, который исполняет сборка, а не его копию.
+        /// </summary>
+        public static TestParkingReport ParkTestsForBuild(string testsPath, string testsParked)
+        {
+            var report = new TestParkingReport();
+
+            if (!Directory.Exists(testsPath))
+            {
+                report.Success = true;
+                report.NothingToDo = true;
+                report.Detail = "папки тестов в Assets нет — парковать нечего";
+                return report;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(testsParked));
+            if (Directory.Exists(testsParked)) Directory.Delete(testsParked, true);
+            Directory.Move(testsPath, testsParked);
+
+            report.Success = true;
+            report.FilesMoved = CountFilesIn(testsParked);
+            report.TestFilesMoved = CountTestFilesIn(testsParked);
+            report.Detail = "убрано из Assets в " + testsParked;
+            return report;
+        }
+
+        /// <summary>
+        /// ВЕРНУТЬ ТЕСТЫ ИЗ `Temp` В `Assets` — вызывается из `finally`, то есть при ЛЮБОМ исходе сборки.
+        ///
+        /// ДЕФЕКТ A2, КОТОРЫЙ ЗДЕСЬ ПОКА СОХРАНЁН (красная версия): возврат выполняется только
+        /// если папки в `Assets` НЕТ. Unity пересоздаёт пустую папку (её `.meta` остаётся),
+        /// поэтому на живой сборке §30 условие не выполнилось и 23 файла тестов остались бы
+        /// в `Temp` навсегда — молча, без единой строки в журнале.
+        /// </summary>
+        public static TestParkingReport RestoreParkedTests(string testsPath, string testsParked)
+        {
+            var report = new TestParkingReport();
+
+            if (!Directory.Exists(testsParked))
+            {
+                report.Success = true;
+                report.NothingToDo = true;
+                report.Detail = "возвращать нечего: в Temp нет запаркованных тестов";
+                return report;
+            }
+
+            if (!Directory.Exists(testsPath))
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(testsPath));
+                Directory.Move(testsParked, testsPath);
+                report.Success = true;
+                report.FilesMoved = CountFilesIn(testsPath);
+                report.TestFilesMoved = CountTestFilesIn(testsPath);
+                report.Detail = "перенесена папка целиком";
+                return report;
+            }
+
+            report.Success = false;
+            report.FilesLeftInTemp = CountFilesIn(testsParked);
+            report.Detail = "папка в Assets уже существует — возврат пропущен";
+            return report;
+        }
+
+        // ---- ПРАВКА ЭТАПА А (A2): КОНЕЦ БЛОКА ДЛЯ ЗАМЕНЫ ----
