@@ -82,7 +82,7 @@ Write-Host ("лог: " + $logPath)
 $argList = @(
     '-batchmode', '-quit',
     '-projectPath', ('"' + $Project + '"'),
-    '-executeMethod', 'KazistovVvXrEditor.KvXrTools.BuildAndroidApk',
+    '-executeMethod', 'KazistovVvXrEditor.KvAndroidSigning.BuildSignedApk',
     '-logFile', ('"' + $logPath + '"')
 )
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
