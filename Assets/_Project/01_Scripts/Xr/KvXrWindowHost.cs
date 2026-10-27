@@ -71,6 +71,14 @@ namespace KazistovVvXr
         /// <summary>Сколько окон сейчас открыто.</summary>
         public int Count { get { return windows.Count; } }
 
+        /// <summary>
+        /// Последнее открытое окно (для «назад» по кнопке B): закрывается оно, а не первое попавшееся.
+        /// </summary>
+        public KvXrGroupPanel LastWindow
+        {
+            get { return windows.Count > 0 ? windows[windows.Count - 1] : null; }
+        }
+
         void Awake()
         {
             Active = this;

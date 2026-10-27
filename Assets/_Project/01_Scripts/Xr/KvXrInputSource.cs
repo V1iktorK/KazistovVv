@@ -731,6 +731,43 @@ namespace KazistovVvXr
         /// <summary>Нажатие стика правого контроллера.</summary>
         public static bool RightStickClick { get { EnsureScanned(); return Button(right, StickClickControlNames); } }
 
+        // ------------------------------------------------------------------ A/B/X/Y (стандарт Quest/PICO)
+
+        /// <summary>
+        /// ИМЕНА КНОПОК A/B/X/Y. Стандарт OpenXR: `primaryButton` (A на правом / X на левом),
+        /// `secondaryButton` (B / Y). Запасные имена — для простых профилей и PICO-рантайма.
+        /// </summary>
+        public static readonly string[] PrimaryButtonControlNames =
+            { "primaryButton", "primary", "aButton", "xButton", "menuButton" };
+
+        public static readonly string[] SecondaryButtonControlNames =
+            { "secondaryButton", "secondary", "bButton", "yButton" };
+
+        /// <summary>Кнопка A (правый primary) — «подтвердить/выбрать» по стандарту Quest.</summary>
+        public static bool RightPrimary { get { EnsureScanned(); return Button(right, PrimaryButtonControlNames); } }
+
+        /// <summary>Кнопка B (правый secondary) — «назад/отмена» по стандарту Quest.</summary>
+        public static bool RightSecondary { get { EnsureScanned(); return Button(right, SecondaryButtonControlNames); } }
+
+        /// <summary>Кнопка X (левый primary) — «меню» по стандарту Quest.</summary>
+        public static bool LeftPrimary { get { EnsureScanned(); return Button(left, PrimaryButtonControlNames); } }
+
+        /// <summary>Кнопка Y (левый secondary) — «вторичное меню/настройки» по стандарту Quest.</summary>
+        public static bool LeftSecondary { get { EnsureScanned(); return Button(left, SecondaryButtonControlNames); } }
+
+        /// <summary>Кнопка системного меню (menu/hamburger) — «главное меню» на любом контроллере.</summary>
+        public static bool MenuButton
+        {
+            get
+            {
+                EnsureScanned();
+                return Button(right, MenuButtonControlNames) || Button(left, MenuButtonControlNames);
+            }
+        }
+
+        private static readonly string[] MenuButtonControlNames =
+            { "menuButton", "start", "systemButton", "menu" };
+
         /// <summary>Нажат ли управляющий элемент с одним из этих имён.</summary>
         private static bool Button(XRController c, string[] names)
         {

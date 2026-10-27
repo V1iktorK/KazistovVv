@@ -52,8 +52,31 @@ namespace KazistovVvXr
         private bool bindLogged;
         private float nextZoneLog;
 
+        /// <summary>
+        /// Запрос подтверждения кнопкой A (стандарт Quest/PICO, 27.10.2026). Ставится
+        /// <c>KvXrActions.Confirm()</c>, съедается кадром ниже — ровно так же, как курок,
+        /// включая арбитраж «не над интерфейсом».
+        /// </summary>
+        private static bool confirmRequested;
+
+        /// <summary>Попросить подтверждение (кнопка A / эквивалент курка).</summary>
+        public static void RequestConfirm() { confirmRequested = true; }
+
         /// <summary>Созданный поток (для проверок и журнала).</summary>
         public TrajectoryFlowController Flow { get { return flow; } }
+
+        /// <summary>Активный мост (для кнопки B — сброс потока, эквивалент Esc).</summary>
+        public static KvXrFlowBridge Active { get; private set; }
+
+        void Awake()
+        {
+            Active = this;
+        }
+
+        void OnDestroy()
+        {
+            if (Active == this) Active = null;
+        }
 
         void Start()
         {
@@ -97,8 +120,13 @@ namespace KazistovVvXr
             bool overInterface = IsOverInterface(origin, direction);
             float trigger = KvXrInputSource.RayTrigger;
             bool triggerDown = trigger >= triggerThreshold;
-            bool confirm = feedConfirm && ShouldFeedConfirm(overInterface, triggerDown) && !triggerWasDown;
+            // Кнопка A (стандарт Quest) — то же подтверждение, что курок, с тем же арбитражем.
+            // Фронты считаются раздельно: одно нажатие = одно действие (§27).
+            bool triggerFront = triggerDown && !triggerWasDown;
             triggerWasDown = triggerDown;
+            bool confirm = feedConfirm && (triggerFront || confirmRequested) &&
+                           ShouldFeedConfirm(overInterface, triggerDown || confirmRequested);
+            confirmRequested = false;
 
             // Лазеры потока ВЫКЛЮЧЕНЫ: в шлеме свои (правый зелёный, левый красный).
             flow.UpdateAim(aimPoint, aimHit && !overInterface, confirm, false,
