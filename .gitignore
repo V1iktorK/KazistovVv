@@ -180,3 +180,7 @@ Packages/*.bak_*
 /Assets/AssistantCustomInstructions.txt
 /Assets/AssistantCustomInstructions.txt.meta
 
+
+# Артефакты сборки APK (пересобираются Unity, в репозитории не нужны).
+KazistovVv_BackUpThisFolder_ButDontShipItWithYourGame/
+KazistovVv_BurstDebugInformation_DoNotShip/
