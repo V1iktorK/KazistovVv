@@ -863,7 +863,9 @@ ShowRows(KvXrScreenModel.BuildStatus(data), true);
 }
 private static bool PlanningHasCandidates()
 {
+#pragma warning disable 0618 // TrajectoryPlannerController помечен [Obsolete] — мёртвый код (аудит §5.7)
             TrajectoryPlannerController planner =                UnityEngine.Object.FindAnyObjectByType<TrajectoryPlannerController>();
+#pragma warning restore 0618
 return planner != null && planner.HasCandidates;
 }
 

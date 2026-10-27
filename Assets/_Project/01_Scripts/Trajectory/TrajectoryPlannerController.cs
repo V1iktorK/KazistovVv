@@ -13,6 +13,9 @@ using Debug = UnityEngine.Debug;
 ///   F9           — автотест: N случайных целей, сводка метрик в консоль.
 /// Никаких LLM: только кинематика, коллизии, планировщик и safety-слой.
 /// </summary>
+[System.Obsolete("Мёртвый код: не размещён ни в одной сцене (проверено §27, поиск по MainScene/XrMain). " +
+    "Его роль выполняет TrajectoryFlowController + KvPlanKit/MotionExecutor (модуль функций). " +
+    "Удалить после того, как владелец подтвердит ненужность (аудит CODE_AUDIT, §5.7).")]
 public class TrajectoryPlannerController : MonoBehaviour
 {
     [Header("Параметры ядра")]

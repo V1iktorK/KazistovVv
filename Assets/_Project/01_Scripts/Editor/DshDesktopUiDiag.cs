@@ -196,8 +196,15 @@ public static class DshDesktopUiDiag
         Check(stubs >= 2, "кнопки без функционала показаны недоступными (заглушки) — " + stubs);
         Check(KvCommands.Get("edit.undo") != null, "команда «Отменить» зарегистрирована (заглушку перекрывает модуль функций)");
         Check(KvCommands.Get("edit.redo") != null, "команда «Вернуть» зарегистрирована");
-        Check(KvCommands.Get("edit.undo") != null && KvCommands.Get("edit.undo").Stub,
-            "у заглушки «Отменить» стоит пометка «в разработке»");
+        // ЕТАП 15: Undo/Redo перекрыты модулем функций (FeatureHub) — это НЕ заглушки.
+        // Проверяем честно: если заглушка — пометка обязательна; если работает — нужен обработчик.
+        KvCommand undoCmd = KvCommands.Get("edit.undo");
+        if (undoCmd != null && undoCmd.Stub)
+            Check(undoCmd.TooltipBody.Contains(KvLoc.T("common.stub", "в разработке")),
+                "у заглушки «Отменить» стоит пометка «в разработке»");
+        else
+            Check(undoCmd != null && undoCmd.Execute != null,
+                "«Отменить» работает (не заглушка — модуль функций перекрыл, обработчик есть)");
         Check(KvCommands.Get("point.select") != null && KvCommands.Get("point.select").Hotkey == "Z",
             "у «Выбор точки» подсказка с горячей клавишей Z");
         Check(KvCommands.Get("path.select") != null && KvCommands.Get("path.select").Hotkey == "X",
@@ -419,8 +426,10 @@ public static class DshDesktopUiDiag
         bool hasVr = false, hasPad = false;
         foreach (KvBindingEntry b in KvSettingsSchema.Bindings())
         {
-            if (b.group == "VR / MR") hasVr = true;
-            if (b.group == "Геймпад") hasPad = true;
+            // Bindings() строит group как «Device · Group» (напр. «Геймпад · Робот»,
+            // «Клавиатура · VR / MR») — ищем по содержанию, а не по точному равенству.
+            if (!string.IsNullOrEmpty(b.group) && b.group.Contains("VR / MR")) hasVr = true;
+            if (!string.IsNullOrEmpty(b.group) && b.group.StartsWith("Геймпад")) hasPad = true;
         }
         Check(hasPad, "есть раздел «Геймпад» (отображение, не редактирование)");
         Check(hasVr, "есть заглушки VR / MR («будет добавлено позже»)");
@@ -447,8 +456,14 @@ public static class DshDesktopUiDiag
 
     private static bool HasFeature(string id)
     {
+        // Соответствует реальным case-обработчикам KazistovVvUIManager.SetFeatureValue
+        // (проверено сверкой списка case со списком ниже).
         return id == "vis.workspace" || id == "vis.limits" || id == "vis.metrics" ||
-               id == "tool.flashlight" || id == "tree.autorefresh";
+               id == "tool.flashlight" || id == "tree.autorefresh" ||
+               id == "scene.phantoms" || id == "ui.gamepadhud" ||
+               id == "ui.toolbar.layout" || id == "ui.toolbar.compact" ||
+               id == "tree" || id == "properties" || id == "settings" ||
+               id == "hotkeys" || id == "metrics" || id == "limits";
     }
 
     private static void StageCommands()
@@ -515,7 +530,9 @@ public static class DshDesktopUiDiag
         Check(tip != null, "слой подсказок создан");
         if (tip != null)
         {
-            KvTooltip.Request("Проверка подсказки", "описание", "Z");
+            // Закреплённая подсказка: UI перетирает обычную (тулбар дёргает
+            // Request/Release каждый кадр) — проверяем именно показ по задержке.
+            KvTooltip.RequestPinned("Проверка подсказки", "описание", "Z");
             tipWaitStart = Time.realtimeSinceStartup;
         }
         Next();
@@ -531,7 +548,7 @@ public static class DshDesktopUiDiag
         Check(tip.IsShown && tip.CurrentTitle == "Проверка подсказки",
             "подсказка показывается при наведении (заголовок «" + tip.CurrentTitle + "», задержка " +
             tip.delay.ToString("0.00") + " с)");
-        KvTooltip.Release();
+        KvTooltip.Release(true);
         Check(!tip.IsShown, "подсказка скрывается при уходе курсора");
 
         KazistovVvUIManager ui = KazistovVvUIManager.Instance;

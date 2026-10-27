@@ -119,44 +119,25 @@ namespace KazistovVvFeatures
             Performance = new KvPlannerPerformance();
 
             // --- журнал: всё важное пишется в файл и в панель
-            Zones.Message += delegate (string m) { Log.Add(KvLogKind.Zone, m); };
-            Poses.Changed += delegate
-            {
-                if (ui != null) ui.RebuildTree(true);
-            };
-            Poses.Failed += delegate (string m) { Log.Add(KvLogKind.Error, "позы: " + m); };
-            Recording.Failed += delegate (string m) { Log.Add(KvLogKind.Error, "запись: " + m); };
-            Recording.RecordingFinished += delegate (KvTrajectoryRecord r)
-            {
-                if (r != null) Log.Add(KvLogKind.Record, "запись «" + r.name + "» сохранена (" +
-                                                       r.SampleCount + " сэмплов, " +
-                                                       r.duration.ToString("0.0") + " с)");
-            };
-            Recording.PlaybackStarted += delegate (KvTrajectoryRecord r)
-            {
-                Log.Add(KvLogKind.Record, "воспроизведение «" + r.name + "» · скорость ×" +
-                                          Recording.SpeedMultiplier.ToString("0.00"));
-            };
-            Recording.PlaybackFinished += delegate (KvTrajectoryRecord r)
-            {
-                Log.Add(KvLogKind.Record, "воспроизведение «" + r.name + "» завершено");
-            };
-            Comparison.Changed += delegate
-            {
-                if (ui != null) ui.RebuildTree(true);
-            };
-            Heatmap.Message += delegate (string m) { Log.Add(KvLogKind.Ui, m); };
-            Clearance.Message += delegate (string m) { Log.Add(KvLogKind.Ui, m); };
-            Gripper.Message += delegate (string m) { Log.Add(KvLogKind.Ui, m); };
-            PickAndPlace.Message += delegate (string m) { Log.Add(KvLogKind.Scenario, m); };
-            Scenarios.Message += delegate (string m) { Log.Add(KvLogKind.Scenario, m); };
-            Presentation.Message += delegate (string m) { Log.Add(KvLogKind.Ui, m); };
-            Sessions.Message += delegate (string m) { Log.Add(KvLogKind.Session, m); };
-            Undo.Performed += delegate (string m) { Log.Add(KvLogKind.Ui, m); };
-            Performance.RunFinished += delegate (KvPlanRun run)
-            {
-                Log.Add(KvLogKind.Trajectory, "планирование: " + KvPlannerPerformance.Summary(run));
-            };
+            // Именованные методы вместо анонимных делегатов: их можно отписать в OnDestroy
+            // (17 анонимных подписок без отписки = утечка при повторном входе в PlayMode).
+            Zones.Message += OnZoneMessage;
+            Poses.Changed += OnPosesChanged;
+            Poses.Failed += OnPosesFailed;
+            Recording.Failed += OnRecordingFailed;
+            Recording.RecordingFinished += OnRecordingFinished;
+            Recording.PlaybackStarted += OnPlaybackStarted;
+            Recording.PlaybackFinished += OnPlaybackFinished;
+            Comparison.Changed += OnComparisonChanged;
+            Heatmap.Message += OnUiMessage;
+            Clearance.Message += OnUiMessage;
+            Gripper.Message += OnUiMessage;
+            PickAndPlace.Message += OnScenarioMessage;
+            Scenarios.Message += OnScenarioMessage;
+            Presentation.Message += OnUiMessage;
+            Sessions.Message += OnSessionMessage;
+            Undo.Performed += OnUiMessage;
+            Performance.RunFinished += OnRunFinished;
 
             BuildScenarios(Scenarios);
             Log.Add(KvLogKind.System, "модуль новых функций запущен (этапы 1–20) · данные: " +
@@ -166,11 +147,70 @@ namespace KazistovVvFeatures
         void OnDestroy()
         {
             if (Instance == this) Instance = null;
+            // Отписка от событий сервисов (утечка при повторном входе в PlayMode).
+            if (Zones != null) Zones.Message -= OnZoneMessage;
+            if (Poses != null)
+            {
+                Poses.Changed -= OnPosesChanged;
+                Poses.Failed -= OnPosesFailed;
+            }
+            if (Recording != null)
+            {
+                Recording.Failed -= OnRecordingFailed;
+                Recording.RecordingFinished -= OnRecordingFinished;
+                Recording.PlaybackStarted -= OnPlaybackStarted;
+                Recording.PlaybackFinished -= OnPlaybackFinished;
+            }
+            if (Comparison != null) Comparison.Changed -= OnComparisonChanged;
+            if (Heatmap != null) Heatmap.Message -= OnUiMessage;
+            if (Clearance != null) Clearance.Message -= OnUiMessage;
+            if (Gripper != null) Gripper.Message -= OnUiMessage;
+            if (PickAndPlace != null) PickAndPlace.Message -= OnScenarioMessage;
+            if (Scenarios != null) Scenarios.Message -= OnScenarioMessage;
+            if (Presentation != null) Presentation.Message -= OnUiMessage;
+            if (Sessions != null) Sessions.Message -= OnSessionMessage;
+            if (Undo != null) Undo.Performed -= OnUiMessage;
+            if (Performance != null) Performance.RunFinished -= OnRunFinished;
             if (Audio != null) Audio.Dispose();
             if (Heatmap != null) Heatmap.Dispose();
             if (Clearance != null) Clearance.Dispose();
             if (Gripper != null) Gripper.Detach();
             if (Recording != null) Recording.StopAll("модуль выключен");
+        }
+
+        // --- именованные обработчики событий сервисов (отписываются в OnDestroy)
+
+        private void OnZoneMessage(string m) { Log.Add(KvLogKind.Zone, m); }
+        private void OnPosesChanged() { if (ui != null) ui.RebuildTree(true); }
+        private void OnPosesFailed(string m) { Log.Add(KvLogKind.Error, "позы: " + m); }
+        private void OnRecordingFailed(string m) { Log.Add(KvLogKind.Error, "запись: " + m); }
+        private void OnUiMessage(string m) { Log.Add(KvLogKind.Ui, m); }
+        private void OnScenarioMessage(string m) { Log.Add(KvLogKind.Scenario, m); }
+        private void OnSessionMessage(string m) { Log.Add(KvLogKind.Session, m); }
+
+        private void OnRecordingFinished(KvTrajectoryRecord r)
+        {
+            if (r != null) Log.Add(KvLogKind.Record, "запись «" + r.name + "» сохранена (" +
+                                                   r.SampleCount + " сэмплов, " +
+                                                   r.duration.ToString("0.0") + " с)");
+        }
+
+        private void OnPlaybackStarted(KvTrajectoryRecord r)
+        {
+            Log.Add(KvLogKind.Record, "воспроизведение «" + r.name + "» · скорость ×" +
+                                      Recording.SpeedMultiplier.ToString("0.00"));
+        }
+
+        private void OnPlaybackFinished(KvTrajectoryRecord r)
+        {
+            Log.Add(KvLogKind.Record, "воспроизведение «" + r.name + "» завершено");
+        }
+
+        private void OnComparisonChanged() { if (ui != null) ui.RebuildTree(true); }
+
+        private void OnRunFinished(KvPlanRun run)
+        {
+            Log.Add(KvLogKind.Trajectory, "планирование: " + KvPlannerPerformance.Summary(run));
         }
 
         void OnDisable()

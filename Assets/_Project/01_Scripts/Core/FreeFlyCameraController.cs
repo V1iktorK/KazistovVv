@@ -155,7 +155,9 @@ public class FreeFlyCameraController : MonoBehaviour
     // Кадр последнего переключения фонарика — второе срабатывание в том же кадре игнорируется.
     private int lastFlashToggleFrame = -1;
     private AimIndicator aimIndicator;
+#pragma warning disable 0618 // TrajectoryPlannerController помечен [Obsolete] — мёртвый код (аудит §5.7)
     private TrajectoryPlannerController plannerController;
+#pragma warning restore 0618
     private TrajectoryFlowController flowController;
     private RobotController selectedRobot;
 

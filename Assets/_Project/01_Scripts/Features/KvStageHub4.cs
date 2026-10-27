@@ -192,6 +192,32 @@ namespace KazistovVvFeatures
         private void OnDestroy()
         {
             if (Instance == this) Instance = null;
+            // Отписка от сообщений сервисов (43 подписки без отписки → утечка при
+            // повторном входе в PlayMode: обработчик держит ссылку на уничтоженный хаб).
+            if (Proxies != null) Proxies.Message -= OnServiceMessage;
+            if (Lab != null) Lab.Message -= OnServiceMessage;
+            if (Cameras != null) Cameras.Message -= OnServiceMessage;
+            if (Forces != null) Forces.Message -= OnServiceMessage;
+            if (Heatmap != null) Heatmap.Message -= OnServiceMessage;
+            if (Report != null) Report.Message -= OnServiceMessage;
+            if (Collab != null) Collab.Message -= OnServiceMessage;
+            if (Web != null) Web.Message -= OnServiceMessage;
+            if (Companion != null) Companion.Message -= OnServiceMessage;
+            if (Voice != null) Voice.Message -= OnServiceMessage;
+            if (Hands != null) Hands.Message -= OnServiceMessage;
+            if (Eyes != null) Eyes.Message -= OnServiceMessage;
+            if (Script != null) Script.Message -= OnServiceMessage;
+            if (BehaviorRunner != null) BehaviorRunner.Message -= OnServiceMessage;
+            if (Environment != null) Environment.Message -= OnServiceMessage;
+            if (Lighting != null) Lighting.Message -= OnServiceMessage;
+            if (Materials != null) Materials.Message -= OnServiceMessage;
+            if (Cinema != null) Cinema.Message -= OnServiceMessage;
+            if (Titles != null) Titles.Message -= OnServiceMessage;
+            if (VoiceOver != null) VoiceOver.Message -= OnServiceMessage;
+            if (Failures != null) Failures.Message -= OnServiceMessage;
+            if (PreRun != null) PreRun.Message -= OnServiceMessage;
+            if (Mannequins != null) Mannequins.Message -= OnServiceMessage;
+            if (LogTools != null) LogTools.Message -= OnServiceMessage;
         }
 
         /// <summary>

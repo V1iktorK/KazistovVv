@@ -130,6 +130,13 @@ namespace KazistovVvFeatures
         private void OnDestroy()
         {
             if (Instance == this) Instance = null;
+            // Отписка от сообщений сервисов (утечка при повторном входе в PlayMode).
+            if (Capture != null) Capture.Message -= OnServiceMessage;
+            if (Singularities != null) Singularities.Message -= OnServiceMessage;
+            if (Waypoints != null) Waypoints.Message -= OnServiceMessage;
+            if (Health != null) Health.Message -= OnServiceMessage;
+            if (Obstacles != null) Obstacles.Message -= OnServiceMessage;
+            if (Pendant != null) Pendant.Message -= OnServiceMessage;
             if (Singularities != null) Singularities.Dispose();
             if (Waypoints != null) Waypoints.Dispose();
             if (Health != null) Health.Dispose();

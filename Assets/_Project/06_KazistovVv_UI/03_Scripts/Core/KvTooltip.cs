@@ -34,12 +34,16 @@ namespace KazistovVvUI
         private string pendingHotkey = "";
         private float hoverStart = -1f;
         private bool visible;
+        private bool pinned;
         private Canvas canvas;
 
         /// <summary>Подсказка (заголовок/описание/клавиша) для текущего наведения.</summary>
         public static void Request(string title, string body, string hotkey)
         {
             if (instance == null) return;
+            // Обычное наведение отменяет закрепление (иначе после закреплённой
+            // подсказки обычные перестанут сниматься при уходе курсора).
+            if (instance.pinned) instance.pinned = false;
             if (instance.pendingTitle == title && instance.pendingBody == body &&
                 instance.pendingHotkey == hotkey) return;
             instance.pendingTitle = title;
@@ -49,10 +53,27 @@ namespace KazistovVvUI
             if (instance.visible) instance.Paint();
         }
 
-        /// <summary>Снять наведение.</summary>
-        public static void Release()
+        /// <summary>
+        /// Закреплённая подсказка: не снимается автоматическим уходом курсора
+        /// (диагностика и явные подсказки системы). Снимается только Release(force: true).
+        /// </summary>
+        public static void RequestPinned(string title, string body, string hotkey)
         {
             if (instance == null) return;
+            instance.pinned = true;
+            instance.pendingTitle = title;
+            instance.pendingBody = body;
+            instance.pendingHotkey = hotkey;
+            instance.hoverStart = Time.unscaledTime;
+            if (instance.visible) instance.Paint();
+        }
+
+        /// <summary>Снять наведение. Для закреплённой подсказки требуется force: true.</summary>
+        public static void Release(bool force = false)
+        {
+            if (instance == null) return;
+            if (instance.pinned && !force) return;
+            instance.pinned = false;
             instance.pendingTitle = "";
             instance.pendingBody = "";
             instance.pendingHotkey = "";

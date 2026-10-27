@@ -52,6 +52,9 @@ public class SCARAController : RobotController
     private Vector3 refDir2;           // стартовое направление звена 2
     private bool geometryCached;
     private bool zTravelCalibrated;     // ход Z посчитан РОВНО ОДИН РАЗ (ФИКС 5)
+    private bool dhLogged;              // DH уже напечатан (ФИКС 5.8: шум от копий-фантомов)
+    private float dhLoggedA1;
+    private float dhLoggedA2;
     private bool referencesReported;
     private float lastAngle1;
     private float lastAngle2;
@@ -460,9 +463,20 @@ public class SCARAController : RobotController
         // Теперь ход Z считается РОВНО ОДИН РАЗ: SCARAController.Awake → CalibrateZTravelOnce,
         // а повторно — только явным запросом (RecalculateKinematics / команда оператора).
 
-        Debug.Log("[SCARA] DH: a1=" + link1Len.ToString("0.000") + " a2=" +
-                  link2Len.ToString("0.000") + ", вертикаль=" +
-                  verticalAxis.ToString("0.00"));
+        // ФИКС 5.8 (шум): строка DH печаталась каждой копией-фантомом. Логируем только
+        // при ИЗМЕНЕНИИ посчитанных параметров — кэшируем по позе.
+        bool changed = !dhLogged ||
+            Mathf.Abs(link1Len - dhLoggedA1) > 0.001f ||
+            Mathf.Abs(link2Len - dhLoggedA2) > 0.001f;
+        if (changed)
+        {
+            dhLogged = true;
+            dhLoggedA1 = link1Len;
+            dhLoggedA2 = link2Len;
+            Debug.Log("[SCARA] DH: a1=" + link1Len.ToString("0.000") + " a2=" +
+                      link2Len.ToString("0.000") + ", вертикаль=" +
+                      verticalAxis.ToString("0.00"));
+        }
     }
 
     /// <summary>
