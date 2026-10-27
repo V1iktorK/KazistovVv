@@ -1032,3 +1032,187 @@ GREEN Б2 `313 / 310 / 1 / 2` → после §31 `313 / 311 / 0 / 2` → `stage
 | `Tools/_stage_a/СОСТОЯНИЕ_ЭТАПА_А.md` | рабочее состояние сессии «Этап А»: что сделано, что осталось, чем доказано (плюс черновики отчёта и текстов инструментов) |
 | `Assets/_Project/01_Scripts/Editor/KvUrpKeywordPolicy.cs` | политика отсечения ключевых слов URP с причиной для каждого слова (настоящее решение Б2: `URP/Lit` 442 368 → 1 536) |
 | `Logs/xr-build-apk-s30.log`, `Logs/xr-build-apk-s31.log`, `Logs/stage-a-*.txt/.md`, `Logs/s31-*.log`, `Logs/platform-return.log`, `Logs/ci-stage-a-*.log`, `Logs/ci-console-summary.json` | числа Этапа А: варианты шейдеров до/после отсечения, возврат тестов, состояние после сборки, идентификатор и профиль §31, возврат платформы, гейт «чистой консоли» |
+
+---
+
+## Дополнение 18.10.2026: XR-слой §35–§36 — как с этим работать
+
+_Раздел дополняет основной текст. Всё, что касается сборки шлема, живёт по тем же правилам, что и
+раньше (см. §«Сборка APK»), но появились свои ловушки — они перечислены в конце._
+
+### 1. Где что лежит
+
+| Файл | Что делает |
+|---|---|
+| `Assets/_Project/01_Scripts/Xr/KvXrRig.cs` | старт XR: состояние рига, стерео, целевые кадры, запуск диагностики ввода и OpenXR |
+| `Assets/_Project/01_Scripts/Xr/KvXrHeadTracking.cs` | **переносит позу головы на камеру** в `LateUpdate` (без него мир рисуется с пола) |
+| `Assets/_Project/01_Scripts/Xr/KvXrInputSource.cs` | единый источник поз и кнопок: голова, кисти (`devicePose`), указание (`pointer`), курок, грип, стик, меню; события «контроллеры появились/пропали» |
+| `Assets/_Project/01_Scripts/Xr/KvPicoControllerProfile.cs` | профиль контроллеров PICO для OpenXR: устройство ввода, карта действий, правило `userPaths` по рукам и его аудит |
+| `Assets/_Project/01_Scripts/Xr/KvXrGroupPanel.cs` | панель групп: 8 иконок, подпись 0,5 с, веер, крепление к контроллеру, нажатие |
+| `Assets/_Project/01_Scripts/Xr/KvXrGroupPanelLayout.cs` | вся арифметика панели: раскладка, порог подписи, **попадание луча геометрией** |
+| `Assets/_Project/01_Scripts/Xr/KvXrUiPointer.cs` | луч (из контроллера или по взгляду), наведение и нажатие на панель, журнал |
+| `Assets/_Project/01_Scripts/Xr/KvHangarPlacement.cs` | где ставить ангар вокруг оператора (измеренные числа, а не «на глаз») |
+| `Assets/_Project/01_Scripts/Xr/KvXrHangarAnchor.cs` | ставит зал по позе оператора во время работы |
+| `Assets/_Project/01_Scripts/Xr/KvXrDesktopOverlayGuard.cs` | гасит десктопный интерфейс в шлеме — и рисование, и кликабельность |
+| `Assets/_Project/01_Scripts/Xr/KvXrOpenXrDiagnostics.cs` | строки о рантайме OpenXR, расширении контроллеров и XR-устройствах в журнал |
+
+### 2. Как проверить, не надевая шлем
+
+| Проверка | Команда | Что должно быть |
+|---|---|---|
+| компиляция | `Unity.exe -batchmode -nographics -quit -projectPath C:\KazistovVv_Build -logFile Logs\compile.log` | код 0, `error CS`/`warning CS` — ноль |
+| гейт «чистой консоли» + все тесты | `powershell -NoProfile -ExecutionPolicy Bypass -File Tools\stage-a-verify.ps1 -Tag <метка>` | 0/0 ошибок и предупреждений; тесты: 469 прошло, 0 упало |
+| сборка APK | `powershell -NoProfile -ExecutionPolicy Bypass -File Tools\stage-a-build-apk.ps1` | `[KvXr] APK собран` + файл и SHA256; 25–35 минут |
+| установка и журнал | `Tools\device-install-and-log.ps1 -Mode Install\|Log\|Check` | `Success`, затем строки `[KvXr] …` |
+| потоковый журнал (начало не теряется) | `Tools\_stage_a\device-stream-log.ps1 -Tag <метка> -Seconds 210` | ищите `КОНТРОЛЛЕРЫ ПОЯВИЛИСЬ`, `ПОДПИСЬ`, `ВЕЕР` |
+
+### 3. Ловушки, на которых уже терялось время
+
+1. **Шлем может быть просто разряжен.** `adb devices` пуст, Windows видит драйвер, посторонних `adb`
+   нет — а это разряд. Проверять `adb shell dumpsys battery` ПЕРЕД разбором драйверов.
+2. **В шлеме может стоять другая сборка.** Сверять размер установленного APK с `Builds\KazistovVv.apk`
+   (в `ls -l` размер — пятое поле) до любых выводов «не помогло».
+3. **Сборка APK — одна на несколько пунктов.** Она занимает 25–35 минут; две подряд без нужды —
+   потерянный час.
+4. **`.ps1` с кириллицей обязан быть с BOM.** Инструмент `edit` BOM снимает — после правки
+   `Tools\*.ps1` возвращайте его, иначе PowerShell 5.1 не разберёт файл (ловит тест
+   `KvBuildTests.ToolsScripts_WithCyrillic_HaveUtf8Bom`).
+5. **Правки `.unity`/`.prefab`/`.asset` — только инструментами редактора** (текстовый YAML
+   читать можно, писать нельзя). `MainScene.unity` — контрольная сумма
+   `22AA6D2299161F0D6B0DE404F4571438D63323E2D428CE222F72FD815185B02C`, менять нельзя.
+6. **`KvXrInputSource.TryPose` на пути `devicePosition + deviceRotation` возвращает `true` даже при
+   нулевых значениях** — позу проверять по `isTracked`; панель такие позы отвергает и пишет об этом.
+7. **Гасить рисование ≠ гасить кликабельность.** Невидимый интерфейс продолжает ловить луч;
+   отключать надо и `Canvas.enabled`, и `GraphicRaycaster`.
+8. **Выключать `KazistovVv_UI` целиком нельзя:** на том же объекте живёт менеджер интерфейса,
+   который заполняет реестр команд — панель в шлеме станет пустой молча.
+
+### 4. Тесты XR (без шлема)
+
+| Файл | Что проверяет |
+|---|---|
+| `KvXrGroupPanelTests.cs` | раскладка панели, порог подписи 0,5 с, дуга 210°, радиусы, попадание лучом, запасное положение у пояса |
+| `KvPicoControllerProfileTests.cs` | путь профиля, расширение, включённость фичи для Android, состав элементов устройства |
+| `KvXrS36Tests.cs` (**новый**) | правило `userPaths` по рукам (и что оно ЛОВИТ нарушение), аудит настоящей карты действий, геометрия попадания луча в иконку (включая вырожденные входы) |
+| `KvDeviceTests.cs` | состав XR-сцены, лоадер OpenXR, идентификатор приложения |
+| `KvXrHangarPlacementTests.cs` | правила размещения ангара и стендов |
+| `KvXrOverlayPolicyTests.cs` | что в шлеме гасится и что кликается |
+
+---
+
+## Дополнение 20.10.2026: ПЕРЕХОД НА PICO OPENXR SDK (решение владельца, [R3] снят)
+
+**Что изменилось в проекте.**
+
+| Что | Как |
+|---|---|
+| Зависимость | `com.unity.xr.openxr.picoxr` **1.4.1** поставлен **локальной папкой** — `_packages/PICO-Unity-OpenXR-SDK`, строка в `Packages/manifest.json`: `"com.unity.xr.openxr.picoxr": "file:C:/KazistovVv_Build/_packages/PICO-Unity-OpenXR-SDK"`. Сеть при сборке не нужна |
+| Фичи OpenXR для Android | `PICOFeature` (вкл), `PICO4UltraControllerProfile` (вкл), `KvPicoControllerProfile` (**выкл**), `KHRSimpleControllerProfile` (вкл) |
+| Инструмент | `Assets/_Project/01_Scripts/Editor/KvPicoSdkSwitch.cs` → `KazistovVvXrEditor.KvPicoSdkSwitch.Apply` |
+| Манифест | мета-данные PICO (`pvr.app.type=vr`, `controller=1`) ставит сам SDK; наш хук `KvPicoManifestMetaData` больше их не удаляет и служит страховкой |
+| Подпись | своя: `KvAndroidSigning.Configure()` и `KvAndroidSigning.BuildSignedApk()`; хранилище `keystore/kazistovvv.keystore`, псевдоним `kazistovvv` |
+
+**Как собирать и запускать (важно, иначе потеряется час):**
+
+```
+$env:GRADLE_USER_HOME='C:\gradle_home'      # иначе шаг prefab падает на пути с кириллицей
+Unity.exe -batchmode -quit -projectPath C:\KazistovVv_Build ^
+  -executeMethod KazistovVvXrEditor.KvAndroidSigning.BuildSignedApk -logFile Logs\build.log
+adb install -r Builds\KazistovVv.apk
+```
+
+* **запускать приложение только из библиотеки шлема** — запуск по `adb` (`am start` / `monkey`)
+  система снимает (`Activity not started` / `app died`), потому что SDK объявляет приложение
+  VR-приложением (`pvr.app.type=vr`);
+* журнал снимать потоком **до** запуска: `Tools\_stage_a\device-stream-log.ps1 -Tag <метка> -Seconds 200`,
+  затем владелец запускает приложение из библиотеки;
+* подпись менять нельзя без повторной регистрации: отпечатки в `Docs\REPORT_XR_S36.md` §6.2.
+
+**Признак, что всё на месте** (строки журнала):
+
+```
+[KvXr] КОНТРОЛЛЕРЫ ПОЯВИЛИСЬ: правый PICO4UltraTouchControllerOpenXR (triggerPressed, trigger, …, devicePose, …)
+[KvXr] панель групп: встала У КОНТРОЛЛЕРА (левая рука) · … · поза УКАЗАНИЯ · развёрнута НА оператора
+[KvXr] ПАНЕЛЬ: луч навёл «…» — … · источник КОНТРОЛЛЕР
+```
+
+---
+
+## Дополнение 21.10.2026 (§37): КИСТИ, ЖЕСТЫ, МОДЕЛИ КОНТРОЛЛЕРОВ И ПОДСТРОЙКА БЕЗ ПЕРЕСБОРКИ
+
+### 1. Что появилось и где лежит
+
+| Что | Файл | Строка-доказательство в журнале |
+|---|---|---|
+| Модели контроллеров (меш PICO 4 Ultra из SDK, материал наш) | `01_Scripts/Xr/KvXrControllerVisuals.cs` | `ИКОНКИ КОНТРОЛЛЕРОВ: показано 2 · модель «меш SDK …»` |
+| Отслеживание кистей (пакет `com.unity.xr.hands` 1.9.0) | `01_Scripts/Xr/KvXrHands.cs` | `ОТСЛЕЖИВАНИЕ РУК: левая … · правая … · подсистема XR Hands работает` |
+| Распознавание и исполнение жестов | `01_Scripts/Xr/KvXrGestures.cs` | `ЖЕСТ: «щипок» сработал · правая рука · нажата иконка «…»` |
+| Подстройка чисел файлом | `01_Scripts/Xr/KvXrTuning.cs` | `ПОДСТРОЙКА: файл подстройки применён · ключей N · панель.радиус …` |
+| Инструменты (пакет, фича кистей, проверка меша, сводка) | `01_Scripts/Editor/KvXrS37Tools.cs` | меню `KazistovVv/Устройство/` пп. 10–12 |
+
+**Ничего из этого не добавлено в сцену**: компоненты создаются в рантайме из `KvXrRig`, поэтому
+`XrMain.unity` не менялся и его хеш остался прежним.
+
+### 2. Кисти: что уже сделано в проекте и что проверить
+
+Сделано и записано в ассеты редактором (не руками):
+
+* пакет `com.unity.xr.hands` **1.9.0** поставлен через менеджер пакетов
+  (`KvXrS37Tools.AddHandTrackingPackage`);
+* для Android включена фича `HandTracking`, выключена чужая `MetaHandTrackingAim` (требует
+  расширения Meta, которого у PICO нет);
+* в `Assets/Resources/PICOProjectSetting.asset` выставлено `isHandTracking = true` и режим
+  «контроллеры и кисти» — только с этим хуком SDK PICO дописывает в манифест `handtracking = 1`
+  и разрешение `com.picovr.permission.HAND_TRACKING`.
+
+**Что проверить, если кистей нет** (по порядку):
+
+1. строка `ОТСЛЕЖИВАНИЕ РУК: подсистема XR Hands НЕ создана` — фича выключена или пакет не встал;
+2. строка `поз нет — положите контроллеры` — кисти не трекаются: контроллеры в руках, режим ввода
+   «контроллеры», или в настройках шлема выключено отслеживание рук;
+3. `aapt2 dump xmltree` по APK: есть ли `handtracking` и разрешение `com.picovr.permission.HAND_TRACKING`.
+
+### 3. Подстройка чисел без пересборки — как этим пользоваться
+
+Радиус панели подбирается ОПРОСОМ владельца ([S1.2]), и каждая итерация не должна стоить сборки APK
+(12–35 минут). Механизм: файл в папке данных приложения, который читается раз в 2 секунды.
+
+```
+$adb = 'C:\Program Files\Unity\Hub\Editor\6000.5.6f1\Editor\Data\PlaybackEngines\AndroidPlayer\SDK\platform-tools\adb.exe'
+$tmp = "$env:TEMP\kv_xr_tuning.txt"
+@('panel.radius=0.125','ray.hand=right','visuals.mode=mesh','gesture.enabled=1') |
+    Set-Content -Path $tmp -Encoding ASCII
+& $adb push $tmp /storage/emulated/0/Android/data/com.KazistovVv.app/files/kv_xr_tuning.txt
+```
+
+Ключи: `panel.radius` (0.080…0.420 м), `panel.forward` (0.150…0.900 м), `panel.up` (−0.050…0.250 м),
+`ray.hand` (`right`/`left`/`правая`/`левая`), `visuals.mode`
+(`mesh`/`primitives`/`billboard`/`off`), `gesture.enabled` (`1`/`0`). Мусор в значении НЕ
+применяется — остаётся прежнее число. Каждое изменение печатается строкой `[KvXr] ПОДСТРОЙКА: …`.
+
+### 4. Сборка и запуск — без изменений (§36)
+
+```
+$env:GRADLE_USER_HOME='C:\gradle_home'      # иначе шаг prefab падает на пути с кириллицей
+Unity.exe -batchmode -quit -projectPath C:\KazistovVv_Build ^
+  -executeMethod KazistovVvXrEditor.KvAndroidSigning.BuildSignedApk -logFile Logs\build.log
+adb install -r Builds\KazistovVv.apk
+```
+
+* запускать **только из библиотеки шлема** (`adb am start` / `monkey` система снимает);
+* журнал снимать потоком **до** нажатия иконки в библиотеке:
+  `Tools\_stage_a\device-stream-log.ps1 -Tag s37 -Seconds 300 -NoRestart`;
+* подпись не менялась: `keystore/kazistovvv.keystore`, псевдоним `kazistovvv`,
+  SHA-256 сертификата `3d8430c9b5b65e26c6a09043d049cc7379153326f91ef79f9b57d97489213a35`.
+
+### 5. Проверки без шлема для этой волны
+
+```
+# гейт «чистой консоли» + все тесты (502 всего, 2 прежних пропуска)
+powershell -NoProfile -ExecutionPolicy Bypass -File Tools\stage-a-verify.ps1 -Tag s37
+# редакторные инструменты §37 (печатают отчёт в консоль)
+Unity.exe -batchmode -nographics -quit -projectPath C:\KazistovVv_Build `
+  -executeMethod KazistovVvXrEditor.KvXrS37Tools.ReportS37State            -logFile Logs\s37-state.log
+Unity.exe -batchmode -nographics -quit -projectPath C:\KazistovVv_Build `
+  -executeMethod KazistovVvXrEditor.KvXrS37Tools.VerifySdkControllerModels -logFile Logs\s37-mesh.log
+```

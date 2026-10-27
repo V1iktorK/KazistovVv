@@ -56,6 +56,7 @@ namespace KazistovVvXr
 
         private Transform rigRoot;
         private Transform head;
+        private KvXrUiPointer pointer;
         private float lastSnapTurnTime = -10f;
         private bool triggerWasDown;
         private GameObject teleportMarker;
@@ -106,6 +107,10 @@ namespace KazistovVvXr
             if (rigRoot == null) rigRoot = transform;
             if (head == null) head = FindHead();
 
+            // СТИК ЗАНЯТ ВВОДОМ (§41). Пока открыто колесо символов, стик принадлежит ему: иначе
+            // выбор символа ещё и разворачивал бы оператора — стик в шлеме это поворот и ход.
+            if (StickOwnedByInput()) return;
+
             Quaternion rigYaw = Quaternion.Euler(0f, rigRoot.eulerAngles.y, 0f);
 
             HandleSnapTurn();
@@ -113,6 +118,16 @@ namespace KazistovVvXr
                 HandleTeleport(rigYaw);
             else
                 HandleSmooth(rigYaw);
+        }
+
+        /// <summary>
+        /// ЗАБРАЛ ЛИ КТО-ТО СТИК. Спрашивается у панели ввода, а не решается здесь: правило захвата
+        /// одно (`KvXrWheelLayout.CapturesStick`) и проверено тестом.
+        /// </summary>
+        private static bool StickOwnedByInput()
+        {
+            KvXrGroupPanel panel = KvXrGroupPanel.Active;
+            return panel != null && panel.StickCaptured;
         }
 
         // ------------------------------------------------------------------ поворот шагами
@@ -134,7 +149,26 @@ namespace KazistovVvXr
 
         private void HandleTeleport(Quaternion rigYaw)
         {
-            bool haveAim = KvXrInputSource.TryRightPose(out Vector3 handPos, out Quaternion handRot);
+            // ПОКА ЛУЧ НАВЕДЁН НА ПАНЕЛЬ — НЕ ТЕЛЕПОРТИРОВАТЬ (исправлено 23.10.2026).
+            //
+            // Курок в шлеме один: он и нажимает иконку, и подтверждает телепорт. До этой правки
+            // каждое нажатие по панели УВОДИЛО ОПЕРАТОРА с места: корень рига смещался, и всё, что
+            // считается от него (кисти, стоящая на месте панель), уезжало. Владелец видел это как
+            // «иконки перестали быть прикреплены к контроллеру» и «рук не видно». Правило уже
+            // описано в шапке `KvXrUiPointer` («при наведении на интерфейс телепорт молчит») —
+            // здесь оно наконец реализовано.
+            if (pointer == null) pointer = UnityEngine.Object.FindAnyObjectByType<KvXrUiPointer>();
+            if (pointer != null && pointer.AimingAtUi)
+            {
+                SetMarker(false, Vector3.zero, rigYaw);
+                triggerWasDown = KvXrInputSource.RayTrigger >= triggerThreshold;
+                return;
+            }
+
+            // §37: РУКА ТЕЛЕПОРТА — ТА ЖЕ, ЧТО У ЛУЧА. Иначе при смене руки луча курок одной руки
+            // нажимал бы иконку, а курок другой — телепортировал: ровно дефект «одно нажатие — два
+            // действия», который в §27 лечили на десктопе.
+            bool haveAim = KvXrInputSource.TryRayPose(out Vector3 handPos, out Quaternion handRot);
             if (!haveAim)
             {
                 SetMarker(false, Vector3.zero, rigYaw);
@@ -149,7 +183,7 @@ namespace KazistovVvXr
             teleportPoint = ground;
             SetMarker(teleportValid, ground, rigYaw, normal);
 
-            bool triggerDown = KvXrInputSource.RightTrigger >= triggerThreshold;
+            bool triggerDown = KvXrInputSource.RayTrigger >= triggerThreshold;
             if (triggerDown && !triggerWasDown && teleportValid)
                 TeleportTo(ground);
             triggerWasDown = triggerDown;

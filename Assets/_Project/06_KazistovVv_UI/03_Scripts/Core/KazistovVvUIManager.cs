@@ -130,6 +130,20 @@ namespace KazistovVvUI
         private FreeFlyCameraController cameraController;
         private CenterWindow centerWindow;
 
+        /// <summary>
+        /// СПАВНЕР ОБЪЕКТОВ ДЛЯ ШЛЕМА (§42). В шлеме из стартового меню создаются столы и роботы;
+        /// чтобы не заводить вторую фабрику, меню шлема пользуется ТЕМ ЖЕ `ObjectSpawner`, что и
+        /// компьютерный интерфейс. Свойство только отдаёт экземпляр — поведение прежнего кода не меняется.
+        /// </summary>
+        public ObjectSpawner Objects
+        {
+            get
+            {
+                if (spawner == null) spawner = gameObject.AddComponent<ObjectSpawner>();
+                return spawner;
+            }
+        }
+
         private bool built;
         private bool rebuilding;
 

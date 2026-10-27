@@ -74,6 +74,30 @@ namespace KazistovVvXr
         /// <summary>MR активен (просьба владельца: реальная комната вместо лаборатории).</summary>
         public bool MrActive { get { return KvXrSettings.GetPassthrough(); } }
 
+        /// <summary>
+        /// ГАСИТЬ ЛИ ВИРТУАЛЬНЫЕ СТЕНДЫ. Правило вынесено отдельной чистой функцией, потому что
+        /// здесь и была ошибка: прежняя строка `!hideVirtualStands || GetShowVirtualStands()`
+        /// при `hideVirtualStands = true` и выключенном тумблере давала ЛОЖЬ и прятала столы
+        /// В VR, где они — главное содержимое. Владелец 16.10.2026: «столов или роботов не видно».
+        ///
+        /// Правило: прятать ТОЛЬКО в MR, только если это задано полем и оператор не включил
+        /// тумблер «виртуальные стенды» вручную. В VR стенды видны ВСЕГДА.
+        /// </summary>
+        public static bool HidesVirtualStands(bool mrActive, bool hideField, bool showToggle)
+        {
+            return mrActive && hideField && !showToggle;
+        }
+
+        /// <summary>
+        /// СТАВИТЬ ЛИ РОБОТА НА «РЕАЛЬНЫЙ СТОЛ». Только в MR: в VR реального стола нет, и
+        /// постановка уводила робота в НАЧАЛО КООРДИНАТ — туда, где стоит оператор, отчего
+        /// робот становился невидимым (изнутри модели видны только обратные стороны граней).
+        /// </summary>
+        public static bool ShouldPlaceRobotOnRealTable(bool mrActive)
+        {
+            return mrActive;
+        }
+
         void OnEnable()
         {
             KvXrSettingsChanged.SettingsChanged += ApplyLayers;
@@ -90,7 +114,15 @@ namespace KazistovVvXr
             if (!table.IsValid) table = KvXrMrPlacement.DefaultTable;
             if (!room.IsValid) room = KvXrMrPlacement.DefaultRoom;
 
-            PlaceRobot();
+            // РОБОТА СТАВИМ НА «РЕАЛЬНЫЙ СТОЛ» ТОЛЬКО В MR. В VR реального стола нет, и постановка
+            // переносила робота В НАЧАЛО КООРДИНАТ — то есть туда, где стоит оператор. Робот,
+            // внутри которого стоишь, не виден: изнутри модели видны только обратные стороны граней.
+            // Именно это и записал журнал шлема 16.10.2026: «Робот поставлен на реальный стол:
+            // центр (0,00; 0,00) м, низ 0,78 м», — при режиме «виртуальная лаборатория (VR)».
+            if (ShouldPlaceRobotOnRealTable(MrActive)) PlaceRobot();
+            else Debug.Log("[KvXr] Робот оставлен НА СВОЁМ СТЕНДЕ: режим не MR, реального стола нет. " +
+                           "Постановка «на реальный стол» в VR увела бы робота в начало координат — " +
+                           "в место, где стоит оператор.");
             ApplyLayers();
 
             Debug.Log("[KvXr] " + KvXrMrPlacement.Describe(table, room, workZoneRadiusMeters));
@@ -130,8 +162,19 @@ namespace KazistovVvXr
         /// </summary>
         public void ApplyLayers()
         {
-            // 1. Виртуальные стенды лаборатории: в MR гасятся, иначе перекрывают комнату.
-            SetVirtualStandsVisible(!hideVirtualStands || KvXrSettings.GetShowVirtualStands());
+            // 1. Виртуальные стенды лаборатории гасятся ТОЛЬКО В MR, иначе они перекрывали бы
+            //    реальную комнату. Это и было написано в замысле — но выполнялось ВСЕГДА.
+            //
+            // ДЕФЕКТ, ИСПРАВЛЕННЫЙ 16.10.2026 (§35). Прежняя строка была
+            //     SetVirtualStandsVisible(!hideVirtualStands || KvXrSettings.GetShowVirtualStands());
+            // При `hideVirtualStands = true` (значение поля по умолчанию) и выключенном тумблере
+            // «виртуальные стенды» (его умолчание — 0) она даёт `false || false` = ЛОЖЬ, то есть
+            // СТОЛЫ ПРЯЧУТСЯ И В ШЛЕМЕ В РЕЖИМЕ VR, где они и есть главное содержимое.
+            // Владелец 16.10.2026: «столов или роботов не видно» — при том, что в журнале шлема
+            // стенды стоят на своих местах и ничем не загорожены. Вот почему их не было видно.
+            bool hideStandsInMr = HidesVirtualStands(MrActive, hideVirtualStands,
+                KvXrSettings.GetShowVirtualStands());
+            SetVirtualStandsVisible(!hideStandsInMr);
 
             // 2. Сетка рабочей зоны робота.
             if (KvXrSettings.GetShowWorkZone())

@@ -137,7 +137,11 @@ $sb = New-Object System.Text.StringBuilder
 
 $byNamespace = @{}
 foreach ($file in ($targets | Sort-Object FullName)) {
-    $lines = Get-Content $file.FullName
+    # ЧИТАЕМ ЯВНО КАК UTF-8. Исходники проекта — UTF-8 БЕЗ BOM, а Windows PowerShell 5.1 по
+    # умолчанию читает файл в кодировке ANSI: кириллица превращалась в кракозябры
+    # («РќРђР—РђРўРР•» вместо «НАЗНАЧЕНИЕ») и такой попадала в справочник. Найдено 15.10.2026,
+    # когда инструмент был запущен через `powershell -File` вместо `pwsh`.
+    $lines = Get-Content -Path $file.FullName -Encoding UTF8
     $declIndex = -1
     $typeKind = ''
     $typeName = ''
@@ -198,7 +202,10 @@ Write-Host ("  пространств имён: {0} · типов: {1} · стр
 if ($Apply) {
     $docPath = Join-Path $Project 'Docs\API_REFERENCE.md'
     if (-not (Test-Path $docPath)) { Write-Host "ОШИБКА: нет $docPath"; exit 1 }
-    $doc = Get-Content $docPath -Raw
+    # Кодировка чтения указана ЯВНО — по той же причине, что и при чтении исходников:
+    # `Get-Content -Raw` без неё в Windows PowerShell 5.1 читает UTF-8 как ANSI и портит
+    # кириллицу ВСЕГО справочника при записи.
+    $doc = Get-Content -Path $docPath -Raw -Encoding UTF8
     if ($doc -match 'Дополнение 08\.10\.2026: XR-слой') {
         Write-Host 'Раздел уже есть в справочнике — правка не нужна.'
     } else {

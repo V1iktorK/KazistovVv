@@ -57,10 +57,124 @@ namespace KazistovVvXr
 
         void Start()
         {
+            // §37: ЧТО ЖИВЁТ ТОЛЬКО В РАНТАЙМЕ. Модели контроллеров и исполнитель жестов создаются
+            // ЗДЕСЬ, а не лежат в сцене: файл XrMain.unity не правится вовсе, поэтому принятое в
+            // §35–§36 не может сломаться от правки сцены. Оба вызова идемпотентны.
+            EnsureRuntimeComponents();
+
             if (!logOnStart) return;
             Debug.Log("[KvXr] " + Status);
             Debug.Log("[KvXr] " + KvXrInputSource.Describe());
             Debug.Log("[KvXr] " + KvXrSettings.BuildRigConfig().Describe());
+            Debug.Log("[KvXr] " + KvXrSettings.DescribePointer());
+        }
+
+        /// <summary>
+        /// СОЗДАТЬ ТО, ЧТО НЕ ЛЕЖИТ В СЦЕНЕ (§37): модели контроллеров, кисти и жесты. Вынесено
+        /// отдельным методом, чтобы это было видно в одном месте: сцена не меняется, всё собирается кодом.
+        /// </summary>
+        private void EnsureRuntimeComponents()
+        {
+            Camera camera = headCamera != null ? headCamera : Camera.main;
+            KvXrControllerVisuals.Ensure(transform, camera);
+            KvXrHands.Ensure(transform, camera);
+            KvXrGestures.Ensure(transform);
+            KvXrSecondaryRay.Ensure(transform, camera);   // §39: второй луч — только указатель
+
+            // §39: курсору на конце луча нужна камера, чтобы разворачиваться к оператору.
+            KvXrUiPointer pointer = Object.FindAnyObjectByType<KvXrUiPointer>();
+            if (pointer != null && pointer.headCamera == null) pointer.headCamera = camera;
+
+            // §41: СТАРТОВОЕ МЕНЮ перед оператором (указание владельца: «нет стартового меню —
+            // сначала сделаем его»). Создаётся в рантайме, сцена не меняется.
+            KvXrStartMenu.Ensure(transform, camera);
+
+            // §41: ОКНА В МИРЕ (указание владельца: кнопки должны выдавать окна, которые не крепятся
+            // ко взгляду и остаются висеть, когда оператор отходит).
+            KvXrWindowHost.Ensure(camera);
+
+            // §42: ПУСТО ПРИ ЗАПУСКЕ — столы и роботы сцены гасятся в рантайме (файл XrMain.unity не
+            // меняется), добавляются они уже из стартового меню.
+            EnsureSceneEmpty();
+
+            // §42: ПОТОК ЭТАПОВ — без него в шлеме не работала ни одна визуализация (пятна, границы,
+            // зоны, сингулярности): службы привязываются к потоку, а его в XR-сцене не было вовсе.
+            EnsureFlowBridge(camera);
+        }
+
+        /// <summary>Создать компонент «пусто при запуске», если его нет (§42).</summary>
+        private static void EnsureSceneEmpty()
+        {
+            KvXrSceneEmpty existing = Object.FindAnyObjectByType<KvXrSceneEmpty>(FindObjectsInactive.Include);
+            if (existing != null) return;
+
+            var go = new GameObject("KvXrSceneEmpty");
+            go.AddComponent<KvXrSceneEmpty>();
+        }
+
+        /// <summary>Создать мост потока этапов, если его нет (§42).</summary>
+        private void EnsureFlowBridge(Camera camera)
+        {
+            KvXrFlowBridge existing = Object.FindAnyObjectByType<KvXrFlowBridge>(FindObjectsInactive.Include);
+            if (existing != null)
+            {
+                if (existing.headCamera == null) existing.headCamera = camera;
+                return;
+            }
+
+            var go = new GameObject("KvXrFlowBridge");
+            KvXrFlowBridge bridge = go.AddComponent<KvXrFlowBridge>();
+            bridge.headCamera = camera;
+        }
+
+        private float lastRecoverTime = -100f;
+
+        void OnApplicationPause(bool paused)
+        {
+            if (!paused) Recover();
+        }
+
+        void OnApplicationFocus(bool focused)
+        {
+            if (focused) Recover();
+        }
+
+        /// <summary>
+        /// ВОССТАНОВЛЕНИЕ ПОСЛЕ ПРОБУЖДЕНИЯ ШЛЕМА (§37). Жалоба владельца: «после ухода в спящий
+        /// режим указка на контроллерах не восстанавливается и веер тоже». Сон останавливает
+        /// приложение и может пересоздать сеанс, устройства и подсистемы — всё, что было закэшировано
+        /// (список устройств, закреплённые стороны, подсистема кистей, состояние указателя,
+        /// положение панели), к этому моменту может быть негодным.
+        ///
+        /// ЧТО ЗДЕСЬ ДЕЛАЕТСЯ: пересканировать ввод, снять закрепление сторон (пусть определятся
+        /// заново), поднять подсистему кистей, сбросить жесты и указатель, поставить панель заново —
+        /// и напечатать ОДНУ строку с числами, по которой видно, что восстановление произошло.
+        /// </summary>
+        public void Recover()
+        {
+            if (Time.realtimeSinceStartup - lastRecoverTime < 1f) return;   // пауза и фокус приходят парой
+            lastRecoverTime = Time.realtimeSinceStartup;
+
+            KvXrInputSource.ForceScan();
+            KvXrInputSource.UnlockSides();
+
+            KvXrHands hands = Object.FindAnyObjectByType<KvXrHands>();
+            if (hands != null) hands.Recover();
+
+            KvXrGestures gestures = Object.FindAnyObjectByType<KvXrGestures>();
+            if (gestures != null) gestures.ResetState();
+
+            KvXrGroupPanel panel = Object.FindAnyObjectByType<KvXrGroupPanel>();
+            if (panel != null) panel.Reanchor();
+
+            KvXrUiPointer pointer = Object.FindAnyObjectByType<KvXrUiPointer>();
+            if (pointer != null) pointer.ResetState();
+
+            DetectXr();
+            Debug.Log("[KvXr] ПРОБУЖДЕНИЕ: устройства пересмотрены · " + KvXrInputSource.Describe() +
+                      " · " + KvXrInputSource.DescribeSides() +
+                      " · кисти " + (KvXrHands.SubsystemRunning ? "подняты" : "НЕТ") +
+                      " · панель и указатель поставлены заново");
         }
 
         /// <summary>
@@ -71,7 +185,21 @@ namespace KazistovVvXr
         /// </summary>
         void Update()
         {
+            // §40: РЕЖИМ УПРАВЛЕНИЯ — контроллеры в руках или кисти. От него зависят луч (контроллер
+            // или палец), крепление панели (контроллер или ладонь) и видимость второго луча.
+            KvXrMode.Tick();
+
+            // §37: ФАЙЛ ПОДСТРОЙКИ. Читается не чаще раза в 2 с; если значения изменились —
+            // в журнал уходит строка с числами. Это механизм опросов радиуса панели без пересборки.
+            string tuning = KvXrTuning.Tick();
+            if (!string.IsNullOrEmpty(tuning)) Debug.Log(tuning);
+
             KvXrInputSource.TickDiagnostics();
+
+            // СТРОКИ ОБ OPENXR И ВВОДЕ (сессия §36): выдано ли расширение контроллеров,
+            // не нарушено ли правило привязок по рукам, сколько устройств видит XR-подсистема.
+            // Без этих строк «контроллеров нет» остаётся догадкой — ровно как было в §35.
+            KvXrOpenXrDiagnostics.Tick();
         }
 
         /// <summary>

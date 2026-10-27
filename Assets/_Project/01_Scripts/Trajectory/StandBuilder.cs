@@ -117,6 +117,71 @@ namespace TrajectoryCore
         /// </summary>
         private static GameObject BuildTable(string name, Vector3 position, float topHeight)
         {
+            return BuildTable(name, position, topHeight, TableWidth, TableDepth);
+        }
+
+        /// <summary>
+        /// МАТЕРИАЛ СТОЛА: у созданного объекта он ОБЯЗАН быть таким же, как у столов сцены
+        /// (дефект Д18, найдено в шлеме 25.10.2026: «стол розовый, робот зелёный, так не должно быть»).
+        ///
+        /// ПОЧЕМУ РОЗОВЫЙ. `GameObject.CreatePrimitive` даёт материал по умолчанию, а в URP/HDRP его
+        /// шейдер не совпадает с активным конвейером — Unity рисует такой материал ЯРКО-РОЗОВЫМ
+        /// («missing shader»). Столы сцены этим не болеют: у них назначен `Material_1_URP.mat`.
+        ///
+        /// ОТКУДА БЕРЁМ. Сначала — с реального стола сцены (значит, гарантированно правильный конвейер
+        /// и вид). Если столов в сцене нет — создаём литературный материал тем же путём, что у пола
+        /// XR-сцены (`KvRenderPipelineShaders.CreateLit`).
+        /// </summary>
+        private static Material TableMaterial()
+        {
+            if (cachedTableMaterial != null) return cachedTableMaterial;
+
+            // 1) материал со сценного стола («Стенд_1_Стол» / «Стенд_2_Стол» и их столешницы)
+            GameObject stand = FindByName(Stand1Name);
+            if (stand == null) stand = FindByName(Stand2Name);
+            if (stand != null)
+            {
+                MeshRenderer[] renderers = stand.GetComponentsInChildren<MeshRenderer>(true);
+                for (int i = 0; i < renderers.Length; i++)
+                {
+                    if (renderers[i] == null || renderers[i].sharedMaterial == null) continue;
+                    cachedTableMaterial = renderers[i].sharedMaterial;
+                    return cachedTableMaterial;
+                }
+            }
+
+            // 2) запасной путь: материал того же вида, что у пола XR-сцены
+            cachedTableMaterial = KazistovVvFeatures.KvRenderPipelineShaders.CreateLit(
+                "Материал_стола_XR", new Color(0.42f, 0.44f, 0.47f));
+            return cachedTableMaterial;
+        }
+
+        private static Material cachedTableMaterial;
+
+        /// <summary>Назначить материал ВСЕМ частям стола (столешница и ножки).</summary>
+        private static void ApplyTableMaterial(GameObject root)
+        {
+            if (root == null) return;
+
+            Material material = TableMaterial();
+            if (material == null) return;
+
+            MeshRenderer[] renderers = root.GetComponentsInChildren<MeshRenderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                if (renderers[i] == null) continue;
+                renderers[i].sharedMaterial = material;
+            }
+        }
+
+        /// <summary>
+        /// СТОЛ ЗАДАННОГО РАЗМЕРА (§42). Добавлено для шлема: там из меню создаются ДВА вида столов —
+        /// квадратный 0,72 × 0,48 м («как в ПК, только меньше») и круглый «авто» (см. `BuildRoundTable`).
+        /// Тот же построитель, что у стендов ПК: второй геометрии стола в проекте не появляется.
+        /// </summary>
+        public static GameObject BuildTable(string name, Vector3 position, float topHeight,
+                                            float width, float depth)
+        {
             GameObject root = new GameObject(name);
             root.transform.position = position;
             root.transform.rotation = Quaternion.identity;
@@ -124,29 +189,78 @@ namespace TrajectoryCore
 
             float topThickness = TopThickness;
             float topY = Mathf.Max(0.2f, topHeight) - topThickness * 0.5f;
+            float safeWidth = Mathf.Max(0.1f, width);
+            float safeDepth = Mathf.Max(0.1f, depth);
 
             GameObject top = GameObject.CreatePrimitive(PrimitiveType.Cube);
             top.name = "Столешница";
             top.transform.SetParent(root.transform, false);
-            top.transform.localScale = new Vector3(TableWidth, topThickness, TableDepth);
+            top.transform.localScale = new Vector3(safeWidth, topThickness, safeDepth);
             top.transform.localPosition = new Vector3(0f, topY, 0f);
 
             float legHeight = Mathf.Max(0.1f, topHeight - topThickness);
-            // Ножки — по углам новой столешницы (отступ от края фиксированный).
-            float legX = TableWidth * 0.5f - LegInset;
-            float legZ = TableDepth * 0.5f - LegInset;
+            float legX = Mathf.Max(0.02f, safeWidth * 0.5f - LegInset);
+            float legZ = Mathf.Max(0.02f, safeDepth * 0.5f - LegInset);
+            BuildLegs(root.transform, legHeight, legX, legZ);
+
+            ApplyTableMaterial(root);        // §42/Д18: материал как у столов сцены (не розовый)
+            root.AddComponent<KazistovVvUI.RegisteredObject>().DisplayName = name;
+            return root;
+        }
+
+        /// <summary>
+        /// КРУГЛЫЙ СТОЛ «АВТО» (§42): радиус считается от вылета руки робота.
+        /// Столешница — цилиндр, ножки — по четырём направлениям, чтобы стол не «парил».
+        /// </summary>
+        public static GameObject BuildRoundTable(string name, Vector3 position, float topHeight, float radius)
+        {
+            GameObject root = new GameObject(name);
+            root.transform.position = position;
+            root.transform.rotation = Quaternion.identity;
+            root.transform.localScale = Vector3.one;
+
+            float topThickness = TopThickness;
+            float topY = Mathf.Max(0.2f, topHeight) - topThickness * 0.5f;
+            float safeRadius = Mathf.Max(0.15f, radius);
+
+            GameObject top = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            top.name = "Столешница";
+            top.transform.SetParent(root.transform, false);
+            // Цилиндр Unity имеет высоту 2 при масштабе 1: масштаб Y = толщина / 2.
+            top.transform.localScale = new Vector3(safeRadius * 2f, topThickness * 0.5f, safeRadius * 2f);
+            top.transform.localPosition = new Vector3(0f, topY, 0f);
+            RemoveCollider(top);
+
+            float legHeight = Mathf.Max(0.1f, topHeight - topThickness);
+            float legOffset = Mathf.Max(0.02f, safeRadius * 0.55f);
+            BuildLegs(root.transform, legHeight, legOffset, legOffset);
+
+            ApplyTableMaterial(root);        // §42/Д18: материал как у столов сцены (не розовый)
+            root.AddComponent<KazistovVvUI.RegisteredObject>().DisplayName = name;
+            return root;
+        }
+
+        /// <summary>Четыре ножки по углам (или по четырём направлениям у круглого стола).</summary>
+        private static void BuildLegs(Transform parent, float legHeight, float legX, float legZ)
+        {
             for (int i = 0; i < 4; i++)
             {
                 GameObject leg = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 leg.name = "Ножка_" + (i + 1);
-                leg.transform.SetParent(root.transform, false);
+                leg.transform.SetParent(parent, false);
                 leg.transform.localScale = new Vector3(0.06f, legHeight, 0.06f);
                 leg.transform.localPosition = new Vector3(
                     (i % 2 == 0 ? -legX : legX), legHeight * 0.5f, (i < 2 ? -legZ : legZ));
             }
+        }
 
-            root.AddComponent<KazistovVvUI.RegisteredObject>().DisplayName = name;
-            return root;
+        /// <summary>Коллайдер столешницы круглого стола не нужен: луч и постановка робота идут по именам.</summary>
+        private static void RemoveCollider(GameObject go)
+        {
+            Collider collider = go.GetComponent<Collider>();
+            if (collider == null) return;
+            if (Application.isPlaying) Object.Destroy(collider);
+            else Object.DestroyImmediate(collider);
         }
 
         /// <summary>

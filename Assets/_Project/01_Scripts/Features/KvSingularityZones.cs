@@ -536,6 +536,11 @@ namespace KazistovVvFeatures
 
         private void Report()
         {
+            // §42, дефект Д19: НЕ ПЕЧАТАТЬ, ПОКА КАТАЛОГ СЛОВАРЕЙ НЕ ЗАГРУЖЕН. На Android словари
+            // читаются асинхронно, и одна и та же строка успевала напечататься трижды — по-русски,
+            // по-английски и по-немецки (журнал шлема 25.10.2026). Ждём готовности и печатаем один раз.
+            if (!KazistovVvUI.KvLoc.FilesLoaded) return;
+
             string text = Status;
             if (text == lastReported) return;      // без спама: пишем только изменения
             lastReported = text;

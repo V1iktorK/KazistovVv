@@ -43,6 +43,19 @@ namespace KazistovVvXr
         /// <summary>Размер кнопки в пикселях канваса.</summary>
         public float buttonSize = 76f;
 
+        /// <summary>
+        /// ЗАПАСНОЕ ПОЛОЖЕНИЕ ПАНЕЛИ, КОГДА РУКИ НЕ ВИДНО (нет контроллеров). Панель встаёт
+        /// перед глазами: 1,15 м вперёд и на 0,25 м ниже уровня глаз — так её видно, не задирая
+        /// голову, и она не перекрывает вид на робота.
+        /// </summary>
+        public const float FallbackDistanceMeters = 1.15f;
+
+        /// <summary>Насколько ниже уровня глаз ставится панель в запасном положении, метры.</summary>
+        public const float FallbackDropMeters = 0.25f;
+
+        /// <summary>Сказано ли в журнал про запасное положение (чтобы не повторять каждую секунду).</summary>
+        private bool fallbackLogged;
+
         /// <summary>Размер канваса панели в пикселях (квадрат).</summary>
         public float canvasSize = 420f;
 
@@ -243,10 +256,40 @@ namespace KazistovVvXr
 
             if (!hasPose)
             {
-                // Руки не видно — панель не «зависает» в воздухе: она скрывается до появления позы.
-                if (canvas.gameObject.activeSelf) canvas.gameObject.SetActive(false);
+                // РУКИ НЕ ВИДНО. Прежнее поведение — спрятать панель («не зависает в воздухе») —
+                // оказалось плохим на живом устройстве 15.10.2026: контроллеры приложению не
+                // отдаются вовсе, и владелец не видел панель НИКОГДА, хотя в журнале она «построена,
+                // кнопок 7». Теперь панель встаёт ПЕРЕД ГЛАЗАМИ: пусть не у руки, зато её видно
+                // и по ней можно понять, что интерфейс жив.
+                if (headCamera == null)
+                {
+                    if (canvas.gameObject.activeSelf) canvas.gameObject.SetActive(false);
+                    return;
+                }
+
+                Vector3 gaze = headCamera.transform.forward;
+                gaze.y = 0f;
+                if (gaze.sqrMagnitude < 0.0001f) gaze = Vector3.forward;
+                gaze.Normalize();
+
+                Vector3 fallback = headCamera.transform.position
+                                   + gaze * FallbackDistanceMeters
+                                   - Vector3.up * FallbackDropMeters;
+
+                transform.position = fallback;
+                transform.rotation = Quaternion.LookRotation(gaze, Vector3.up);
+
+                if (!canvas.gameObject.activeSelf) canvas.gameObject.SetActive(true);
+                if (!fallbackLogged)
+                {
+                    fallbackLogged = true;
+                    Debug.Log("[KvXr] Панель у руки: позы руки НЕТ (контроллеры не отдаются) — " +
+                              "панель показана перед глазами на " + FallbackDistanceMeters + " м");
+                }
                 return;
             }
+
+            fallbackLogged = false;
 
             Vector3 toHead = headCamera != null
                 ? (headCamera.transform.position - position)

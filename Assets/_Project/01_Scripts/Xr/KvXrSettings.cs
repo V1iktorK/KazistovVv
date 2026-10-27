@@ -446,8 +446,7 @@ namespace KazistovVvXr
 
         /// <summary>Строка состояния XR: режим перемещения, панель, включённые слои MR.</summary>
         public static string Describe()
-        {
-            var sb = new System.Text.StringBuilder();
+        {            var sb = new System.Text.StringBuilder();
             sb.Append("XR: перемещение — ").Append(MoveModeLabel(GetMoveModeIndex()));
             if (GetMoveMode() == KvXrMoveMode.Teleport)
                 sb.Append(string.Format(" ({0:0.0} м)", GetTeleportDistance()));
@@ -459,6 +458,134 @@ namespace KazistovVvXr
             sb.Append(", достижимость ").Append(GetShowReach() ? "вкл" : "выкл");
             sb.Append(", стенды ").Append(GetShowVirtualStands() ? "вкл" : "выкл");
             return sb.ToString();
+        }
+
+        // ------------------------------------------------------------------ §37: рука луча, радиус панели, визуал
+
+        /// <summary>
+        /// РУКА, ИЗ КОТОРОЙ ИДЁТ ЛУЧ (задание владельца [S1.3]). До §37 луч был ЖЁСТКО правым:
+        /// `KvXrUiPointer` звал `TryRightAimPose` напрямую, и сменить руку было нечем. Теперь
+        /// сторона — настройка, и по умолчанию ПРАВАЯ, как владелец и просил («основная — правая»).
+        /// </summary>
+        public const string KeyRayHand = "KazistovVv.XR.Ray.Hand";
+
+        /// <summary>Радиус панели групп в метрах — настройка (§37, опрос владельца).</summary>
+        public const string KeyGroupPanelRadius = "KazistovVv.XR.Panel.Radius";
+
+        /// <summary>Чем показывать контроллеры в шлеме (0 — меш SDK, 1 — примитивы, 2 — значок, 3 — выкл).</summary>
+        public const string KeyControllerVisuals = "KazistovVv.XR.Visuals.Controllers";
+
+        /// <summary>Распознавание жестов кистями включено (0/1).</summary>
+        public const string KeyGestures = "KazistovVv.XR.Gestures";
+
+        /// <summary>Второй луч из второй руки (§39/§40): 0 — выключен, 1 — включён.</summary>
+        public const string KeySecondaryRay = "KazistovVv.XR.Ray.Secondary";
+
+        /// <summary>По умолчанию второй луч включён.</summary>
+        public const int DefaultSecondaryRay = 1;
+
+        /// <summary>Показывать ли второй луч (настройка; файл подстройки `ray.secondary` её перекрывает).</summary>
+        public static bool GetSecondaryRay()
+        {
+            return PlayerPrefs.GetInt(KeySecondaryRay, DefaultSecondaryRay) != 0;
+        }
+
+        public static void SetSecondaryRay(bool on)
+        {
+            PlayerPrefs.SetInt(KeySecondaryRay, on ? 1 : 0);
+        }
+
+        /// <summary>По умолчанию луч идёт из ПРАВОЙ руки ([S1.3]).</summary>
+        public const int DefaultRayHand = (int)KvXrQuickHand.Right;
+
+        /// <summary>По умолчанию модели контроллеров включены и берутся из SDK.</summary>
+        public const int DefaultControllerVisuals = (int)KvXrControllerVisualMode.Mesh;
+
+        /// <summary>По умолчанию жесты включены: это согласованный набор §37.</summary>
+        public const int DefaultGestures = 1;
+
+        /// <summary>Сколько вариантов руки — по этому числу строится переключатель настроек.</summary>
+        public const int RayHandCount = 2;
+
+        /// <summary>Индекс → рука луча. Значения вне диапазона приводятся к правой, а не падают.</summary>
+        public static KvXrQuickHand RayHandFromIndex(int index)
+        {
+            return index == (int)KvXrQuickHand.Left ? KvXrQuickHand.Left : KvXrQuickHand.Right;
+        }
+
+        /// <summary>Название руки луча по индексу — то, что видит владелец в настройках и журнале.</summary>
+        public static string RayHandLabel(int index)
+        {
+            return KvXrQuickPanelLayout.HandLabel(RayHandFromIndex(index));
+        }
+
+        /// <summary>Из какой руки идёт луч.</summary>
+        public static KvXrQuickHand GetRayHand()
+        {
+            return RayHandFromIndex(PlayerPrefs.GetInt(KeyRayHand, DefaultRayHand));
+        }
+
+        public static void SetRayHand(KvXrQuickHand hand)
+        {
+            PlayerPrefs.SetInt(KeyRayHand, (int)hand);
+        }
+
+        public static int GetRayHandIndex()
+        {
+            return (int)GetRayHand();
+        }
+
+        public static void SetRayHandIndex(int index)
+        {
+            SetRayHand(RayHandFromIndex(index));
+        }
+
+        /// <summary>Радиус панели групп, метры. Ограничен 0.080…0.420 — так же, как в файле подстройки.</summary>
+        public static float GetGroupPanelRadius()
+        {
+            return KvXrGroupPanelLayout.ClampPanelRadius(
+                PlayerPrefs.GetFloat(KeyGroupPanelRadius, KvXrGroupPanelLayout.DefaultPanelRadiusMeters));
+        }
+
+        public static void SetGroupPanelRadius(float meters)
+        {
+            PlayerPrefs.SetFloat(KeyGroupPanelRadius, KvXrGroupPanelLayout.ClampPanelRadius(meters));
+        }
+
+        /// <summary>Чем показывать контроллеры. Мусор в значении приводит к мешу, а не к «ничего не видно».</summary>
+        public static int GetControllerVisualMode()
+        {
+            return (int)KvXrControllerVisuals.ModeFromIndex(
+                PlayerPrefs.GetInt(KeyControllerVisuals, DefaultControllerVisuals));
+        }
+
+        public static void SetControllerVisualMode(int modeIndex)
+        {
+            PlayerPrefs.SetInt(KeyControllerVisuals, (int)KvXrControllerVisuals.ModeFromIndex(modeIndex));
+        }
+
+        /// <summary>Включены ли жесты (по умолчанию — да).</summary>
+        public static bool GetGesturesEnabled()
+        {
+            return PlayerPrefs.GetInt(KeyGestures, DefaultGestures) != 0;
+        }
+
+        public static void SetGesturesEnabled(bool on)
+        {
+            PlayerPrefs.SetInt(KeyGestures, on ? 1 : 0);
+        }
+
+        /// <summary>
+        /// СТРОКА О ЛУЧЕ И ПАНЕЛИ для журнала: какая рука у луча, какая у панели, какой радиус.
+        /// Владелец проверяет сторону ДВИЖЕНИЕМ руки в шлеме, а строкой — что код думает то же самое.
+        /// </summary>
+        public static string DescribePointer()
+        {
+            return string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                "луч из {0} руки · панель у {1} руки · радиус панели {2:0.000} м",
+                GetRayHand() == KvXrQuickHand.Right ? "ПРАВОЙ" : "ЛЕВОЙ",
+                GetQuickPanelHand() == KvXrQuickHand.Right ? "ПРАВОЙ" : "ЛЕВОЙ",
+                GetGroupPanelRadius());
         }
     }
 }

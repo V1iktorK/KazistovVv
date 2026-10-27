@@ -34,8 +34,33 @@ $logs = Join-Path $Project 'Logs'
 New-Item -ItemType Directory -Path $logs -Force | Out-Null
 $logPath = Join-Path $logs $LogName
 
-if (Get-Process Unity -ErrorAction SilentlyContinue) {
-    Write-Host "ДРУГОЙ ПРОЦЕСС Unity УЖЕ РАБОТАЕТ — второй инстанс не допускается. Останавливаюсь."
+# ЗАЩИТА ОТ ВТОРОГО РЕДАКТОРА. Два редактора Unity на одном проекте портят `Library`, поэтому
+# запускать сборку при работающем редакторе нельзя.
+#
+# ДЕФЕКТ, ИСПРАВЛЕННЫЙ 16.10.2026 (§35). Прежняя проверка была `Get-Process Unity` — то есть
+# «есть процесс с именем Unity». Под неё попадала СЛУЖБА ЛИЦЕНЗИЙ Unity Hub: она запускается
+# как `unity.exe serve` из папки Hub, весит 4 МБ и РАБОТАТЬ ОБЯЗАНА — именно она отдаёт
+# лицензию редактору. Итог: сборка отказывалась стартовать «из-за второго инстанса», которого
+# нет, а останавливать службу нельзя — без неё редактор не запустится вовсе (дефект A19-класса:
+# штатная команда из документации не работает).
+#
+# ТЕПЕРЬ РЕДАКТОРОМ СЧИТАЕТСЯ ТОЛЬКО ТО, ЧТО ИМ ЯВЛЯЕТСЯ: процесс, запущенный ИЗ ПАПКИ РЕДАКТОРА
+# (`...\Hub\Editor\<версия>\Editor\Unity.exe`). Служба лицензий живёт в `...\Unity Hub\resources\`
+# и под проверку больше не попадает.
+$editors = @()
+foreach ($p in (Get-CimInstance Win32_Process -Filter "Name = 'Unity.exe'" -ErrorAction SilentlyContinue)) {
+    $exe = $p.ExecutablePath
+    if (-not $exe) { continue }
+    $isHubService = $exe -match '\\Unity Hub\\' -or ($p.CommandLine -and $p.CommandLine -match '\bserve\b')
+    $isEditor = $exe -match '\\Hub\\Editor\\' -or $exe -match '\\Editor\\Unity\.exe$'
+    if ($isEditor -and -not $isHubService) {
+        $editors += ("PID {0} · {1}" -f $p.ProcessId, $exe)
+    }
+}
+if ($editors.Count -gt 0) {
+    Write-Host "ДРУГОЙ РЕДАКТОР Unity УЖЕ РАБОТАЕТ — второй инстанс не допускается. Останавливаюсь."
+    foreach ($e in $editors) { Write-Host ("  " + $e) }
+    Write-Host "  (служба лицензий Unity Hub работе не мешает и намеренно не считается редактором)"
     exit 1
 }
 

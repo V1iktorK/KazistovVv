@@ -8002,6 +8002,298 @@ _Этот раздел добавлен к справочнику, потому 
 | метод | `ConfigureXrLoaders` | `public static void ConfigureXrLoaders()` |  |
 
 
+## Дополнение 15.10.2026: профиль контроллеров PICO и нажатие взглядом (§33–§34)
+
+_Собрано тем же инструментом (`Tools\api-reference-add-xr.ps1`, черновик `Tools\_stage_a\API_S33_34.md`), что и дополнение §28–§31: только то, что написано в коде._
+
+**Новые типы §§33–§34 — два.** Остальные файлы XR-слоя в этой сессии ПРАВИЛИСЬ, а не создавались, и их описания из дополнения §28–§31 остаются в силе; изменения перечислены в конце раздела.
+
+### Пространство имён `KazistovVvXr`
+### `class KvGazeDwell`
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvGazeDwell.cs` (строка 21)
+- **Назначение:** НАЖАТИЕ ВЗГЛЯДОМ ПО ЗАДЕРЖКЕ (сессия §33, дефект с живого шлема 15.10.2026). ЗАЧЕМ. Владелец в шлеме: «не могу навестись на оверлей». Причина не в интерфейсе: указатель проекта брал луч у ПРАВОГО КОНТРОЛЛЕРА (`TryRightPose`), а контроллеры приложению не отдаются вовсе — значит луча не было и нажать было нечем. Пока контроллеры не заведены, единственный доступный «указатель» — ВЗГЛЯД: человек смотрит на кнопку, и через некоторое время она нажимается сама. Такой способ (dwell) — стандарт для VR-интерфейсов без контроллеров, и он не мешает: когда контроллер появится, работает обычный луч с курком. ПОЧЕМУ ВЫНЕСЕНО В ОТДЕЛЬНЫЙ ТИП. Решение «пора нажимать» — это ЧИСЛО, а не картинка: накопили врем…
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| константа | `DefaultSeconds` | `public const float DefaultSeconds = 1.3f;` |  |
+| константа | `MinSeconds` | `public const float MinSeconds = 0.2f;` |  |
+| метод | `Advance` | `public static float Advance(float progress, float deltaTime, float threshold)` |  |
+
+
+### `class KvPicoControllerProfile`
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvPicoControllerProfile.cs` (строка 75)
+- **Назначение:** ПРОФИЛЬ КОНТРОЛЛЕРОВ PICO 4 ULTRA ДЛЯ OPENXR (сессия §34, дефект с живого шлема 15.10.2026). ЗАЧЕМ СВОЙ ПРОФИЛЬ. Контроллеры в руках владельца работали: система шлема их видела и печатала позы (`PvrTrackingService: logDebugControllerPose,left confidence 2`). А приложение — нет: `[KvXr] XR-ввод: шлем есть · правый нет · левый нет`. ПОЧЕМУ. OpenXR создаёт устройство ввода только для ТОГО профиля взаимодействия, который рантайм назвал текущим для руки. Журнал шлема называет его прямо: `xrGetCurrentInteractionProfile ret = 0 Path /interaction_profiles/bytedance/pico4s_controller` В пакете Unity `com.unity.xr.openxr` профилей PICO НЕТ ВООБЩЕ: там Khronos Simple, Oculus Touch, Valve Index, Microso…
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| константа | `featureId` | `public const string featureId = "com.kazistovvv.openxr.feature.input.pico4s";` |  |
+| константа | `profile` | `public const string profile = "/interaction_profiles/bytedance/pico4s_controller";` |  |
+| константа | `extensionString` | `public const string extensionString = "XR_BD_controller_interaction";` |  |
+| константа | `trigger` | `public const string trigger = "/input/trigger/value";` |  |
+| константа | `triggerClick` | `public const string triggerClick = "/input/trigger/click";` |  |
+| константа | `triggerTouch` | `public const string triggerTouch = "/input/trigger/touch";` |  |
+| константа | `squeeze` | `public const string squeeze = "/input/squeeze/value";` |  |
+| константа | `squeezeClick` | `public const string squeezeClick = "/input/squeeze/click";` |  |
+| константа | `thumbstick` | `public const string thumbstick = "/input/thumbstick";` |  |
+| константа | `thumbstickClick` | `public const string thumbstickClick = "/input/thumbstick/click";` |  |
+| константа | `thumbstickTouch` | `public const string thumbstickTouch = "/input/thumbstick/touch";` |  |
+| константа | `buttonA` | `public const string buttonA = "/input/a/click";` |  |
+| константа | `buttonATouch` | `public const string buttonATouch = "/input/a/touch";` |  |
+| константа | `buttonB` | `public const string buttonB = "/input/b/click";` |  |
+| константа | `buttonBTouch` | `public const string buttonBTouch = "/input/b/touch";` |  |
+| константа | `buttonX` | `public const string buttonX = "/input/x/click";` |  |
+| константа | `buttonXTouch` | `public const string buttonXTouch = "/input/x/touch";` |  |
+| константа | `buttonY` | `public const string buttonY = "/input/y/click";` |  |
+| константа | `buttonYTouch` | `public const string buttonYTouch = "/input/y/touch";` |  |
+| константа | `menu` | `public const string menu = "/input/menu/click";` |  |
+| константа | `system` | `public const string system = "/input/system/click";` |  |
+| константа | `grip` | `public const string grip = "/input/grip/pose";` |  |
+| константа | `aim` | `public const string aim = "/input/aim/pose";` |  |
+| константа | `haptic` | `public const string haptic = "/output/haptic";` |  |
+| тип | `KvPicoController` | `public class KvPicoController : XRControllerWithRumble` |  |
+| свойство | `thumbstick` | `public ThumbstickControl thumbstick { get; private set; }` |  |
+| свойство | `grip` | `public AxisControl grip { get; private set; }` |  |
+| свойство | `gripPressed` | `public ButtonControl gripPressed { get; private set; }` |  |
+| свойство | `menu` | `public ButtonControl menu { get; private set; }` |  |
+| свойство | `primaryButton` | `public ButtonControl primaryButton { get; private set; }` |  |
+| свойство | `primaryTouched` | `public ButtonControl primaryTouched { get; private set; }` |  |
+| свойство | `secondaryButton` | `public ButtonControl secondaryButton { get; private set; }` |  |
+| свойство | `secondaryTouched` | `public ButtonControl secondaryTouched { get; private set; }` |  |
+| свойство | `trigger` | `public AxisControl trigger { get; private set; }` |  |
+| свойство | `triggerPressed` | `public ButtonControl triggerPressed { get; private set; }` |  |
+| свойство | `triggerTouched` | `public ButtonControl triggerTouched { get; private set; }` |  |
+| свойство | `thumbstickClicked` | `public ButtonControl thumbstickClicked { get; private set; }` |  |
+| свойство | `thumbstickTouched` | `public ButtonControl thumbstickTouched { get; private set; }` |  |
+| свойство | `devicePose` | `public PoseControl devicePose { get; private set; }` |  |
+| свойство | `pointer` | `public PoseControl pointer { get; private set; }` |  |
+| свойство | `haptic` | `public HapticControl haptic { get; private set; }` |  |
+
+
+### Что изменилось в уже описанных типах (§33–§34)
+
+| Тип | Что изменилось | Зачем |
+|---|---|---|
+| `KvXrSceneContent` | поля `bringStandsNearPlayer`, `standDistance`, `standSpacing`, `createFloor`, `floorSize`; методы `PlaceStandsAroundPlayer`, `EnsureFloor`; константа `FloorName` | стенды переносятся к оператору (3,2 м), под ногами создаётся пол 40×40 м — иначе в шлеме «только горизонт» |
+| `KvXrQuickPanel` | поле `fallbackLogged`; поведение при отсутствии позы руки — панель встаёт перед глазами (1,15 м, на 0,25 м ниже уровня глаз) | без контроллеров панель раньше пряталась, и её не видели вообще |
+| `KvXrUiPointer` | поля `useGazeWhenNoController`, `gazeDwellSeconds`, `gazeOriginForward`, `gazeOriginDown`; метод `HandleGazeClick`; `Aiming` учитывает режим взгляда | наведение и нажатие взглядом, когда контроллеров нет |
+| `KvXrInputSource` | новых публичных членов нет; события «контроллеры появились/пропали» больше не ограничены по времени | короткое окно диагностики скрывало появление контроллеров |
+| `KvXrDeviceTools` | константа `PicoControllerProfile`; `ApplyControllerProfile` включает оба профиля и подтверждает по факту; обновление списка фич OpenXR | фича, не включённая для Android, в APK не попадает |
+
+---
+
+## Дополнение 18.10.2026: панель групп у руки, ангар, камера за головой, контроллеры (§35–§36)
+
+_Раздел собран так же, как дополнения §28–§31 и §33–§34: описания типов и таблицы членов взяты
+из исходников дословно (XML-комментарии `/// <summary>`), черновик — `Tools\_stage_a\API_S36_draft.md`.
+Таблицы «что изменилось» и два типа, которые генератор не взял (в их файлах первым объявлен
+другой тип), написаны вручную по сделанным правкам._
+
+**Появилось в §35:** панель с ОБОБЩАЮЩИМИ ИКОНКАМИ ГРУПП вместо плоской панели с подписями;
+ангар вокруг оператора; камера, которая следует за головой (карточка Б23); сторож десктопного
+оверлея; перевод материалов ангара на URP для шлема.
+**Появилось в §36:** строки диагностики OpenXR и ввода в журнал; ГЕОМЕТРИЧЕСКОЕ наведение луча
+на панель (луч × плоскость панели, метры) вместо экранных пикселей uGUI.
+
+### Пространство имён `KazistovVvXr`
+
+
+### `class KvHangarPlacement`
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvHangarPlacement.cs` (строка 34)
+- **Назначение:** ГДЕ СТАВИТЬ АНГАР В XR-СЦЕНЕ (сессия §35, карточка Б17). ЗАЧЕМ ОТДЕЛЬНЫЙ ТИП. «Поставить ангар рядом со стендами» — это ЧИСЛО, а не картинка, и ошибиться в нём легко на десятки метров: ангар проекта — зал 37,8 × 50,3 м при потолке 9,4 м, и промах означает либо «ангар в стороне от оператора», либо «оператор внутри стены». Здесь лежит только арифметика размещения; объекты сцены создаёт редакторный инструмент `KvXrHangarTools`, а правило проверяется тестом без шлема и без сцены. ОТКУДА ЧИСЛА. Измерено, а не подобрано: редакторный метод `KvXrHangarTools.MeasureDesktopEnvironment` (журнал `Logs\s35-hangar-measure3.log`, 16.10.2026) вернул габарит ангара (40,18 × 9,38 × 50,31), его центр (10,91; 4…
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| поле (только чтение) | `DesktopHangarSize` | `public static readonly Vector3 DesktopHangarSize = new Vector3(40.18f, 9.38f, 50.31f);` |  |
+| поле (только чтение) | `DesktopHangarCenter` | `public static readonly Vector3 DesktopHangarCenter = new Vector3(10.91f, 4.69f, -15.00f);` |  |
+| поле (только чтение) | `DesktopStandsCenter` | `public static readonly Vector3 DesktopStandsCenter = new Vector3(0.00f, 1.30f, -26.00f);` |  |
+| поле (только чтение) | `HangarLocalCenter` | `public static readonly Vector3 HangarLocalCenter = DesktopHangarCenter;` |  |
+| константа | `RootScale` | `public const float RootScale = 1f;` |  |
+| константа | `MinCeilingMeters` | `public const float MinCeilingMeters = 2.2f;` |  |
+
+### `class KvHdrpToUrpMaterial`
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvHdrpToUrpMaterial.cs` (строка 29)
+- **Назначение:** ПЕРЕВОД МАТЕРИАЛОВ АНГАРА С HDRP НА URP (сессия §35, карточка Б17). ЗАЧЕМ. Материалы ангара в проекте — `HDRP/Lit` (проверено: шейдер `…render-pipelines.high-definition…/Runtime/Material/Lit/Lit.shader`). На компьютере это правильно: уровень качества `Standalone = 1` — это HDRP. Но для шлема собирается уровень качества `Mobile` (в `QualitySettings.asset` записано `Android: 0`), а он на `Assets\Settings\Mobile_RPAsset.asset` — это **URP**. HDRP-материал под URP даёт РОЗОВУЮ поверхность, а приёмка владельца требует «ни одной розовой поверхности». ПОЧЕМУ НЕЛЬЗЯ ПРОСТО ПОПРАВИТЬ МАТЕРИАЛЫ АНГАРА. Общие `.mat` в `Assets\ROOMS\HQ Hangar Free\Materials\` используются десктопной сценой, которая рабо…
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| константа | `HdrpBaseColorMap` | `public const string HdrpBaseColorMap = "_BaseColorMap";` |  |
+| константа | `UrpBaseMap` | `public const string UrpBaseMap = "_BaseMap";` |  |
+| константа | `BaseColor` | `public const string BaseColor = "_BaseColor";` |  |
+| константа | `HdrpNormalMap` | `public const string HdrpNormalMap = "_NormalMap";` |  |
+| константа | `UrpBumpMap` | `public const string UrpBumpMap = "_BumpMap";` |  |
+| константа | `HdrpMaskMap` | `public const string HdrpMaskMap = "_MaskMap";` |  |
+| константа | `UrpMetallicGlossMap` | `public const string UrpMetallicGlossMap = "_MetallicGlossMap";` |  |
+| константа | `UrpOcclusionMap` | `public const string UrpOcclusionMap = "_OcclusionMap";` |  |
+| константа | `Metallic` | `public const string Metallic = "_Metallic";` |  |
+| константа | `Smoothness` | `public const string Smoothness = "_Smoothness";` |  |
+| константа | `UrpLitShader` | `public const string UrpLitShader = "Universal Render Pipeline/Lit";` |  |
+| константа | `HdrpMetallicChannel` | `public const int HdrpMetallicChannel = 0;      // R` |  |
+| константа | `HdrpOcclusionChannel` | `public const int HdrpOcclusionChannel = 1;     // G` |  |
+| константа | `HdrpDetailChannel` | `public const int HdrpDetailChannel = 2;        // B` |  |
+| константа | `HdrpSmoothnessChannel` | `public const int HdrpSmoothnessChannel = 3;    // A` |  |
+| метод | `ToUrpMetallicGloss` | `public static Color ToUrpMetallicGloss(Color hdrpMask)` |  |
+
+### `class KvXrDesktopOverlayGuard`
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvXrDesktopOverlayGuard.cs` (строка 34)
+- **Назначение:** ДЕСКТОПНОГО ИНТЕРФЕЙСА В ШЛЕМЕ БЫТЬ НЕ ДОЛЖНО (сессия §35, карточка Б20). ЗАДАНИЕ ВЛАДЕЛЬЦА. «Десктопный оверлей инструментов и окон (то, что похоже на интерфейс для ПК) в шлеме должен быть скрыт — его там быть не должно». ЧТО ИМЕННО МЕШАЛО. В `XrMain` живёт проектный канвас (`KazistovVv_UI` / `KazistovVvCanvas`) с деревом, окнами и тулбаром, а компонент `KvXrPanelAnchor` переводил его в мировое пространство и вешал перед оператором. Это и есть «интерфейс для ПК» в шлеме. ГЛАВНАЯ ЛОВУШКА, РАДИ КОТОРОЙ ЭТОТ КОМПОНЕНТ УСТРОЕН ИМЕННО ТАК. Кажется очевидным: «десктопный интерфейс не нужен — выключить `KazistovVv_UI`». Это сломало бы панель шлема: РЕЕСТР КОМАНД (`KvCommands`) наполняет менеджер и…
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| поле | `checkIntervalSeconds` | `public float checkIntervalSeconds = 1f;` |  |
+| поле | `neutralizePanelAnchor` | `public bool neutralizePanelAnchor = true;` |  |
+| поле | `logOnGuard` | `public bool logOnGuard = true;` |  |
+
+### `class KvXrGroupPanel`
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvXrGroupPanel.cs` (строка 39)
+- **Назначение:** ПАНЕЛЬ С ОБОБЩАЮЩИМИ ИКОНКАМИ ГРУПП У РУКИ (сессия §35, карточка Б19). РЕШЕНИЕ ВЛАДЕЛЬЦА (16.10.2026), дословно: • «Панель инструментов должна быть у руки (у контроллера), а не висеть в середине экрана»; • «Основные кнопки — ОБОБЩАЮЩИЕ ИКОНКИ групп (не текст)»; • «Текст появляется только после наведения и удержания фокуса 0,5 секунды»; • «После нажатия на кнопку группы — полумесяцем раскрываются ВСЕ иконки этой группы, без названий, одними иконками». ЧТО ЗАМЕНЕНО. Прежняя панель (`KvXrQuickPanel`) показывала 8 ПЛОСКИХ кнопок с постоянными ПОДПИСЯМИ, а когда позы руки не было — вставала ПЕРЕД ГЛАЗАМИ на 1,15 м. Владелец запретил и то, и другое: подписи превращали панель в текст, а показ перед…
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| поле | `headCamera` | `public Camera headCamera;` |  |
+| поле | `sortingOrder` | `public int sortingOrder = 55;` |  |
+| поле | `forwardOffset` | `public float forwardOffset = 0.14f;` |  |
+| поле | `upOffset` | `public float upOffset = 0.06f;` |  |
+| поле | `beltHeightMeters` | `public float beltHeightMeters = 1.05f;` |  |
+| поле | `canvasSize` | `public float canvasSize = 420f;` |  |
+| поле | `metersPerCanvasUnit` | `public float metersPerCanvasUnit = 0.0025f;` |  |
+| поле | `handForwardMeters` | `public float handForwardMeters = 0.30f;` |  |
+| поле | `handUpMeters` | `public float handUpMeters = 0.04f;` |  |
+| поле | `handMinDistanceFromEyes` | `public float handMinDistanceFromEyes = 0.35f;` |  |
+| поле | `handMaxDistanceFromEyes` | `public float handMaxDistanceFromEyes = 1.20f;` |  |
+| поле | `logOnBuild` | `public bool logOnBuild = true;` |  |
+| свойство | `BuiltOnce` | `public bool BuiltOnce { get { return builtOnce; } }` |  |
+| свойство | `IconCount` | `public int IconCount { get { return icons.Count; } }` |  |
+| свойство | `Level` | `public KvXrPanelLevel Level { get { return level; } }` |  |
+| свойство | `OpenGroupIndex` | `public int OpenGroupIndex { get { return openGroupIndex; } }` |  |
+| свойство | `Status` | `public string Status { get; private set; }` |  |
+| свойство | `PlacedAtHand` | `public bool PlacedAtHand { get; private set; }` |  |
+
+### `class KvXrHangarAnchor`
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvXrHangarAnchor.cs` (строка 27)
+- **Назначение:** СТАВИТ АНГАР ТАМ, ГДЕ ОКАЗАЛИСЬ СТЕНДЫ (сессия §35, карточка Б17). ЗАЧЕМ ЭТОТ КОМПОНЕНТ, ЕСЛИ АНГАР УЖЕ ЛЕЖИТ В СЦЕНЕ. Геометрия ангара впекается в `XrMain` редакторным инструментом — так её видно и в сборке, и в файле уровня. Но ПОЛОЖЕНИЕ ангара нельзя впечь окончательно: `KvXrSceneContent` переносит стенды вокруг оператора ВО ВРЕМЯ РАБОТЫ, отталкиваясь от того, где оператор стоит. Если оператор окажется не в начале координат, стенды уедут — и впечённый ангар разошёлся бы с ними: столы вылезли бы из стены или оказались бы снаружи зала. ЧТО ДЕЛАЕТ. После того как стенды встали, находит их общий габарит и переносит корень ангара по тому же правилу, что и на компьютере (см. <see cref="KvHangar…
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| поле | `hangarRoot` | `public Transform hangarRoot;` |  |
+| поле | `forceFloorAtZero` | `public bool forceFloorAtZero = true;` |  |
+| поле | `logOnPlace` | `public bool logOnPlace = true;` |  |
+| свойство | `StandsCenter` | `public Vector3 StandsCenter { get; private set; }` |  |
+| свойство | `AppliedRootPosition` | `public Vector3 AppliedRootPosition { get; private set; }` |  |
+| свойство | `Applied` | `public bool Applied { get; private set; }` |  |
+
+### `class KvXrHeadTracking`
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvXrHeadTracking.cs` (строка 35)
+- **Назначение:** КАМЕРА ШЛЕМА СЛЕДУЕТ ЗА ГОЛОВОЙ ОПЕРАТОРА (сессия §35, найдено 18.10.2026 на живом шлеме). СИМПТОМЫ ВЛАДЕЛЬЦА, которые это лечит: • «камера где-то в непонятном месте»; • «я нахожусь в 0 по высоте где-то за ангаром»; • «камера плохо поворачивается и всегда крутится». ПРИЧИНА (доказана строкой журнала, а не рассуждением). В журнале шлема: [KvHangar] камеры: «XrCamera» (0.00, 0.00, 0.00) вкл (main) · поза шлема (-0.73, 1.54, -0.22) То есть объект-камера стоял в НАЧАЛЕ КООРДИНАТ НА УРОВНЕ ПОЛА, а настоящая голова была на высоте 1,54 м — и в другом месте. Проба ориентации восемь раз подряд показала «курс шлема 0.0°», хотя оператор в это время крутил головой. ПОЧЕМУ ТАК ВЫШЛО. В XR-сцене НЕТ ни `T…
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| поле | `headCamera` | `public Camera headCamera;` |  |
+| поле | `logOnFirstApply` | `public bool logOnFirstApply = true;` |  |
+| свойство | `AppliedFrames` | `public int AppliedFrames { get; private set; }` |  |
+| свойство | `LastHeadPosition` | `public Vector3 LastHeadPosition { get; private set; }` |  |
+| свойство | `Tracking` | `public bool Tracking { get; private set; }` |  |
+
+### `class KvXrIconHover`
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvXrIconHover.cs` (строка 24)
+- **Назначение:** НАВЕДЕНИЕ НА ИКОНКУ ПАНЕЛИ (сессия §35, карточка Б19). ЗАЧЕМ. Владелец требует: «Текст появляется только после наведения и удержания фокуса 0,5 секунды». Чтобы отсчитать эти полсекунды, панель должна знать, когда луч навёл её иконку, а когда ушёл с неё. ПОЧЕМУ ИМЕННО ТАК, А НЕ «СВОИМ ЛУЧОМ». Указатель проекта (`KvXrUiPointer`) уже подсвечивает цель через `ExecuteEvents.ExecuteHierarchy(..., pointerEnterHandler)` и `pointerExitHandler`. Значит иконке достаточно реализовать эти два обработчика — и наведение придёт ТЕМ ЖЕ путём, что и нажатие. Второго способа ввода не появляется, и разойтись им негде: если указатель перенастроят, наведение и нажатие сместятся вместе. ЭТО КАСАЕТСЯ ТОЛЬКО УРОВНЯ …
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| свойство | `Title` | `public string Title { get; private set; }` |  |
+| свойство | `Hovered` | `public bool Hovered { get; private set; }` |  |
+| метод | `Bind` | `public void Bind(KvXrGroupPanel owner, string title)` |  |
+
+### `class KvXrOpenXrDiagnostics`
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvXrOpenXrDiagnostics.cs` (строка 29)
+- **Назначение:** СТРОКИ ОБ OPENXR И ВВОДЕ ДЛЯ ЖУРНАЛА ШЛЕМА (сессия §36). ЗАЧЕМ. Требование владельца [F5]: «сделано» без строки в журнале не принимается. По дефекту контроллеров (карточка Б18/Б24) в журнале раньше было видно только «правый нет · левый нет · устройств 0», то есть итог, а не причину. Здесь печатается то, что раньше приходилось выяснять перебором логов рантайма: • выдал ли рантайм расширение `XR_BD_controller_interaction` (без него профиль ByteDance не действует вовсе); • сколько расширений рантайм объявил всего и сколько включено; • не нарушает ли наша карта привязок правило «путь кнопки руки → своя рука» — именно это нарушение заставляло OpenXR отвечать `XR_ERROR_PATH_UNSUPPORTED` и отбрасыв…
+
+### `enum KvXrOverlayDisposition`
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvXrOverlayPolicy.cs` (строка 6)
+- **Назначение:** —
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| значение | `HideRendering` | `HideRendering = 0` |  |
+| значение | `Remove` | `Remove = 1` |  |
+| значение | `Keep` | `Keep = 2` |  |
+
+### `enum KvXrPanelLevel`
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvXrGroupPanelLayout.cs` (строка 6)
+- **Назначение:** —
+
+| Тип | Имя | Объявление | Описание |
+|---|---|---|---|
+| значение | `Groups` | `Groups = 0` |  |
+| значение | `GroupFan` | `GroupFan = 1` |  |
+
+### `class KvXrGroupPanelLayout` (генератор не взял: в файле первым объявлен `enum KvXrPanelLevel`)
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvXrGroupPanelLayout.cs`
+- **Назначение:** ГЕОМЕТРИЯ ПАНЕЛИ С ОБОБЩАЮЩИМИ ИКОНКАМИ ГРУПП (§35) и ПОПАДАНИЕ ЛУЧОМ ПО
+  ИКОНКЕ (§36). Чистая арифметика без `GameObject`, кадра и состояния: углы, радиусы, порог
+  подписи, проверка попадания луча в плоскость панели. Всё это проверяется тестами без шлема —
+  и только поэтому подпись 0,5 с и веер 210° можно считать сделанными, а не «на глаз».
+
+| Тип | Имя | Смысл |
+|---|---|---|
+| константа | `MaxFanIcons` = 14 | предел веера — размер самой большой группы проекта («Визуализация»); у прежней панели он 12 и закреплён её тестами |
+| константа | `MinFanIcons` = 1 | меньше одной иконки — это не веер |
+| константа | `GroupCount` = 8 | сколько групп показывает уровень 0 |
+| константа | `IconSizeMeters` = 0,042 | размер иконки: читается с 40 см и уверенно ловится лучом |
+| константа | `MinGapMeters` = 0,012 | просвет между соседними иконками |
+| константа | `MinRadiusMeters` = 0,14 · `MaxRadiusMeters` = 0,42 | границы радиуса полумесяца |
+| константа | `GroupSpanDegrees` = 160 · `FanSpanDegrees` = 210 | дуга уровня групп и дуга веера |
+| константа | `UpDegrees` = 90 | середина дуги всегда сверху |
+| константа | `LabelDwellSeconds` = 0,5 | **порог подписи — решение владельца** |
+| константа | `HitRadiusMeters` = 0,85 × размера иконки | радиус попадания луча |
+| константа | `BeltDropMeters` · `BeltForwardMeters` · `BeltMinAngleFromGazeDegrees` | запасное положение у пояса и его угол от взгляда |
+| метод | `ClampFanCount` · `IsValidFanCount` | приведение и проверка числа иконок веера |
+| метод | `RadiusForCount` · `AngleDegrees` · `OffsetMeters` (две перегрузки) | раскладка полумесяца |
+| метод | `GroupOffsets` · `FanOffsets` | смещения иконок уровня 0 и веера, метры |
+| метод | `ClosestIndex` | номер ближайшей иконки или −1 (возврат −1 — не «нулевая иконка», иначе нажатие «в пустоту» срабатывало бы) |
+| метод | `TryRayToPanelPlane` **(§36)** | пересечение луча с плоскостью панели: точка в осях панели и дальность вдоль луча, МЕТРЫ |
+| метод | `TryHitIcon` **(§36)** | попадание в иконку по геометрии: номер, расстояние от центра, дальность вдоль луча |
+| метод | `ShowsLabel` · `AdvanceLabelDwell` | правило показа подписи (только уровень групп, только после 0,5 с) |
+| метод | `BeltPosition` · `BeltAngleFromGazeDegrees` · `AngleFromGazeDegrees` · `Flatten` | запасное положение у пояса и угол от направления взгляда |
+| метод | `Describe` | строка журнала панели (числа с инвариантной культурой) |
+
+### `class KvXrOverlayPolicy` (тоже не попал в генератор: в файле первым объявлен `enum KvXrOverlayDisposition`)
+
+- **Файл:** `Assets\_Project\01_Scripts\Xr\KvXrOverlayPolicy.cs`
+- **Назначение:** ПРАВИЛО «что в шлеме видно, а что нет» — чистые данные и решения, которые сторож
+  (`KvXrDesktopOverlayGuard`) только применяет. Отдельный тип ради тестов: «десктопный интерфейс в
+  шлеме погашен» — это утверждение, и оно проверяется списком, а не глазами.
+  Ключевой запрет, записанный в коде: **гасить рисование ≠ гасить кликабельность** — невидимый
+  интерфейс продолжал ловить луч и нажиматься (найдено 16.10.2026), поэтому отключаются и
+  `Canvas.enabled`, и `GraphicRaycaster`.
+
+### Что изменилось в уже описанных типах (§35–§36)
+
+| Тип | Что изменилось | Зачем |
+|---|---|---|
+| `KvPicoControllerProfile` | у каждой кнопки руки свой `userPaths` (`x/y/menu → leftHand`, `a/b → rightHand`); карта действий вынесена в `BuildActionMap()`; правило `HandBindingViolation`, `ComponentOf`, аудит `AuditHandBindings` | **главный дефект Б18**: без `userPaths` Unity подставляет путь ОБЕИМ рукам (`OpenXRInput.cs:296`), рантайм отвечает `XR_ERROR_PATH_UNSUPPORTED` и отбрасывает весь набор привязок — контроллеры не появляются при исправном железе |
+| `KvXrInputSource` | `TryRightAimPose`, `TryLeftAimPose`, `TryAimPose`, `HasRightAim`, `HasLeftAim` | поза УКАЗАНИЯ (`aim`) — вдоль неё идёт луч; поза кисти (`grip`) остаётся для панели |
+| `KvXrUiPointer` | поля `groupPanel`, `useEventSystemFallback`, `MaxGazeDownMeters`; методы `AimAlongPanel`, `HandleTriggerPress`, `HandleGazePress`, `ResetHoverAfterPress` | наведение на панель ГЕОМЕТРИЕЙ; смещение «луча взгляда» вниз ограничено 3 см (10 см смещали линию взгляда на 14°, и луч проходил ниже иконки) |
+| `KvXrGroupPanel` | поля `handForwardMeters`, `handUpMeters`, `handMinDistanceFromEyes`, `handMaxDistanceFromEyes`, `poseRejectedLogged`; методы `TryAim`, `SetHoverIndex`, `TitleAt`, `PressIndex`, `IconsOnLevel`; списки `hovers`, `iconActions`, `iconTitles`, `currentOffsets` | панель ставится У КОНТРОЛЛЕРА (вперёд по указанию, разворот НА оператора), нажатие и подпись идут через геометрию, каждая строка журнала — доказательство |
+| `KvXrRig` | вызов `KvXrOpenXrDiagnostics.Tick()` | строки о рантайме, расширении контроллеров и XR-устройствах |
+| `KvHangarPlacement` | в описании прямо сказано, что `ApprovedOperatorLocalPosition` (0, 0, −29,20) **больше не используется**: зал ставится сдвигом всей лаборатории | старая пометка в журнале вводила в заблуждение |
+| `KvXrHangarTools`, `KvXrHangarBuilder`, `KvXrInterfaceSetupTools`, `KvXrLightingTools` (Editor) | методы постановки зала, замера окружающей среды, постановки панели групп и сторожа, света шлема | правки сцены только редакторными инструментами ([S3.4]) |
+
+
+---
+
 ## Источники
 
 Все файлы `*.cs` из `Assets\` (кроме `Assets\_Recovery\`), сгруппированные по пространствам имён:
@@ -8084,6 +8376,7 @@ _Этот раздел добавлен к справочнику, потому 
 - `Assets\_Project\01_Scripts\Features\KvCinematics.cs`
 - `Assets\_Project\01_Scripts\Features\KvCollisionOptimizer.cs`
 - `Assets\_Project\01_Scripts\Features\KvComparison.cs`
+
 - `Assets\_Project\01_Scripts\Features\KvConstrainedPlanner.cs`
 - `Assets\_Project\01_Scripts\Features\KvDynamicObstacles.cs`
 - `Assets\_Project\01_Scripts\Features\KvEnergyOptimal.cs`
@@ -8205,5 +8498,580 @@ _Этот раздел добавлен к справочнику, потому 
 - `Assets\_Project\08_Tests\Editor\KvTimeOptimalTests.cs`
 - `Assets\_Project\08_Tests\Editor\KvTrajMathTests.cs`
 
+---
+
+# ДОПОЛНЕНИЕ 21.10.2026 (§37): МОДЕЛИ КОНТРОЛЛЕРОВ, КИСТИ, ЖЕСТЫ, РУКА ЛУЧА, ПОДСТРОЙКА
+
+## A. Новые типы
+
+### A.1 `KazistovVvXr.KvXrControllerVisualMode` (перечисление)
+
+| Значение | Число | Что значит |
+|---|---|---|
+| `Mesh` | 0 | готовый меш PICO 4 Ultra из SDK (`Resources/Controller/PICO 4U L|R`) + наши материалы (выбор владельца §37) |
+| `Primitives` | 1 | модель из примитивов (цилиндр-рукоять, сфера-торец, диск-кольцо) |
+| `Billboard` | 2 | плоский значок у кисти, всегда развёрнут к оператору |
+| `Off` | 3 | не показывать ничего |
+
+### A.2 `KazistovVvXr.KvXrControllerVisuals` (`MonoBehaviour`)
+
+Создаётся в рантайме из `KvXrRig` (`Ensure(Transform parent, Camera camera)`) — в сцене его нет.
+
+| Член | Тип | Назначение |
+|---|---|---|
+| `Ensure(parent, camera)` | `static KvXrControllerVisuals` | найти или создать (идемпотентно: второй модели на руку не появляется) |
+| `ModeFromIndex(int)` | `static KvXrControllerVisualMode` | индекс настройки → режим; мусор → `Mesh` |
+| `ModeName(KvXrControllerVisualMode)` | `static string` | название режима для журнала |
+| `SdkModelPath(KvXrQuickHand)` | `static string` | `Controller/PICO 4U R` или `… L` |
+| `IsPoseUsable(bool isTracked, Vector3 position)` | `static bool` | отказ: нет `isTracked`, поза нулевая, поза дальше 3 м |
+| `Build(KvXrControllerVisualMode)` | `void` | перестроить модели по режиму (с откатом на примитивы) |
+| `ShownCount`, `ModelDescription`, `Mode` | свойства | состояние для журнала и отчёта |
+| Константы | `IgnoreRaycastLayer = 2`, `SdkModelRight`, `SdkModelLeft`, `MinPlausibleSizeMeters = 0.04`, `MaxPlausibleSizeMeters = 0.60`, `HideGraceSeconds = 0.30` | пороги, по которым модель принимается/скрывается |
+
+### A.3 `KazistovVvXr.KvHandFrame` (структура)
+
+Положение кисти, как его видит распознавание: `valid`, `wrist`, `palm`, `palmRotation`, `thumbTip`,
+`indexProximal`, `indexTip`, `middleProximal`, `middleTip`, `ringProximal`, `ringTip`,
+`littleProximal`, `littleTip`. Ни `GameObject`, ни подсистемы — поэтому собирается руками в тесте.
+
+### A.4 `KazistovVvXr.KvGestureMath` (статический)
+
+| Член | Что считает |
+|---|---|
+| `PalmScale(frame)` | ширина ладони (основания указательного ↔ мизинца), иначе «ладонь ↔ запястье»; 0 = позы нет |
+| `IsUsable(frame)` | `valid` + ладонь ≥ 10 мм + все точки конечные числа |
+| `IsFingerExtended(frame, proximal, tip)` | кончик дальше от ладони, чем основание, в 1,15 раза |
+| `IsPinch(frame, maxRatio = 0.30)` | «большой ↔ указательный» ≤ 30 % ширины ладони |
+| `IsOpenPalm(frame)` | все 4 пальца выпрямлены, большой отведён, не щипок |
+| `IsIndexPoint(frame)` | выпрямлен только указательный, остальные согнуты, не щипок |
+| Константы | `PinchRatio = 0.30`, `ExtendedRatio = 1.15`, `MinPalmScaleMeters = 0.010`, `ThumbAwayRatio = 0.80` |
+
+### A.5 `KazistovVvXr.KvGestureRecognizer` (класс)
+
+| Член | Что делает |
+|---|---|
+| `TryTick(KvHandFrame right, KvHandFrame left, float deltaTime, out KvGestureEvent result)` | один шаг; `true` — жест сработал (не чаще одного за кадр; правая рука первой) |
+| `Reset()` | сбросить удержания, паузы и состояние нейтрали |
+| `Detect(frame)` | `Pinch` → `OpenPalm` → `IndexPoint` → `None` (порядок важен: в начале щипка пальцы ещё выпрямлены) |
+| `ActionFor(kind, hand)` | `Pinch+Right → Press`, `Pinch+Left → CloseFan`, `OpenPalm → TogglePanel`, `IndexPoint+Right → NextGroup`, `IndexPoint+Left → None` |
+| `GestureName(kind)` | «щипок» / «раскрытая ладонь» / «указательный палец» |
+| `HoldSecondsFor(kind)` | 0,15 с (щипок), 0,40 с (ладонь, палец) |
+| Константы | `CooldownSeconds = 0.80`, `NeutralSeconds = 0.10` |
+
+### A.6 `KazistovVvXr.KvGestureKind`, `KvGestureAction`, `KvGestureEvent`
+
+`KvGestureKind`: `None`, `Pinch`, `OpenPalm`, `IndexPoint`.
+`KvGestureAction`: `None`, `Press`, `TogglePanel`, `NextGroup`, `CloseFan`.
+`KvGestureEvent`: `kind`, `hand`, `action`, `Name`, `HandName`.
+
+### A.7 `KazistovVvXr.KvXrHandSource` (статический)
+
+| Член | Назначение |
+|---|---|
+| `Provider` | `Func<KvXrQuickHand, KvHandFrame?>` — поставщик поз (ставит `KvXrHands`) |
+| `TryGet(hand, out frame)` | поза кисти, если она есть и достоверна (иначе `false`, без исключений) |
+
+### A.8 `KazistovVvXr.KvXrHands` (`MonoBehaviour`)
+
+Создаётся в рантайме (`Ensure(parent, camera)`). Поднимает подсистему XR Hands
+(`HandTracking.EnsureSubsystemInitialized`), читает 26 суставов, рисует их ОДНИМ мешем на руку.
+
+| Член | Назначение |
+|---|---|
+| `TryReadFrame(hand, out KvHandFrame)` | прочитать позу кисти (false, если кисть не отслеживается или суставов нет) |
+| `Describe()` | строка журнала `ОТСЛЕЖИВАНИЕ РУК: левая … · правая … · поза достоверна` |
+| `RightTracked`, `LeftTracked`, `RightJointCount`, `LeftJointCount`, `SubsystemRunning` | состояние для журнала и отчёта |
+| Поля настройки | `jointSizeMeters` (0,010), `fingertipSizeMeters` (0,016), `drawJoints`, `logOnChange` |
+
+### A.9 `KazistovVvXr.KvXrGestures` (`MonoBehaviour`)
+
+Создаётся в рантайме (`Ensure(parent)`). Один шаг распознавания за кадр; действие выполняет через
+`KvXrUiPointer.HoveredIndex` и `KvXrGroupPanel` (нажатие иконки, закрытие веера, показ/скрытие
+панели, следующая группа). Каждое срабатывание — строка `[KvXr] ЖЕСТ: «…» сработал · <рука> · <что сделано>`.
+
+### A.10 `KazistovVvXr.KvXrTuning` (статический)
+
+Подстройка чисел файлом `Application.persistentDataPath/kv_xr_tuning.txt` (на шлеме —
+`/storage/emulated/0/Android/data/com.KazistovVv.app/files/kv_xr_tuning.txt`), перечитывается раз в
+2 с. Формат: `ключ=значение` построчно, `#` — комментарий. Файл ПОВЕРХ настроек: он не заменяет
+`PlayerPrefs` и ничего не пишет на диск.
+
+| Ключ | Границы | Действие |
+|---|---|---|
+| `panel.radius` | 0,080…0,420 м | радиус панели групп |
+| `panel.forward` | 0,050…0,900 м | вынос панели вперёд от контроллера (по умолчанию 0,12 м) |
+| `panel.up` | −0,050…0,250 м | подъём панели над лучом |
+| `panel.minDistanceEyes` | 0,100…1,200 м | ближайшая дистанция панели от глаз (по умолчанию 0,18 м); именно этот кламп держал панель в 0,35 м |
+| `ray.hand` | `right`/`left`/`правая`/`левая` | рука луча |
+| `visuals.mode` | `mesh`/`primitives`/`billboard`/`off` | чем показывать контроллеры |
+| `gesture.enabled` | `1`/`0`/`вкл`/`выкл` | распознавание жестов |
+| `sides.swap` | `1`/`0`/`поменять`/`как есть` (нет ключа — автоматика) | поменять стороны рук местами (§37, после «контроллеры всё ещё перепутаны») |
+
+| Член | Назначение |
+|---|---|
+| `Parse(string)` | чистая функция разбора текста в `Dictionary<string,string>` |
+| `TryParseFloat(raw, out value)` | разбор числа независимо от языка системы; `NaN`/∞ отвергаются |
+| `ResolvePanelRadius/Forward/Up(map, fallback)`, `ResolveRayHand`, `ResolveVisuals`, `ResolveGestures` | чистые функции «значение из файла либо прежнее», с ограничением диапазона |
+| `ResolveSidesSwap(map)` | `bool?`: `true` — поменять стороны, `false` — как есть, `null` — автоматика |
+| `Tick()` | перечитать файл, если прошло 2 с; возвращает строку для журнала при изменении |
+| `Reload()` | перечитать немедленно |
+| `PanelRadiusMeters`, `PanelForwardMeters`, `PanelUpMeters`, `RayHand`, `VisualsMode`, `GesturesEnabled`, `FilePath`, `FileFound`, `KeyCount` | действующие значения и состояние |
+
+## B. Изменения описанных ранее типов
+
+### B.1 `KvXrGroupPanelLayout` — новые члены (прежние НЕ менялись)
+
+| Член | Что считает |
+|---|---|
+| `DefaultPanelRadiusMeters = 0.100f` | радиус по умолчанию (выбор владельца §37) |
+| `MinPanelRadiusMeters = 0.080f`, `MaxPanelRadiusMeters = 0.420f` | границы радиуса |
+| `MinIconSizeMeters = 0.016f`, `MaxIconSizeMeters = 0.060f`, `MinFanIconSizeMeters = 0.024f` | границы размера иконки |
+| `MinGapForSmallIcons = 0.008f`, `MaxGapMeters = 0.012f`, `GapRatio = 0.22f` | просвет между иконками |
+| `ClampPanelRadius(float)` | ограничить радиус |
+| `IconBudgetMeters(count, span, radius)` | сколько метров дуги на иконку |
+| `GapForCount(count, span, radius)` / `IconSizeForCount(count, span, radius)` | просвет и размер иконки ОТ радиуса |
+| `RadiusForIconSize(count, span, iconSize)` | какой радиус нужен, чтобы иконка была не мельче заданной |
+| `FanRadiusMeters(iconCount, groupRadius)` | радиус веера (не даёт иконкам стать мельче 24 мм) |
+| `NeighbourDistanceMeters(...)`, `IconsDoNotOverlap(...)` | проверка «иконки не слипаются» |
+| `GroupOffsetsForRadius(groupCount, hand, radius)`, `FanOffsetsForRadius(iconCount, hand, radius)` | раскладка от заданного радиуса |
+| `DescribeSizes(count, span, radius)` | строка `радиус 0.100 м · иконка 27 мм · просвет 8.0 мм` |
+| `ShowsLabel(level, dwellSeconds)` | **изменено 21.10.2026**: подпись по 0,5 с удержания на ОБОИХ уровнях (раньше — только на уровне групп); разрешение владельца получено, тест `FanLevel_NeverShowsLabels` заменён на `FanLevel_ShowsLabelAfterDwell` |
+| `TryHitIcon(..., float hitRadiusMeters = HitRadiusMeters)` | радиус попадания теперь параметр (панель передаёт 0,85 от фактического размера иконки) |
+
+### B.2 `KvXrInputSource` — новые члены
+
+| Член | Назначение |
+|---|---|
+| `RayHand` | рука луча (файл подстройки → настройка; по умолчанию правая) |
+| `RayHandName` | «правая»/«левая» для журнала |
+| `Controller(KvXrQuickHand)`, `HasHand(hand)` | контроллер конкретной руки |
+| `TryRayAimPose`, `TryRayPose`, `RayTrigger`, `RayGrip`, `RayStick` | то же, что раньше, но для руки луча |
+| `TryAimPose(hand, …)`, `TryPose(hand, …)` | позы конкретной руки |
+| `TryTrackedPose(hand, …)` | поза с ОБЯЗАТЕЛЬНОЙ проверкой `isTracked` (для моделей: нулевая поза отвергается) |
+| `ResolveSides()`, `UnlockSides()`, `DescribeSides()`, `DescribeHandedness()` | определение сторон рук: ручной `sides.swap` → метки `LeftHand`/`RightHand` → `handedness` → положение относительно головы; решение по 20 кадрам, с пересмотром при явном (≥ 5 см) разведении рук |
+| `SidesLocked`, `SidesWereSwapped`, `ManualSidesActive` | состояние сторон для журнала и отчёта |
+
+### B.3 `KvXrSettings` — новые члены
+
+| Ключ / член | По умолчанию | Назначение |
+|---|---|---|
+| `KeyRayHand` = `KazistovVv.XR.Ray.Hand` · `GetRayHand/SetRayHand`, `RayHandFromIndex`, `RayHandLabel` | правая | рука луча |
+| `KeyGroupPanelRadius` = `KazistovVv.XR.Panel.Radius` · `GetGroupPanelRadius/SetGroupPanelRadius` | 0,100 м | радиус панели групп |
+| `KeyControllerVisuals` · `GetControllerVisualMode/SetControllerVisualMode` | `Mesh` | чем показывать контроллеры |
+| `KeyGestures` · `GetGesturesEnabled/SetGesturesEnabled` | включены | распознавание жестов |
+| `DescribePointer()` | — | строка `луч из ПРАВОЙ руки · панель у ЛЕВОЙ руки · радиус панели 0.100 м` |
+
+### B.4 `KvXrGroupPanel` — новые члены
+
+| Член | Назначение |
+|---|---|
+| `RadiusMeters` | действующий радиус (настройка → файл подстройки) |
+| `DefaultHandForwardMeters = 0.30f`, `DefaultHandUpMeters = 0.04f` | значения по умолчанию для выноса/подъёма |
+| перестройка на ходу | при изменении радиуса панель перестраивается и встаёт заново, печатая `радиус изменён на …` |
+
+### B.5 `KvXrUiPointer` — новые члены
+
+| Член | Назначение |
+|---|---|
+| `HoveredIndex` | номер иконки под лучом (−1 — ни одной); нужен жестам |
+| строка `Указатель: луч из ПРАВОЙ руки …` | печатается один раз при старте и при смене руки |
+| `источник КОНТРОЛЛЕР (правая рука)` | сторона в строке наведения |
+
+### B.6 `KvXrLocomotion`
+
+Телепорт читает позу и курок РУКИ ЛУЧА (`TryRayPose`, `RayTrigger`), а не жёстко правой: иначе при
+смене руки курок нажимал бы иконку и одновременно телепортировал.
+
+### B.7 `KvXrRig`
+
+`Start()` вызывает `EnsureRuntimeComponents()`: создаёт `KvXrControllerVisuals`, `KvXrHands`,
+`KvXrGestures` (все — идемпотентно, сцена не меняется) и печатает `DescribePointer()`.
+`Update()` раз в 2 с читает файл подстройки (`KvXrTuning.Tick()`).
+
+## C. Редакторные инструменты §37 (`KazistovVvXrEditor.KvXrS37Tools`)
+
+| Метод | Что делает |
+|---|---|
+| `AddHandTrackingPackage()` | ставит `com.unity.xr.hands` 1.9.0 через менеджер пакетов и печатает зависимости |
+| `ApplyHandTrackingForAndroid()` | включает фичу `HandTracking` для Android, выключает `MetaHandTrackingAim`, ставит `PICOProjectSetting.isHandTracking = true` (режим «контроллеры и кисти») |
+| `VerifySdkControllerModels()` | проверяет БЕЗ ШЛЕМА: загружается ли меш SDK, габарит, коллайдеры, аниматоры, шейдеры материалов |
+| `ReportS37State()` | сводка: версия пакета, фича кистей, `DescribePointer()`, размеры панели, путь файла подстройки |
+
+## D. Тесты §37 (`Assets/_Project/08_Tests/Editor/KvXrS37Tests.cs`)
+
+31 тест: радиус и размеры иконок (включая «иконки не слипаются» и неизменность прежнего API),
+рука луча (по умолчанию правая, переключение, отдельная настройка панели), разбор файла подстройки и
+ограничение значений, отказ от нулевой позы кисти, распознавание щипка/ладони/указательного пальца,
+удержание, пауза, требование нейтрального положения, сторона руки в событии жеста, отказ от нулевой
+позы контроллера и пути к мешам SDK.
+
+---
+
+# ДОПОЛНЕНИЕ 21.10.2026 (§38): СТРОГИЕ ЖЕСТЫ, «ЖЕСТ БЕЗ ДЕЛА», ДИАГНОСТИКА КИСТЕЙ
+
+## E. Новое и изменённое в §38
+
+### E.1 `KvGestureMath` — строгие пороги и условия места
+
+| Член | Значение / смысл |
+|---|---|
+| `PinchTouching` | **0,85** (было 0,75) — «почти сведённые» пальцы больше не щипок |
+| `PinchMinIndexCurl` / `PinchMaxIndexCurl` | **0,30 / 0,85** — указательный в этом диапазоне (кулак исключён) |
+| `OpenCurl` | **0,15** (было 0,22) — палец считается прямым только при таком сгибе |
+| `OpenSpread` | **0,10** — пальцы должны быть разведены |
+| `OpenThumbCurl` | **0,45** — большой палец выпрямлен (иначе это хват) |
+| `OpenMaxPinch` | **0,30** — ладонь не может быть одновременно щипком |
+| `PointIndexCurl` / `PointOtherCurl` / `PointMaxPinch` | **0,20 / 0,75 / 0,40** |
+| `MinForwardMeters` = **0,15**, `MaxDistanceFromHeadMeters` = **0,90** | «рука в поле зрения» |
+| `PalmUpMinVertical` = **0,50** | насколько «вверх» смотрят пальцы для позы «ладонь поднята» |
+| `IsHandInView(hand, headPosition, headRotation)` | рука впереди ≥ 0,15 м и не дальше 0,90 м от головы |
+| `IsPalmUpPosture(frame)` | пальцы смотрят вверх (жест «стоп») — опущенная рука этому не удовлетворяет |
+
+### E.2 `KvGestureActions` (новый статический класс)
+
+| Член | Смысл |
+|---|---|
+| `IsUseful(action, hasTargetIcon, fanOpen, panelVisible)` | «жест без дела не считается»: нажатие — только при иконке под лучом; выход из веера — только при раскрытом веере; следующая группа — только при видимой панели; показ/скрытие панели — всегда |
+
+### E.3 `KvGestureRecognizer` — новое
+
+| Член | Смысл |
+|---|---|
+| `Detect(frame, headPosition, headRotation)` | распознавание с учётом МЕСТА руки и позы «ладонь вверх» |
+| `TryTick(right, left, headPosition, headRotation, deltaTime, out result)` | то же, но по кадру целиком (так зовёт исполнитель жестов) |
+| `PalmHoldSeconds` | **0,80** (было 0,60) |
+| `PointHoldSeconds` | **0,60** (было 0,50) |
+| `PinchHoldSeconds` = 0,20 · `CooldownSeconds` = 1,0 · `NeutralSeconds` = 0,15 | **не менялись** — закреплены тестами §37 |
+
+### E.4 `KvHandDiagnostics` (новый статический класс)
+
+| Член | Смысл |
+|---|---|
+| `MaxPlausibleDistanceMeters` = **1,20** | дальше этого кисть «нарисована не там, где рука» |
+| `DistanceToCamera(hand, camera)` | расстояние в метрах |
+| `IsPlausible(hand, camera)` | правдоподобно ли расстояние |
+| `Describe(hand, camera)` | строка `запястье (…) · камера (…) · до камеры 0.49 м`, при превышении — `ВНИМАНИЕ: это не рука, а ошибка пространства` |
+
+### E.5 Изменения в `KvXrHands`
+
+* в строку `ОТСЛЕЖИВАНИЕ РУК` добавлена диагностика места кисти (запястье, камера, расстояние);
+* частота печати ограничена: смена состояния — сразу, «просто числа» — не чаще раза в 2 с
+  (до §38 за 25 минут набиралось **13 238** строк).
+
+### E.6 Изменения в `KvXrGestures`
+
+* вызывает распознавание с головой (место руки) и отбрасывает «жесты без дела»;
+* каждое срабатывание печатает СВОИ числа: `ЖЕСТ: «щипок» сработал · правая рука · нажата иконка «…» · всего жестов N · сгибы 0.55/0.45/0.45/0.45 · щипок 0.92 · разведение 0.15`;
+* ключ файла подстройки `gesture.muteWithController` (по умолчанию выключен) глушит жесты руки с контроллером.
+
+## F. Тесты §38 (`Assets/_Project/08_Tests/Editor/KvXrS38Tests.cs`)
+
+14 тестов: место руки (впереди/далеко/за спиной), пороги места числами, поза «ладонь вверх»,
+расслабленная кисть не раскрытая ладонь, строгие пороги щипка и указательного пальца, «жест без
+дела не считается» для всех действий, распознавание с учётом места, удлинённое удержание ладони,
+диагностика кистей (расстояние, правдоподобие, строка журнала).
+
+---
+
+# ДОПОЛНЕНИЕ 23.10.2026 (§39): КУРСОРЫ, ВТОРОЙ ЛАЗЕР, СКЕЛЕТ КИСТЕЙ
+
+## G. Новые типы §39 (`Assets/_Project/01_Scripts/Xr/KvXrCursor.cs`)
+
+### G.1 `KvCursorState` (перечисление)
+
+`Hidden` (луча нет) · `Idle` (луч есть, иконки нет) · `OverIcon` (луч навёл иконку).
+
+### G.2 `KvXrCursor` (статический)
+
+| Член | Значение / смысл |
+|---|---|
+| `RayMarkerMeters` = **0,014** | размер метки на конце луча |
+| `FingerMarkerMeters` = **0,022** | размер метки у кончика указательного пальца |
+| `State(rayActive, overIcon)` | `Hidden` / `Idle` / `OverIcon` |
+| `RayLengthMeters(overIcon, distanceToHit, fullLength)` | попадание → до иконки; промах → **полная длина** (исправление «луч упирается в невидимую плоскость панели») |
+
+### G.3 `KvXrSecondaryRayLogic` (статический)
+
+| Член | Значение / смысл |
+|---|---|
+| `WidthMeters` = **0,005** | второй луч тоньше основного (8 мм) |
+| `MarkerMeters` = **0,010** | метка на конце второго луча |
+| `CanPress()` | **всегда false** — решение владельца «второй луч только указатель» |
+| `SourceHand(rayHand)` | всегда ПРОТИВОПОЛОЖНАЯ рука руки луча |
+| `LengthMeters(...)` | те же правила, что у основного луча |
+
+### G.4 `KvHandBone` / `KvHandSkeleton` (структура и статический класс)
+
+| Член | Значение / смысл |
+|---|---|
+| `BoneWidthMeters` = **0,004** | толщина «кости» |
+| `JointSizeMeters` = **0,012** | размер точки сустава (для сравнения толщин) |
+| `FingerPointerMeters` = **0,060** | «указательный» отрезок от кончика пальца |
+| `JointCount` = 26, `MinJointIndex`/`MaxJointIndex` | границы суставов кисти без зависимости от пакета в тестах |
+| `Bones` / `BoneCount` = **25** | запястье–ладонь (1) + большой палец (4) + по 5 на четыре пальца (20) |
+| `IsValidJoint(int)`, `ToLocalIndex(int)` | проверка и перевод индекса сустава в локальный |
+| `CountDrawableBones(bool[] jointPresent)` | сколько костей рисуемо: «нет сустава — нет кости» |
+
+### G.5 `KvXrSecondaryRay` (`MonoBehaviour`)
+
+Создаётся в рантайме (`Ensure(parent, camera)` из `KvXrRig`). Тонкий бледный луч из руки, которая не
+является рукой луча; на конце метка 10 мм; **нажатия нет**. Выключается ключом файла подстройки
+`ray.secondary=0`. Состояние: `CurrentLength`, `SourceHand`.
+
+### G.6 Изменения в существующих типах (§39)
+
+| Тип | Что добавлено |
+|---|---|
+| `KvXrUiPointer` | поле `headCamera`, `cursorSizeMeters` (14 мм), метка-курсор на конце луча (цвет: спокойный → зелёный над иконкой), `HideCursor()`; луч при промахе идёт на полную длину, при попадании — **в центр иконки** |
+| `KvXrGroupPanel` | `IconWorldPosition(int index)` — центр иконки в мировых координатах (для курсора) |
+| `KvXrHands` | отрисовка **скелета**: 26 точек + до 25 костей + указательный отрезок 6 см — **в одном меше** (по-прежнему 1 вызов отрисовки на руку) |
+| `KvXrTuning` | ключ `ray.secondary` (`1`/`0`) и `ResolveSecondaryRay(map)`, свойство `SecondaryRayEnabled` |
+| `KvXrRig` | создаёт `KvXrSecondaryRay`, передаёт камеру указателю |
+
+## H. Тесты §39 (`Assets/_Project/08_Tests/Editor/KvXrS39Tests.cs`)
+
+12 тестов: длина луча при промахе и попадании, состояние метки, размеры меток (14/22 мм),
+второй луч не нажимает, источник второго луча — противоположная рука, длина/толщина второго луча,
+выключение файлом подстройки, 25 костей скелета, корректность индексов суставов, отсутствие дублей,
+«нет сустава — нет кости», толщины кости и точки, длина указательного отрезка.
+
+---
+
+# ДОПОЛНЕНИЕ 23.10.2026 (§40): РЕЖИМ КИСТЕЙ И ЭКРАНЫ ИНТЕРФЕЙСА
+
+## I. Новые типы (`Assets/_Project/01_Scripts/Xr/KvXrMode.cs`)
+
+### I.1 `KvXrControlMode` (перечисление)
+
+`None` (управлять нечем) · `Controllers` (контроллеры в руках) · `Hands` (контроллеры отложены).
+
+### I.2 `KvXrModeResolver` (статический)
+
+| Член | Значение / смысл |
+|---|---|
+| `ControllerInHandMeters` = **0,20** | ближе этого «кисть ↔ контроллер» — контроллер в руке |
+| `Resolve(handTracked, controllerTracked, distance)` | чистое правило режима |
+| `ModeName(mode)` | «контроллеры» / «кисти» / «нет управления» |
+
+### I.3 `KvXrMode` (статический, состояние кадра)
+
+| Член | Смысл |
+|---|---|
+| `Right`, `Left`, `For(hand)`, `Current` | режим каждой руки и руки луча |
+| `Description`, `LastDistance` | строка для журнала и экрана «Состояние»; последнее расстояние «кисть ↔ контроллер» |
+| `Tick()` | пересчёт раз в кадр из `KvXrRig`; каждая смена режима — строка `[KvXr] РЕЖИМ: …` |
+
+### I.4 `KvXrHandRay` (статический)
+
+| Член | Значение / смысл |
+|---|---|
+| `MaxLengthMeters` = **1,5** | предел длины луча из пальца |
+| `TryGetRay(frame, out origin, out direction)` | начало — кончик указательного, направление — от основания к кончику; нет кисти — нет луча |
+| `LengthMeters(overIcon, distanceToHit, maxLength)` | попадание → до иконки, промах → предел |
+
+### I.5 `KvXrHandPanelPlacement` (статический)
+
+| Член | Значение / смысл |
+|---|---|
+| `ForwardMeters` = **0,12**, `UpMeters` = **0,04** | смещение панели от ладони |
+| `TryGet(frame, out position, out forward)` | положение и направление панели по позе кисти |
+
+### I.6 `KvXrSettingStep`, `KvXrStatusData`, `KvXrSettingsData`, `KvXrObjectInfo`
+
+`KvXrSettingStep.Step/StepInt` — шаг с границами; структуры данных — входы экранов.
+
+### I.7 `KvXrScreenModel` (статический)
+
+`BuildStatus` · `BuildSettings` · `BuildObjects(names, selected)` · `BuildProperties(info)` ·
+`BuildHelp` — чистые функции, формирующие строки экранов (проверяются тестами без шлема).
+
+### I.8 Изменения в существующих типах (§40)
+
+| Тип | Что добавлено |
+|---|---|
+| `KvXrPanelLevel` | уровни экранов: `StatusScreen`, `SettingsScreen`, `ObjectsScreen`, `PropertiesScreen`, `HelpScreen` |
+| `KvXrGroupPanel` | `OpenScreen(level)`, `CloseScreen()`, `ScreenTitle(level)`, `IsScreen(level)`, `SelectObject(index)`; ряд входов в экраны внизу панели; режим кистей — панель у ладони; строки экранов как надписи без попадания лучом |
+| `KvXrUiPointer` | `handRayLength` (1,5 м), ветка «луч из пальца» в режиме кистей, `AimAlongPanel(..., maxLength)` |
+| `KvXrSecondaryRay` | в режиме кистей не рисуется |
+| `KvXrSettings` | `KeySecondaryRay`, `GetSecondaryRay/SetSecondaryRay` (настройка, которую перекрывает файл `ray.secondary`) |
+| `KvXrRig` | `KvXrMode.Tick()` каждый кадр |
+
+## J. Тесты §40 (`Assets/_Project/08_Tests/Editor/KvXrS40Tests.cs`)
+
+11 тестов: режим по расстоянию (5/19/25 см, отсутствие кисти/контроллера, порог числом), луч из
+пальца (начало, длина 1,5 м, «нет кисти — нет луча»), панель у ладони (0,12/0,04, разворот по кисти),
+содержимое экранов «Состояние» и «Настройки», шаги и границы настроек, список объектов с пометкой
+выбранного и пустой список, свойства выбранного и «не выбран», справка со всеми четырьмя жестами.
 
 
+
+
+## K. Правка после приёмки §40 (24.10.2026): цели луча на панели
+
+ЗАЧЕМ. Владелец: «не приклеивается лазер к новым кнопкам внизу контроллера, что выстроены в ряд.
+информация, яркость и тд». Кнопка на панели — это картинка на канвасе ПЛЮС смещение в списке целей
+луча. Смещения раньше вписывались вручную в каждый построитель уровня, и для ряда экранов §40 их
+забыли, поэтому луч проходил сквозь видимые кнопки.
+
+### K.1 Новые члены `KvXrGroupPanel`
+
+| Член | Смысл |
+|---|---|
+| `RayTargetCount` | сколько целей у луча на текущем уровне; обязано совпадать с `IconCount` |
+| `RayTargetOffset(int index)` | смещение цели на канвасе, метры — позволяет проверить без шлема, какая кнопка под лучом |
+| `pendingOffsets` (закрытое) | накопитель смещений, который заполняет `CreateIcon`; в конце `Rebuild()` становится `currentOffsets` |
+| `ClearIcons()` | очищает в том числе `pendingOffsets` (иначе смещения копились бы через пересборки) |
+
+### K.2 Правило, которое теперь держится кодом, а не памятью
+
+1. Каждая интерактивная иконка создаётся ТОЛЬКО через `CreateIcon` — и он же добавляет её смещение
+   в список целей. Нет иконки без цели, потому что это один и тот же вызов.
+2. `Rebuild()` собирает `currentOffsets` из накопителя ЦЕЛИКОМ, после построения уровня
+   (группы + ряд экранов; веер + центр; экран + его кнопки).
+3. Порядок списка совпадает с порядком `icons`/`hovers`/`iconActions`/`iconTitles`, поэтому
+   `PressIndex(index)` нажимает именно наведённую кнопку (`TryAim` → `SetHoverIndex` → `PressIndex`).
+4. Если длины всё же разошлись — `Debug.LogError` «ЦЕЛИ ЛУЧА РАСХОДЯТСЯ С ИКОНКАМИ: целей N · иконок M».
+5. В веере команды раскладываются до `hitOffsets.Length - 1`: последнее смещение в `FanHitOffsets` —
+   центр (0,0), это иконка «Закрыть», а не команда.
+
+### K.3 Тесты (`Assets/_Project/08_Tests/Editor/KvXrPanelTargetTests.cs`), 5 штук
+
+| Тест | Что доказывает |
+|---|---|
+| `GroupLevel_ScreenRowIsHittable` | ряд экранов внизу панели присутствует в целях своими пятью смещениями (−0,150 / −0,075 / 0 / +0,075 / +0,150 м; −0,235 м) — 13 иконок, 13 целей |
+| `SettingsScreen_StepperButtonsAreHittable` | «−», «+», «Дальше», «Закрыть» экрана «Настройки» ловятся лучом |
+| `EveryScreen_CloseButtonIsHittableAndCountsMatch` | на всех пяти экранах иконок столько же, сколько целей, и «Закрыть» ловится |
+| `FanLevel_HasCenterExitTarget` | центральная иконка веера (0,0) — цель (повторение дефекта 21.10.2026 исключено) |
+| `RayTargets_DoNotOverlap` | две цели не стоят в одном месте: иначе луч нажимает соседнюю кнопку |
+
+---
+
+## M. §42 (25.10.2026): окна компьютера в шлеме, столы, поток этапов
+
+Приложение к справочнику. Описывает то, что добавлено волной §42 — по одному разделу на файл.
+
+### M.1 `KvXrDesktopWindows` — таблица «id команды → экран шлема»
+
+Соответствие хранится ДАННЫМИ (`KvXrDesktopWindowInfo[]`), а не ветками `switch`: новая команда
+компьютера не может молча открыть не тот экран.
+
+| Член | Что делает |
+|---|---|
+| `int Count` | сколько команд-окон знает таблица (**50**) |
+| `bool TryGet(string id, out KvXrDesktopWindowInfo info)` | экран, вкладка и заголовок окна для команды; `false` — команда окна не открывает, её надо выполнить |
+| `bool IsWindowCommand(string id)` | то же без структуры |
+| `List<string> AllIds()` | все id команд-окон (тест полноты) |
+| `int ScreenCount()` | сколько разных экранов задействовано (**11**) |
+| `string Describe()` | строка журнала о таблице |
+
+`KvXrDesktopWindowInfo`: `CommandId`, `Screen` (какой экран), `Tab` (номер вкладки), `Title` (заголовок).
+
+### M.2 `KvXrDesktopTabs` — вкладки новых экранов
+
+| Член | Что делает |
+|---|---|
+| `int CountOf(screen)` | вкладок у экрана (0 — без вкладок) |
+| `string TabTitle(screen, i)` | короткая подпись кнопки |
+| `string KeyOf(screen, i)` | ключ вкладки — **всегда латиницей** (`record`, `waypoints`, `interface`…): по нему ищутся кнопки вкладки |
+| `string TitleOf(screen, i)` | полный заголовок: «Верстак · Точки» |
+| `int PageCount(tabs)`, `PageOf(tab)`, `FirstOnPage(page)` | листание по 4 вкладки |
+| `bool Fits(screen, halfWidth)` | ряд вкладок влезает в окно (0,58 м ≤ 0,62 м) |
+
+Числа: `VisibleSlots = 4`, `StepMeters = 0,13`. Всего вкладок в новых экранах — **41**.
+
+### M.3 `KvXrScreenRows` + `KvXrScreenData` — содержимое вкладок
+
+`List<string> Build(screen, tab, data)` — **чистая функция**: что попадёт в строки, решает она, а рисует
+панель. Правило: **пустого списка не бывает** — если данных нет, первая строка честно называет причину
+(`KvXrScreenRows.NoData(reason)`).
+
+`KvXrScreenData` — одна структура на все экраны: робот, версия, язык, масштаб, пресет графики, кадры,
+углы суставов, журнал, списки (позы/сценарии/сессии/записи/зоны), верстак (груз, плоскость, точки,
+ограничения, узлы RRT, прокси, силы), пульт, клавиши.
+
+### M.4 `KvXrTableKinds` + `KvReachMath` — числа столов
+
+| Константа / метод | Значение |
+|---|---|
+| `KvXrTableKinds.SquareWidth` / `SquareDepth` / `TopHeight` | **0,72** / **0,48** / **0,98** м (решение владельца В2) |
+| `KvXrTableKinds.SquareDiagonal` | **0,8653** м («диагональ 0,87 м») |
+| `KvXrTableKinds.Radius(kind, reach)` | квадратный — половина диагонали; авто — `KvReachMath.AutoRadius` |
+| `KvReachMath.ChainLength(pivots, tcp)` | вылет = сумма расстояний между пивотами + отрезок до TCP (не меньше 0,05 м) |
+| `KvReachMath.AutoRadius(chain)` | **0,95 × вылет + 0,10 м** → 2,3496 м (6-осевой) и 0,7774 м (SCARA) |
+| `KvXrTableKinds.DescribeCreate(kind, reach)` | строка журнала с числами |
+
+Одна формула вылета на всю программу: её же используют сингулярностные зоны — второй формулы в проекте нет.
+
+### M.5 `KvXrStartMenuRows` + `KvXrStartRowAction` — строки меню «Стол»/«Робот»
+
+`Tables(existing)` / `Robots(existing)` возвращают состав строк, `ActionFor(section, row, tables, robots)` —
+действие строки. Состав и действие считаются **одной функцией** (раньше это были два независимых
+`switch`, и они могли разойтись). Потолок панели — `KvXrStartMenuLayout.MaxContentRows` (7).
+
+`KvXrStartRowAction`: `SelectObject`, `CreateSquareTable`, `CreateAutoTable`, `CreateSixAxisRobot`,
+`CreateScaraRobot`, `RunStand`, `SwitchRobot`, `None`.
+
+### M.6 `KvXrSceneEmpty` (компонент) + `KvXrSceneEmptyState` — пусто при запуске
+
+`[DefaultExecutionOrder(500)]` — после начинки (−400) и после MR-слоя. Гасит корни со «стенд» в имени
+вместе с их роботами, повторяет гашение раз в секунду, печатает один раз:
+`[KvXr] СЦЕНА: выключено роботов N · столов M — как в ПК до добавления`.
+
+Сцена `XrMain.unity` при этом **не меняется**; правило `HidesVirtualStands`, закреплённое тестом, не тронуто.
+
+### M.7 `KvXrFlowBridge` (компонент) + `KvXrFlowRules` — поток этапов в шлеме
+
+Создаёт на камере шлема **тот же** `TrajectoryFlowController`, что на компьютере, и кормит его публичным
+`UpdateAim(...)`. Правила: лазеры потока выключены (в шлеме свои), подтверждение — только вне интерфейса,
+камеру поток не двигает. Переключатель без пересборки — `KazistovVv.XR.FlowAim`.
+
+| Член | Что делает |
+|---|---|
+| `bool ShouldFeedConfirm(overInterface, triggerDown)` | курок подтверждает точку только вне интерфейса |
+| `bool ShouldFeedAim(overInterface)` | прицел кормится, когда луч не над панелью/окном/меню |
+| `string Describe(flowCreated, robot, visible)` | `[KvXr] ПОТОК: создан на камере шлема · робот «…» · визуализаций видимо N` |
+
+### M.8 `KvXrVisuals` — почему визуализаций не видно
+
+`Reason(flowCreated, robotBound, toggledOn, hasGeometry, onDesktopCanvas)` возвращает одну из причин:
+`поток этапов не создан` / `робот не привязан` / `выключено тумблером` / `в этой позе показывать нечего` /
+`панель на десктопном канвасе` / `видно`.
+`Describe(visible, reason)` — `[KvXr] ЗОНЫ: видимо N · причина скрытия «…»`.
+
+### M.9 `KvXrObjectFactory` — создание столов и роботов
+
+| Член | Что делает |
+|---|---|
+| `float ReachOf(RobotController)` | вылет руки по пивотам сцены (через `KvReachMath`) |
+| `RobotController ActiveRobot()` | первый активный робот |
+| `Vector3 SpotInFrontOf(camera, distance)` | точка на полу впереди оператора (по умолчанию 1,20 м) |
+| `float YawTowards(from, target)` | разворот стола на оператора |
+| `GameObject CreateTable(kind, point, yaw, reach)` | стол нужного вида (через `StandBuilder`) |
+| `RobotController CreateRobot(scara, position, yaw)` | копия сценного эталона через `ObjectSpawner.SpawnRobot` |
+
+### M.10 `KvXrVoiceStatus` — честная строка про голос
+
+`Available(hasAppId, hasMic)` и `Line(hasAppId, hasMic)`: без appID — «голос недоступен: нет appID PICO
+(клавиатура и колесо работают)»; без разрешения — своя строка про `RECORD_AUDIO`.
+
+### M.11 Изменения в `KvXrGroupPanel` и `KvXrWindowHost`
+
+| Член | Что делает |
+|---|---|
+| `bool OpenDesktopWindow(string commandId)` | открыть окно компьютера по команде; `false` — команда окна не открывает |
+| `void OpenDesktopTab(int index)` | переключить вкладку окна (рядом с прежним `OpenScreen`) |
+| `KvXrPanelLevel WindowScreen` / `OpenedWindowScreen` | какой экран-окно показан |
+| `string WindowCommandId` | какой командой окно открыто (журнал и дедупликация) |
+| `KvXrPanelLevel.DesktopWindow = 16` | уровень «окно компьютера» (не экран панели у руки: своя плита 0,62 × 0,52 м) |
+| `KvXrWindowHost.Open(screen, title, key)` | окно с ключом: два окна «Верстака» живут рядом |
+| `KvXrWindowHost.FindOpen(screen, key)` / `KeyOf(window)` | поиск и ключ открытого окна |
+
+### M.12 Тесты этой волны (`KvXrS42Tests.cs`, 20 штук)
+
+`Windows_EveryWindowCommandHasScreen`, `Windows_OpenCreatesWindowNotCommand`, `Windows_KeyIsUniquePerCommand`,
+`Windows_EveryTabHasRows`, `Windows_TabStripIsHittable`, `Windows_ScreensDoNotCollideWithFixedRow`,
+`Tables_ThereAreTwoKinds`, `AutoTable_RadiusEqualsRobotReach`, `SquareTable_IsMuchSmallerThanAuto`,
+`SquareTable_MatchesPcNumbers`, `Reach_ChainLengthIsSumOfSegments`, `Scene_StandsAreRecognisedByName`,
+`Scene_EmptyLineHasNumbers`, `Menu_StandAndRobotRowsMatchActions`, `Zones_HiddenVisualizerAlwaysNamesReason`,
+`Zones_DiagnosticLineHasNumbers`, `Flow_ConfirmIsNotFedOverInterface`, `Flow_DescribeNamesRobotAndCount`,
+`Voice_WithoutAppIdSaysUnavailable`, `Scenes_UntouchedByThisWave`.

@@ -297,24 +297,11 @@ namespace KazistovVvUI
             }
             else
             {
-                string q = query.Trim().ToLowerInvariant();
-                // Сначала точные совпадения по началу подписи, затем всё остальное.
-                List<KvCommand> starts = new List<KvCommand>();
-                List<KvCommand> rest = new List<KvCommand>();
-                foreach (KvCommand c in KvCommands.All)
-                {
-                    if (c == null) continue;
-                    if (!Matches(c, q)) continue;
-                    if (Starts(c, q)) starts.Add(c);
-                    else rest.Add(c);
-                }
-                starts.Sort(delegate (KvCommand a, KvCommand b)
-                {
-                    return string.Compare(a.LocalizedTitle, b.LocalizedTitle,
-                        StringComparison.CurrentCultureIgnoreCase);
-                });
-                filtered.AddRange(starts);
-                filtered.AddRange(rest);
+                // ФИЛЬТРАЦИЯ — ОДНИМ КОДОМ С ШЛЕМОМ (§41). Раньше правило поиска жило здесь, и его
+                // пришлось бы повторять в VR: два поиска разошлись бы по составу и порядку выдачи.
+                // Теперь правило одно — `KvCommandSearch.Filter`; поведение палитры не изменилось:
+                // «начинается с» первыми и по алфавиту, остальные — в порядке реестра.
+                filtered.AddRange(KvCommandSearch.Filter(KvCommands.All, query));
             }
 
             int shown = Mathf.Min(filtered.Count, MaxRows);
@@ -340,27 +327,9 @@ namespace KazistovVvUI
             PaintHighlight();
         }
 
-        private static bool Matches(KvCommand c, string q)
-        {
-            if (c.Id != null && c.Id.ToLowerInvariant().Contains(q)) return true;
-            if (c.LocalizedTitle != null && c.LocalizedTitle.ToLowerInvariant().Contains(q)) return true;
-            if (c.Title != null && c.Title.ToLowerInvariant().Contains(q)) return true;
-            if (c.LocalizedDescription != null &&
-                c.LocalizedDescription.ToLowerInvariant().Contains(q)) return true;
-            if (c.Hotkey != null && c.Hotkey.ToLowerInvariant().Contains(q)) return true;
-            // ЭТАП 5: поиск и на других языках (включая английский).
-            string all = KvLoc.AllLanguages("cmd." + c.Id);
-            if (!string.IsNullOrEmpty(all) && all.ToLowerInvariant().Contains(q)) return true;
-            string group = KvToolbarGroups.GroupTitleOf(c.Id);
-            if (!string.IsNullOrEmpty(group) && group.ToLowerInvariant().Contains(q)) return true;
-            return false;
-        }
-
-        private static bool Starts(KvCommand c, string q)
-        {
-            return c.LocalizedTitle != null &&
-                   c.LocalizedTitle.ToLowerInvariant().StartsWith(q);
-        }
+        // ПРАВИЛО ПОИСКА ЖИВЁТ В `KvCommandSearch` (§41): одна функция на палитру компьютера и на
+        // экран «Поиск» в шлеме. Прежние `Matches`/`Starts` отсюда убраны — иначе два поиска
+        // разошлись бы, и владелец увидел бы разные результаты в двух местах.
 
         // ------------------------------------------------------------------ строки
 

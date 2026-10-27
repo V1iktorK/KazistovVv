@@ -408,6 +408,7 @@ namespace KazistovVvUI
         {
             if (loaded) return;
             loaded = true;
+            filesLoaded = true;                 // §42/Д19: на диске словари читаются сразу
 
             try { preference = PlayerPrefs.GetString(PrefsKey, SystemCode); }
             catch { preference = SystemCode; }
@@ -449,6 +450,18 @@ namespace KazistovVvUI
         }
 
         /// <summary>
+        /// ВСЕ СЛОВАРИ С УСТРОЙСТВА ПРОЧИТАНЫ (§42, дефект Д19). На Android словари читаются
+        /// асинхронно, по одному файлу (`ru.json`, `en.json`, `de.json`…). Пока они подгружаются,
+        /// любой текст через `KvLoc.T` меняет значение на каждом шаге. В журнале шлема 25.10.2026
+        /// одна и та же строка сингулярности напечаталась трижды: «СИНГУЛЯРНОСТЬ · Wrist · запястье»,
+        /// «SINGULARITY · wrist · wrist», «SINGULARITÄT · Handgelenk · Handgelenk».
+        /// Потребители журнальных строк спрашивают этот признак и не печатают до готовности каталога.
+        /// </summary>
+        public static bool FilesLoaded { get { return filesLoaded; } }
+
+        private static bool filesLoaded;
+
+        /// <summary>
         /// ДОГРУЗИТЬ СЛОВАРИ С УСТРОЙСТВА (Android/WebGL). Вызывается coroutine-ом из интерфейса
         /// ПОСЛЕ сборки оболочки: файлы читаются по одному, затем подписи пересобираются
         /// (событие <see cref="Changed"/>), поэтому оператор видит уже переведённый интерфейс.
@@ -483,6 +496,7 @@ namespace KazistovVvUI
             }
 
             asyncRunning = false;
+            filesLoaded = true;                 // §42/Д19: каталог готов — журнальным строкам можно печатать
             fileCount += loaded;
             loadStatus = "языков: " + langs.Count + " · файлов прочитано: " + fileCount +
                          " · с устройства: " + loaded + (failed > 0 ? " (не прочитано: " + failed + ")" : "") +
