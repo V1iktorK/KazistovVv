@@ -58,7 +58,7 @@ namespace KazistovVvXr
         private Transform head;
         private KvXrUiPointer pointer;
         private float lastSnapTurnTime = -10f;
-        private bool triggerWasDown;
+        private bool teleportStickWasDown;
         private GameObject teleportMarker;
         private bool teleportValid;
         private Vector3 teleportPoint;
@@ -149,29 +149,28 @@ namespace KazistovVvXr
 
         private void HandleTeleport(Quaternion rigYaw)
         {
-            // ПОКА ЛУЧ НАВЕДЁН НА ПАНЕЛЬ — НЕ ТЕЛЕПОРТИРОВАТЬ (исправлено 23.10.2026).
+            // ТЕЛЕПОРТ НА ЛЕВОМ СТИКЕ (стандарт Quest/PICO, 29.10.2026).
+            // Владелец: «кнопки под указательный палец + лазеры заняты под зелёный и красный лазер».
+            // Курок теперь ТОЛЬКО для лазеров (красный/зелёный), телепорт — на стике:
+            //   • толкнуть левый стик вперёд — показать метку телепорта;
+            //   • отпустить стик — перенестись на метку.
+            // Это стандарт Quest/PICO: стик = передвижение, курок = действие/выбор.
             //
-            // Курок в шлеме один: он и нажимает иконку, и подтверждает телепорт. До этой правки
-            // каждое нажатие по панели УВОДИЛО ОПЕРАТОРА с места: корень рига смещался, и всё, что
-            // считается от него (кисти, стоящая на месте панель), уезжало. Владелец видел это как
-            // «иконки перестали быть прикреплены к контроллеру» и «рук не видно». Правило уже
-            // описано в шапке `KvXrUiPointer` («при наведении на интерфейс телепорт молчит») —
-            // здесь оно наконец реализовано.
+            // ПОКА ЛУЧ НАВЕДЁН НА ПАНЕЛЬ — НЕ ТЕЛЕПОРТИРОВАТЬ (правило §37).
             if (pointer == null) pointer = UnityEngine.Object.FindAnyObjectByType<KvXrUiPointer>();
             if (pointer != null && pointer.AimingAtUi)
             {
                 SetMarker(false, Vector3.zero, rigYaw);
-                triggerWasDown = KvXrInputSource.RayTrigger >= triggerThreshold;
+                teleportStickWasDown = false;
                 return;
             }
 
-            // §37: РУКА ТЕЛЕПОРТА — ТА ЖЕ, ЧТО У ЛУЧА. Иначе при смене руки луча курок одной руки
-            // нажимал бы иконку, а курок другой — телепортировал: ровно дефект «одно нажатие — два
-            // действия», который в §27 лечили на десктопе.
+            // РУКА ТЕЛЕПОРТА — ТА ЖЕ, ЧТО У ЛУЧА (§37).
             bool haveAim = KvXrInputSource.TryRayPose(out Vector3 handPos, out Quaternion handRot);
             if (!haveAim)
             {
                 SetMarker(false, Vector3.zero, rigYaw);
+                teleportStickWasDown = false;
                 return;
             }
 
@@ -181,12 +180,16 @@ namespace KazistovVvXr
                 out Vector3 ground, out Vector3 normal);
 
             teleportPoint = ground;
-            SetMarker(teleportValid, ground, rigYaw, normal);
 
-            bool triggerDown = KvXrInputSource.RayTrigger >= triggerThreshold;
-            if (triggerDown && !triggerWasDown && teleportValid)
+            // ЛЕВЫЙ СТИК: толкнуть вперёд — показать метку, отпустить — телепорт.
+            Vector2 stick = KvXrInputSource.LeftStick;
+            bool stickDown = stick.y > 0.5f;   // порог «вперёд»
+            SetMarker(stickDown && teleportValid, ground, rigYaw, normal);
+
+            // Телепорт при ОТПУСКАНИИ стика (как в Quest: толкнул → отпустил → перенёсся).
+            if (!stickDown && teleportStickWasDown && teleportValid)
                 TeleportTo(ground);
-            triggerWasDown = triggerDown;
+            teleportStickWasDown = stickDown;
         }
 
         /// <summary>

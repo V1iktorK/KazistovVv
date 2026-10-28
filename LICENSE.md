@@ -6,33 +6,70 @@
 
 **Соавтор: Ametist298.**
 
-Любые права на программное обеспечение **KazistovVv**, включая исключительное право на модификацию и распространение, принадлежат указанным авторам.
+Данное программное обеспечение **KazistovVv** распространяется на условиях
+**Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International (CC BY-NC-ND 4.0)**
+с дополнительными ограничениями, указанными ниже.
+
+Официальный текст лицензии CC BY-NC-ND 4.0:
+<https://creativecommons.org/licenses/by-nc-nd/4.0/deed.ru>
 
 ### 1. Разрешённые действия
 
-Вам разрешается просматривать, скачивать, клонировать репозиторий и запускать данное программное обеспечение исключительно в **личных, некоммерческих целях**.
+Вам разрешается:
+
+1. **Копировать** и распространять исходный код и материалы репозитория в неизменном виде
+   с сохранением настоящей лицензии и указанием авторов.
+2. **Запускать** и использовать программное обеспечение в личных, некоммерческих целях.
+3. **Изучать** исходный код и материалы для образовательных целей.
 
 ### 2. Запрещённые действия
 
 Без предварительного письменного разрешения правообладателя вам запрещается:
 
-1. **Производные работы.** Изменять, адаптировать, модифицировать, переводить или создавать производные произведения на основе данного ПО (включая создание вилок, форков и «переосмысленных» версий).
-2. **Распространение.** Распространять, публиковать, продавать, сублицензировать, передавать по арендным или хостинговым схемам копии ПО или производных произведений третьим лицам.
-3. **Коммерция.** Использовать ПО или его производные произведения в коммерческих целях любого рода.
-4. **Публичная демонстрация.** Публично демонстрировать ПО, включая трансляции, выставки, демонстрации на мероприятиях и публичный показ.
-5. **Имя и название.** Использовать имена «Виктор К.», «V1iktorK», «Ametist298» и название «KazistovVv» в собственных материалах, если это может ввести третьих лиц в заблуждение относительно принадлежности ПО или его одобрения авторами.
-6. **Обход защит.** Обходить технические средства защиты, ограничивающие доступ к функциям ПО, и выполнять обратный инжиниринг (реверс-инжиниринг) в той мере, в какой это запрещено применимым законодательством.
+1. **Производные работы.** Изменять, адаптировать, модифицировать, переводить или создавать
+   производные произведения на основе данного ПО (включая создание вилок, форков
+   и «переосмысленных» версий).
+2. **Распространение изменённых версий.** Распространять, публиковать, продавать,
+   сублицензировать, передавать по арендным или хостинговым схемам копии ПО
+   или производных произведений третьим лицам.
+3. **Коммерция.** Использовать ПО или его производные произведения в коммерческих целях
+   любого рода, включая (но не ограничиваясь) продажу, рекламу, монетизацию,
+   использование в составе коммерческих продуктов или услуг.
+4. **Публичная демонстрация.** Публично демонстрировать ПО, включая трансляции, выставки,
+   демонстрации на мероприятиях и публичный показ.
+5. **Имя и название.** Использовать имена «Виктор К.», «V1iktorK», «Ametist298»
+   и название «KazistovVv» в собственных материалах, если это может ввести третьих лиц
+   в заблуждение относительно принадлежности ПО или его одобрения авторами.
+6. **Обход защит.** Обходить технические средства защиты, ограничивающие доступ к функциям ПО,
+   и выполнять обратный инжиниринг (реверс-инжиниринг) в той мере, в какой это запрещено
+   применимым законодательством.
 
-### 3. Сторонние компоненты
+### 3. Условия атрибуции
 
-Настоящая лицензия распространяется только на те составляющие репозитория, которые принадлежат авторам. Сторонние компоненты, входящие в репозиторий (в том числе пакеты ассетов в `Assets/`, такие как Premises, TABLES, Robots, Samples, модели, текстуры, шрифты, а также пакеты Unity Engine, XR и прочие библиотеки), не подпадают под настоящую лицензию и используются на условиях соответствующих лицензий их правообладателей.
+При любом разрешённом использовании вы обязаны:
 
-### 4. Прочие условия
+1. Указывать авторство: **«Виктор К. (V1iktorK)»** и соавтора **«Ametist298»**.
+2. Сохранять ссылку на настоящую лицензию.
+3. Отмечать внесённые изменения (если таковые разрешены отдельным соглашением).
 
-1. ПО предоставляется **«как есть»** (AS IS), без каких-либо гарантий, явных или подразумеваемых.
+### 4. Сторонние компоненты
+
+Настоящая лицензия распространяется только на те составляющие репозитория,
+которые принадлежат авторам. Сторонние компоненты, входящие в репозиторий
+(в том числе пакеты ассетов в `Assets/`, такие как Premises, TABLES, Robots, Samples,
+модели, текстуры, шрифты, а также пакеты Unity Engine, XR и прочие библиотеки),
+не подпадают под настоящую лицензию и используются на условиях соответствующих
+лицензий их правообладателей.
+
+### 5. Прочие условия
+
+1. ПО предоставляется **«как есть»** (AS IS), без каких-либо гарантий, явных
+   или подразумеваемых.
 2. Настоящая лицензия регулируется законодательством **Российской Федерации**.
-3. Любые права, прямо не предоставленные настоящей лицензией, сохраняются за правообладателями.
-4. Для получения разрешения на использование сверх указанных в разделе 1 действий обратитесь к правообладателю: **[контакт для лицензирования]**.
+3. Любые права, прямо не предоставленные настоящей лицензией, сохраняются
+   за правообладателями.
+4. Для получения разрешения на использование сверх указанных в разделе 1 действий
+   обратитесь к правообладателю.
 
 ---
 
@@ -42,30 +79,46 @@
 
 **Co-author: Ametist298.**
 
-All rights to the **KazistovVv** software, including the exclusive rights to modify and distribute it, belong to the authors named above.
+This software **KazistovVv** is licensed under
+**Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International (CC BY-NC-ND 4.0)**
+with additional restrictions specified above.
 
-### 1. Permitted actions
+Official CC BY-NC-ND 4.0 license text:
+<https://creativecommons.org/licenses/by-nc-nd/4.0/>
 
-You are permitted to view, download, clone the repository, and run this software **solely for personal, non-commercial purposes**.
+### 1. You are free to:
 
-### 2. Prohibited actions
+1. **Copy and redistribute** the source code and materials in their original form,
+   preserving this license and crediting the authors.
+2. **Run and use** the software for personal, non-commercial purposes.
+3. **Study** the source code and materials for educational purposes.
 
-Unless you obtain prior written permission from the copyright holder, you may not:
+### 2. Under the following terms:
 
-1. **Derivative works.** Modify, adapt, translate, or create derivative works based on this software (including forking or "reimagined" versions).
-2. **Distribution.** Distribute, publish, sell, sublicense, or otherwise make copies of the software or derivative works available to third parties, including through rental or hosting arrangements.
-3. **Commercial use.** Use the software or its derivative works for commercial purposes of any kind.
-4. **Public display.** Publicly display the software, including streams, exhibitions, public demonstrations, and showings.
-5. **Name and title.** Use the names "Viktor K.", "V1iktorK", "Ametist298" or the title "KazistovVv" in your own materials in any way that may mislead third parties regarding the ownership of, or endorsement of the software by its authors.
-6. **Circumvention.** Circumvent technological protection measures restricting access to the software's functionality, or perform reverse engineering to the extent that applicable law prohibits it.
+- **Attribution** — You must give appropriate credit, provide a link to the license,
+  and indicate if changes were made.
+- **NonCommercial** — You may not use the material for commercial purposes.
+- **NoDerivatives** — If you remix, transform, or build upon the material,
+  you may not distribute the modified material.
 
-### 3. Third-party components
+### 3. Additional restrictions:
 
-This license applies only to those parts of the repository that belong to the authors. Third-party components included in the repository (including asset packages under `Assets/` such as Premises, TABLES, Robots, Samples, models, textures, fonts, as well as Unity Engine, XR packages, and other libraries) are not covered by this license and are governed by the terms of their respective owners' licenses.
+1. **Derivative works** are prohibited without prior written permission.
+2. **Distribution of modified versions** is prohibited.
+3. **Commercial use** of any kind is prohibited.
+4. **Public demonstration** (streaming, exhibitions, public displays) is prohibited.
+5. **Using the names** "Viktor K.", "V1iktorK", "Ametist298", or "KazistovVv"
+   in a misleading manner is prohibited.
+6. **Circumventing protection measures** and reverse engineering (where prohibited by law)
+   is prohibited.
 
-### 4. General
+### 4. Third-party components
 
-1. The software is provided **"AS IS"**, without warranty of any kind, express or implied.
-2. This license is governed by the laws of the **Russian Federation**.
-3. Any rights not expressly granted by this license are reserved by the copyright holders.
-4. To obtain permission for uses beyond those in Section 1, contact the copyright holder: **[licensing contact]**.
+This license applies only to components owned by the authors.
+Third-party components (Unity packages, assets, models, textures, fonts, etc.)
+are governed by their respective licenses.
+
+### 5. Disclaimer
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
+This license is governed by the laws of the Russian Federation.

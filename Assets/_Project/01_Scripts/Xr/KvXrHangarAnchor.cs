@@ -117,6 +117,7 @@ namespace KazistovVvXr
                           " · стенды внутри зала: " + (standsInside ? "да" : "НЕТ") +
                           " · объектов ангара " + root.childCount);
             if (logOnPlace) Debug.Log(DescribeCameras());
+            if (logOnPlace) Debug.Log(DescribeRenderers(root));
 
             if (!operatorInside || !standsInside)
                 Debug.LogWarning("[KvXr] Ангар: окружение поставлено неверно — оператор или стенды " +
@@ -192,6 +193,42 @@ namespace KazistovVvXr
                 ? "поза шлема " + head.ToString("0.00")
                 : "позы шлема НЕТ");
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// ДИАГНОСТИКА РЕНДЕРЕРОВ ЗАЛА. Показывает, сколько рендереров, сколько включено,
+        /// есть ли материалы и габарит — чтобы в шлеме было видно, рендерится ли зал вообще.
+        /// </summary>
+        public static string DescribeRenderers(Transform root)
+        {
+            if (root == null) return "[KvHangar] рендереры: корень null";
+            Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+            int enabled = 0, withMaterial = 0, visible = 0;
+            Bounds bounds = new Bounds();
+            bool any = false;
+            foreach (Renderer r in renderers)
+            {
+                if (r == null) continue;
+                if (r.enabled) enabled++;
+                Material[] mats = r.sharedMaterials;
+                bool hasMat = false;
+                if (mats != null)
+                    foreach (Material m in mats)
+                        if (m != null) { hasMat = true; break; }
+                if (hasMat) withMaterial++;
+                if (r.enabled && hasMat && r.gameObject.activeInHierarchy) visible++;
+                if (r.enabled && hasMat)
+                {
+                    if (!any) { bounds = r.bounds; any = true; }
+                    else bounds.Encapsulate(r.bounds);
+                }
+            }
+            return "[KvHangar] рендереры: всего " + renderers.Length +
+                   " · включено " + enabled +
+                   " · с материалом " + withMaterial +
+                   " · видимых " + visible +
+                   (any ? " · габарит " + bounds.size.ToString("0.00") + " центр " + bounds.center.ToString("0.00") : " · габарит НЕТ") +
+                   " · детей " + root.childCount;
         }
 
         /// <summary>Имя корня зала в XR-сцене — по нему он и находится.</summary>
