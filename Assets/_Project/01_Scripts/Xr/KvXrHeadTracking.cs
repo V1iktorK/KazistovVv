@@ -101,13 +101,13 @@ namespace KazistovVvXr
                 return;
             }
 
-            // ЛЕЧЕНИЕ ТРЯСКИ (29.10.2026): поза трекинга — в ЛОКАЛЬНЫХ координатах рига,
-            // а не мировых. Камера — дочерний объект XrRig, и KvXrLocomotion двигает риг
-            // (телепорт/поворот/ход): при мировой записи два писателя конфликтовали каждый
-            // кадр — мир дёргался. Локальная запись даёт стандартное поведение TrackedPoseDriver.
-            headCamera.transform.localPosition = position;
-            headCamera.transform.localRotation = rotation;
-            LastHeadPosition = headCamera.transform.position;
+            // ЛЕЧЕНИЕ ТРЯСКИ (29.10.2026): поза трекинга трансформируется в МИРОВЫЕ координаты
+            // через риг (KvXrInputSource.TrackingOrigin), поэтому движение рига (телепорт/
+            // поворот/ход) автоматически двигает камеру — конфликта писателей нет, дрожи нет.
+            // Порядок корректен: KvXrLocomotion двигает риг в Update, здесь — LateUpdate и
+            // onBeforeRender, то есть трансформация идёт через УЖЕ сдвинутый риг.
+            headCamera.transform.SetPositionAndRotation(position, rotation);
+            LastHeadPosition = position;
             AppliedFrames++;
             Tracking = true;
 
@@ -115,9 +115,9 @@ namespace KazistovVvXr
             {
                 logged = true;
                 Debug.Log("[KvXr] Камера следует за головой: поза " + position.ToString("0.00") +
-                          " · высота " + headCamera.transform.position.y.ToString("0.00") + " м · поворот " +
+                          " · высота " + position.y.ToString("0.00") + " м · поворот " +
                           rotation.eulerAngles.ToString("0") +
-                          " (локально к ригу; в сцене не было ни TrackedPoseDriver, ни XROrigin)");
+                          " (мировая, через риг; в сцене не было ни TrackedPoseDriver, ни XROrigin)");
             }
         }
     }

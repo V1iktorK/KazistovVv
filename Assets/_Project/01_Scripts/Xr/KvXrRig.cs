@@ -49,6 +49,10 @@ namespace KazistovVvXr
             if (headCamera == null) headCamera = GetComponent<Camera>();
             if (headCamera == null) headCamera = GetComponentInChildren<Camera>();
 
+            // 29.10.2026: начало отслеживания = этот риг. Без этого позы трекинга
+            // не трансформируются в мировые — лучи бьют мимо, руки не едут с камерой.
+            KvXrInputSource.TrackingOrigin = transform;
+
             Application.targetFrameRate = targetFrameRate;
             QualitySettings.vSyncCount = 0;
 

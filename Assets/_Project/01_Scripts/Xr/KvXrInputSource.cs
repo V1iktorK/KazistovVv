@@ -47,6 +47,21 @@ namespace KazistovVvXr
         /// <summary>Голова (шлем). null — шлема нет.</summary>
         public static XRHMD Head { get { EnsureScanned(); return head; } }
 
+        /// <summary>
+        /// НАЧАЛО ОТСЛЕЖИВАНИЯ (XrRig) — через него позы трекинга переводятся в МИРОВЫЕ
+        /// координаты (29.10.2026, лечение «камера едет, а руки/лучи — нет»). Ставится ригом.
+        /// Пока не поставлен — трансформация единичная (прежнее поведение).
+        /// </summary>
+        public static Transform TrackingOrigin { get; set; }
+
+        /// <summary>Позу трекинга → мировые координаты (через риг, если он известен).</summary>
+        private static void ToWorld(ref Vector3 position, ref Quaternion rotation)
+        {
+            if (TrackingOrigin == null) return;
+            position = TrackingOrigin.TransformPoint(position);
+            rotation = TrackingOrigin.rotation * rotation;
+        }
+
         /// <summary>Правый контроллер. null — не найден.</summary>
         public static XRController Right { get { EnsureScanned(); return right; } }
 
@@ -102,6 +117,7 @@ namespace KazistovVvXr
                     {
                         position = state.position;
                         rotation = state.rotation;
+                        ToWorld(ref position, ref rotation);
                         return true;
                     }
                 }
@@ -781,13 +797,17 @@ namespace KazistovVvXr
         }
 
         /// <summary>
-        /// Поза устройства трекинга.
+        /// Поза устройства трекинга → МИРОВЫЕ координаты (через <see cref="TrackingOrigin"/>).
         ///
-        /// ПОЧЕМУ ТРИ ПУТИ, А НЕ ОДИН. Состав управляющих элементов у XR-устройств разный:
-        /// одни отдают собранную позу (`devicePose`), другие — отдельные `devicePosition`
-        /// и `deviceRotation`, третьи не выставляют признак отслеживания вообще. Если
-        /// опереться только на один вариант, на части платформ «луч просто не работает»,
-        /// и причину в шлеме не видно. Поэтому пробуем по очереди и запоминаем, что сработало.
+        /// ПОЧЕМУ ТРАНСФОРМАЦИЯ ЗДЕСЬ (29.10.2026). Позы трекинга приходят в координатах
+        /// tracking space, а мир (XrHangar, XrSceneContent) стоит в мировых. Пока риг был в нуле,
+        /// пространства совпадали и всё работало. Как только риг стал двигаться (телепорт/поворот),
+        /// лучи и руки стали бить МИМО («лазеры не упираются в текстуры»), а руки/контроллеры
+        /// перестали ехать с камерой («камера перемещается, а персонаж — нет»). Теперь все позы
+        /// трансформируются через риг — руки, лучи и камера живут в одном (мировом) пространстве.
+        ///
+        /// ПОЧЕМУ ДВЕ ПОЗЫ, А НЕ ОДНА. Поза кисти (`devicePose`) и поза указания (`pointer`)
+        /// нужны разным потребителям: панель вешается у кисти, луч идёт по указанию.
         /// </summary>
         private static bool TryPose(InputDevice device, out Vector3 position, out Quaternion rotation)
         {
@@ -804,6 +824,7 @@ namespace KazistovVvXr
                 {
                     position = state.position;
                     rotation = state.rotation;
+                    ToWorld(ref position, ref rotation);
                     return true;
                 }
             }
@@ -815,6 +836,7 @@ namespace KazistovVvXr
             {
                 position = pos.ReadValue();
                 rotation = rot.ReadValue();
+                ToWorld(ref position, ref rotation);
                 return true;
             }
 

@@ -48,7 +48,8 @@ namespace KazistovVvXr
         public bool logOnBind = true;
 
         private TrajectoryFlowController flow;
-        private bool triggerWasDown;
+        private bool leftTriggerWasDown;
+        private bool rightTriggerWasDown;
         private bool bindLogged;
         private float nextZoneLog;
 
@@ -118,19 +119,41 @@ namespace KazistovVvXr
             }
 
             bool overInterface = IsOverInterface(origin, direction);
-            float trigger = KvXrInputSource.RayTrigger;
-            bool triggerDown = trigger >= triggerThreshold;
-            // Кнопка A (стандарт Quest) — то же подтверждение, что курок, с тем же арбитражем.
+
+            // КУРКИ = ЛАЗЕРЫ (возврат назначения 29.10.2026, владелец: «кнопки под указательный
+            // палец + лазеры у нас заняты под зелёный и красный лазер - их верни назад»).
+            // Ровно как Z/X на компьютере: левый курок — красный лазер (новая точка),
+            // правый курок — зелёный (выбор траектории/фантома).
+            float leftTrigger = KvXrInputSource.LeftTrigger;
+            float rightTrigger = KvXrInputSource.RightTrigger;
+            bool leftDown = leftTrigger >= triggerThreshold;
+            bool rightDown = rightTrigger >= triggerThreshold;
+            bool leftFront = leftDown && !leftTriggerWasDown;
+            bool rightFront = rightDown && !rightTriggerWasDown;
+            leftTriggerWasDown = leftDown;
+            rightTriggerWasDown = rightDown;
+
+            bool redOn = leftFront;      // красный лазер = левый курок
+            bool greenOn = rightFront;   // зелёный лазер = правый курок
+
+            // Кнопка A (стандарт Quest) — то же подтверждение, что курок лучевой руки.
+            if (confirmRequested)
+            {
+                if (KvXrInputSource.RayHand == KvXrQuickHand.Left) redOn = true;
+                else greenOn = true;
+            }
+
             // Фронты считаются раздельно: одно нажатие = одно действие (§27).
-            bool triggerFront = triggerDown && !triggerWasDown;
-            triggerWasDown = triggerDown;
-            bool confirm = feedConfirm && (triggerFront || confirmRequested) &&
+            bool triggerFront = leftFront || rightFront || confirmRequested;
+            bool triggerDown = leftDown || rightDown;
+            bool confirm = feedConfirm && triggerFront &&
                            ShouldFeedConfirm(overInterface, triggerDown || confirmRequested);
             confirmRequested = false;
 
-            // Лазеры потока ВЫКЛЮЧЕНЫ: в шлеме свои (правый зелёный, левый красный).
+            // Лазеры потока визуально ВЫКЛЮЧЕНЫ (в шлеме свои), но флаги лазеров —
+            // это выбор действия: красный = новая точка, зелёный = подтверждение.
             flow.UpdateAim(aimPoint, aimHit && !overInterface, confirm, false,
-                           false, false, normal, aimHit);
+                           redOn, greenOn, normal, aimHit);
 
             LogBindOnce();
             LogZones();
