@@ -27,6 +27,18 @@ namespace KazistovVvXr
     /// работает и печатает высоту 1,54 м: `KvXrInputSource.TryHeadPose`. Своих вычислений позы
     /// здесь нет — второго источника истины не появляется.
     ///
+    /// ЛЕЧЕНИЕ ТРЯСКИ (29.10.2026, живой шлем: «всё равно всё трясётся»). Две причины:
+    ///   1) ПОЗА ПИСАЛАСЬ В МИРОВЫЕ КООРДИНАТЫ (`SetPositionAndRotation`), а камера — дочерний
+    ///      объект рига `XrRig`, который `KvXrLocomotion` двигает при телепорте/повороте/ходе.
+    ///      Два писателя конфликтовали каждый кадр: риг сдвигал камеру, мировая запись откатывала
+    ///      её обратно — мир дёргался. Теперь поза пишется в ЛОКАЛЬНЫЕ координаты (как у
+    ///      TrackedPoseDriver по умолчанию): движение рига двигает камеру автоматически,
+    ///      голова следует за трекингом — конфликта нет.
+    ///   2) ПОЗА ПРИМЕНЯЛАСЬ В `LateUpdate`, а рендер кадра уже мог идти: картинка отставала
+    ///      на кадр и «дрожала» при быстрых поворотах головы. Теперь поза применяется ещё и в
+    ///      `Application.onBeforeRender` — самое свежее место до отрисовки (то, что делает
+    ///      стандартный TrackedPoseDriver).
+    ///
     /// ЧЕГО ЭТО НЕ ДЕЛАЕТ: не трогает риг, не меняет масштаб мира, не двигает столы и зал.
     /// Если позы нет (трекинг не готов) — НЕ ПЕРЕПИСЫВАЕТ камеру, чтобы не поставить её в ноль.
     /// </summary>
@@ -58,7 +70,24 @@ namespace KazistovVvXr
             if (headCamera == null) headCamera = GetComponentInChildren<Camera>();
         }
 
+        void OnEnable()
+        {
+            // ЛЕЧЕНИЕ ТРЯСКИ (29.10.2026): поза применяется и перед рендером — картинка
+            // не отстаёт на кадр при поворотах головы (стандарт TrackedPoseDriver).
+            Application.onBeforeRender += ApplyFromTracking;
+        }
+
+        void OnDisable()
+        {
+            Application.onBeforeRender -= ApplyFromTracking;
+        }
+
         void LateUpdate()
+        {
+            ApplyFromTracking();
+        }
+
+        private void ApplyFromTracking()
         {
             if (headCamera == null) return;
 
@@ -72,8 +101,13 @@ namespace KazistovVvXr
                 return;
             }
 
-            headCamera.transform.SetPositionAndRotation(position, rotation);
-            LastHeadPosition = position;
+            // ЛЕЧЕНИЕ ТРЯСКИ (29.10.2026): поза трекинга — в ЛОКАЛЬНЫХ координатах рига,
+            // а не мировых. Камера — дочерний объект XrRig, и KvXrLocomotion двигает риг
+            // (телепорт/поворот/ход): при мировой записи два писателя конфликтовали каждый
+            // кадр — мир дёргался. Локальная запись даёт стандартное поведение TrackedPoseDriver.
+            headCamera.transform.localPosition = position;
+            headCamera.transform.localRotation = rotation;
+            LastHeadPosition = headCamera.transform.position;
             AppliedFrames++;
             Tracking = true;
 
@@ -81,10 +115,9 @@ namespace KazistovVvXr
             {
                 logged = true;
                 Debug.Log("[KvXr] Камера следует за головой: поза " + position.ToString("0.00") +
-                          " · высота " + position.y.ToString("0.00") + " м · поворот " +
+                          " · высота " + headCamera.transform.position.y.ToString("0.00") + " м · поворот " +
                           rotation.eulerAngles.ToString("0") +
-                          " (в сцене не было ни TrackedPoseDriver, ни XROrigin — мир рисовался " +
-                          "с неподвижной точки на полу)");
+                          " (локально к ригу; в сцене не было ни TrackedPoseDriver, ни XROrigin)");
             }
         }
     }
