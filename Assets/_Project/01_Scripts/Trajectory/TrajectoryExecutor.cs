@@ -112,11 +112,58 @@ public class TrajectoryExecutor : MonoBehaviour
             Debug.LogWarning("[Safety] Аварийный стоп: " + SafetyGate.Describe(reason));
     }
 
+    /// <summary>
+    /// ПРОВЕРКА СТОЯЩЕЙ ПОЗЫ НА ПАУЗЕ (создано 30.10.2026, S44).
+    ///
+    /// Робот не двигается, но обстановка вокруг может измениться: оператор пододвинул стол,
+    /// поставил манекен, включил ограничения. На паузе это надо замечать — иначе первое, что
+    /// произойдёт после снятия паузы, будет движение в ставшую опасной зону.
+    ///
+    /// ЧЕГО ЗДЕСЬ НЕТ: проверки скорости. Стоящий робот её не имеет.
+    /// </summary>
+    private void CheckStandingPose()
+    {
+        if (gate == null || validator == null || !validator.Ready || active == null) return;
+
+        int last = active.Path != null ? active.Path.Length - 1 : -1;
+        if (last < 0) return;
+        double[] q = active.Path[Mathf.Clamp(index, 0, last)];
+
+        float clearance = validator.ClearanceAt(q, world, out _, out _);
+        SafetyReason reason;
+        if (!gate.ApproveStep(q, clearance, playhead, validator, out reason))
+        {
+            Stop(reason);
+        }
+    }
+
     private void Update()
     {
         if (!running || active == null) return;
-        if (Paused) { gate?.NotifyState(); return; }   // пауза: робот стоит, траектория не завершена
-        if (!running || active == null) return;
+
+        // ПАУЗА — НЕ «ОТДЫХ ОТ ПРОВЕРОК» (исправлено 30.10.2026, S44).
+        //
+        // ЧТО БЫЛО. На паузе `Update` выходил СРАЗУ после `NotifyState()`, то есть до расчёта
+        // зазора и до `ApproveStep`. Робот стоит — но никто не следит, что он стоит в безопасном
+        // месте.
+        //
+        // ЧЕМ ЭТО ПЛОХО, и это не теория: аварийный останов В САМОМ ПРОЕКТЕ СТАВИТ ПАУЗУ
+        // (`KvSafetyTools.StopMotion` → `features.EmergencyStop()` + `Motion.SetPaused(true)`).
+        // То есть после аварии робот оказывается в состоянии, где контроль зазора и лимитов
+        // выключен. Если в это время оператор поправит обстановку, пододвинет стол или манекен —
+        // система об этом не узнает: проверок нет, пока не снимут паузу.
+        //
+        // ЧТО СТАЛО. Позиция НЕ меняется (playhead стоит), но проверка выполняется: зазор и лимиты
+        // считаются для текущей позы. Отказ обрабатывается так же, как в движении — аварийным
+        // стопом с ПРИЧИНОЙ. Если на паузе стало небезопасно, оператор увидит это сразу, а не
+        // после снятия паузы, когда робот уже поедет.
+        if (Paused)
+        {
+            gate?.NotifyState();
+            CheckStandingPose();
+            return;
+        }
+
         gate?.NotifyState(); // живые данные для watchdog
 
         playhead += Time.deltaTime * Mathf.Max(0.05f, timeScale);
