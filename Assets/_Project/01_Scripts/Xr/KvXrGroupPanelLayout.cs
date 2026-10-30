@@ -516,6 +516,22 @@ namespace KazistovVvXr
             pointMeters = Vector2.zero;
             distanceAlongRayMeters = 0f;
 
+            // ОТСЕВ НЕЧИСЕЛ (добавлено 30.10.2026, S44 — тот же класс, что найден в
+            // KvXrControllerVisuals и KvXrGestures).
+            //
+            // ПОЧЕМУ ПРОВЕРКИ `sqrMagnitude < 1e-8f` НИЖЕ НЕДОСТАТОЧНЫ: для вектора с NaN
+            // `sqrMagnitude` даёт NaN, а сравнение `NaN < 1e-8f` — это `false`, то есть вектор
+            // ПРОХОДИТ как нормальный. Дальше пересечение посчитается с NaN, и `distance <= 0f`
+            // тоже даст `false` — функция вернёт «попадание» с мусорными координатами. Луч нажал бы
+            // иконку, на которую оператор не смотрит.
+            //
+            // `rayOrigin` не проверялся ВООБЩЕ: он не участвует в `sqrMagnitude`, а попадает прямо
+            // в `panelOrigin - rayOrigin`.
+            if (IsNotFinite(rayOrigin) || IsNotFinite(rayDirection) ||
+                IsNotFinite(panelOrigin) || IsNotFinite(panelNormal) ||
+                IsNotFinite(panelRight) || IsNotFinite(panelUp))
+                return false;
+
             if (panelNormal.sqrMagnitude < 1e-8f) return false;
             if (rayDirection.sqrMagnitude < 1e-8f) return false;
             if (panelRight.sqrMagnitude < 1e-8f || panelUp.sqrMagnitude < 1e-8f) return false;
@@ -540,6 +556,12 @@ namespace KazistovVvXr
             return true;
         }
 
+        /// <summary>Есть ли в векторе NaN или бесконечность (для отсева нечисловых данных).</summary>
+        private static bool IsNotFinite(Vector3 v)
+        {
+            return float.IsNaN(v.x) || float.IsNaN(v.y) || float.IsNaN(v.z) ||
+                   float.IsInfinity(v.x) || float.IsInfinity(v.y) || float.IsInfinity(v.z);
+        }
         /// <summary>
         /// ПОПАДАНИЕ В ИКОНКУ: номер ближайшей иконки (или −1). Дополнительно возвращает
         /// расстояние от центра иконки и дальность вдоль луча — обе в метрах: по ним пишется
