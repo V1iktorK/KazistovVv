@@ -139,6 +139,16 @@ namespace KazistovVvFeatures
             Companion = new KvCompanionServer();
             Voice = new KvVoiceService();
             Hands = new KvHandTrackingService();
+
+            // ПОДКЛЮЧИТЬ КИСТИ ИЗ OpenXR К СЕРВИСУ ЖЕСТОВ (30.10.2026, S44, пункт 5.23).
+            //
+            // ДО ЭТОГО позы суставов приходили в `Hands` ТОЛЬКО из диагностики (`DshStage4Diag`),
+            // то есть в собранном приложении распознавание жестов работало вхолостую: логика готова,
+            // данных нет. Владелец видел кисти, но жесты не срабатывали — и причину найти было
+            // нельзя, потому что ни ошибки, ни предупреждения не было.
+            //
+            // Теперь `KvXrHands` каждый кадр передаёт точки сюда через этот мост.
+            KazistovVvXr.KvXrHands.GestureSink = Hands;
             Eyes = new KvEyeTrackingService();
             Foveated = new KvFoveatedRendering();
             Script = new KvScriptEngine();

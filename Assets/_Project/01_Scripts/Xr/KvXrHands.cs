@@ -85,6 +85,26 @@ namespace KazistovVvXr
         /// <summary>Подсистема кистей работает (для журнала и отчёта).</summary>
         public static bool SubsystemRunning { get { return subsystem != null && subsystem.running; } }
 
+        /// <summary>
+        /// МОСТ К СЕРВИСУ ЖЕСТОВ (добавлено 30.10.2026, S44 — пункт 5.23 плана).
+        ///
+        /// ЧТО БЫЛО. `KvXrHands` читал кисти из OpenXR и РИСОВАЛ их, но НИКОМУ не передавал.
+        /// Сервис жестов (`KvHandTrackingService`) получал позы суставов ТОЛЬКО из диагностики
+        /// (`DshStage4Diag`) — то есть в сборке жесты не работали вообще: логика распознавания
+        /// готова, а данных у неё нет.
+        ///
+        /// Владелец просил именно обратное: «кладу контроллеры и вижу свои кисти, и только потом —
+        /// жесты». Кисти видно было, жесты — нет.
+        ///
+        /// ЧТО СТАЛО. Каждый кадр, где кисть отслеживается, её точки передаются в сервис через
+        /// `PushJoint`. Это и есть недостающий адаптер.
+        ///
+        /// ПОЧЕМУ СТАТИЧЕСКОЕ ПОЛЕ. Компонент создаётся через `Ensure`, и экземпляр может
+        /// пересоздаваться; сервис же живёт в хабе и один. Статическая ссылка переживает
+        /// пересоздание компонента и не требует правки сцены.
+        /// </summary>
+        public static KazistovVvFeatures.KvHandTrackingService GestureSink { get; set; }
+
         /// <summary>Найти или создать компонент (идемпотентно). Сцена при этом не меняется.</summary>
         public static KvXrHands Ensure(Transform parent, Camera camera)
         {
@@ -123,6 +143,38 @@ namespace KazistovVvXr
             KvXrHandSource.Provider = null;
         }
 
+        /// <summary>
+        /// ПЕРЕДАТЬ КИСТЬ В СЕРВИС ЖЕСТОВ (создано 30.10.2026, S44).
+        ///
+        /// ПОЧЕМУ ОТДЕЛЬНЫМ МЕТОДОМ: это единственное место, где форматы «кисть из OpenXR» и
+        /// «сустав для сервиса» соприкасаются. Если формат поменяется, править надо здесь, а не в
+        /// трёх местах вызова.
+        ///
+        /// КАКИЕ ТОЧКИ ПЕРЕДАЮТСЯ. Сервис знает шесть: запястье и кончики пяти пальцев — ровно
+        /// столько, сколько нужно для распознавания (щипок, свайп, горсть). Передавать все 26
+        /// суставов незачем: лишняя работа на каждом кадре, а распознавание их не использует.
+        ///
+        /// ОТСЕВ НЕЧИСЛА. `KvGestureMath.IsUsable` уже проверяет кадр, но здесь данные уходят в
+        /// ДРУГОЙ сервис — и он должен получить гарантированно числовые точки (урок E-21).
+        /// </summary>
+        private static void FeedGestures(KvHandFrame frame, bool isTracked, KvXrQuickHand side)
+        {
+            if (!isTracked || GestureSink == null) return;
+            if (!frame.valid) return;
+            if (!KvGestureMath.IsUsable(frame)) return;
+
+            // Сторона передаётся ЯВНО: в самом кадре `KvHandFrame` её нет (он описывает геометрию,
+            // а не то, чья это рука). Так надёжнее, чем угадывать по координатам.
+            int hand = side == KvXrQuickHand.Left ? 0 : 1;
+
+            GestureSink.PushJoint(hand, KazistovVvFeatures.KvHandTrackingService.Wrist, frame.wrist);
+            GestureSink.PushJoint(hand, KazistovVvFeatures.KvHandTrackingService.ThumbTip, frame.thumbTip);
+            GestureSink.PushJoint(hand, KazistovVvFeatures.KvHandTrackingService.IndexTip, frame.indexTip);
+            GestureSink.PushJoint(hand, KazistovVvFeatures.KvHandTrackingService.MiddleTip, frame.middleTip);
+            GestureSink.PushJoint(hand, KazistovVvFeatures.KvHandTrackingService.RingTip, frame.ringTip);
+            GestureSink.PushJoint(hand, KazistovVvFeatures.KvHandTrackingService.LittleTip, frame.littleTip);
+        }
+
         void Update()
         {
             if (subsystem == null && Time.realtimeSinceStartup >= nextSubsystemTry)
@@ -137,6 +189,18 @@ namespace KazistovVvXr
 
             tracked[1] = TryReadFrame(KvXrQuickHand.Right, out right);
             tracked[0] = TryReadFrame(KvXrQuickHand.Left, out left);
+
+            // ПЕРЕДАТЬ КИСТИ В СЕРВИС ЖЕСТОВ (30.10.2026, S44, пункт 5.23).
+            //
+            // ДО ЭТОГО позы суставов приходили в сервис ТОЛЬКО из диагностики, то есть в собранном
+            // приложении у распознавания жестов не было данных вообще. Кисти рисовались, жесты
+            // молчали.
+            //
+            // Передача идёт КАЖДЫЙ КАДР, где кисть отслеживается: сервис сам решает, что с этими
+            // точками делать (жест, нажатие, ничего). Если кисть пропала — НЕ передаём ничего:
+            // сервис увидит отсутствие данных по времени последнего обновления и сбросит жест.
+            FeedGestures(right, tracked[1], KvXrQuickHand.Right);
+            FeedGestures(left, tracked[0], KvXrQuickHand.Left);
 
             if (drawJoints)
             {
