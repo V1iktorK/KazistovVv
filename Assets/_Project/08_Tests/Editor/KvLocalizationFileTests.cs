@@ -253,5 +253,84 @@ namespace KazistovVvTests
             Assert.AreEqual(0, bad.Count,
                 "у этих строк не семь языков: " + string.Join(", ", bad.ToArray()));
         }
+
+        // ============================================================ 3. ШРИФТ CJK (30.10.2026)
+        //
+        // ЗАЧЕМ. Для zh/ja интерфейс берёт СИСТЕМНЫЙ шрифт с CJK-глифами: во встроенном
+        // LegacyRuntime.ttf их нет, и текст превращается в квадраты. Правило выбора шрифта жило
+        // внутри цикла и нигде не проверялось — ошибка в нём означала бы «шрифт не найден» при
+        // живом шрифте на машине. Теперь правило — чистая функция, и оно проверяется здесь.
+
+        /// <summary>
+        /// ПРАВИЛО ВЫБОРА CJK-ШРИФТА УЗНАЁТ НАСТОЯЩИЕ ИМЕНА и НЕ УЗНАЁТ посторонние.
+        /// Проверяются имена, которые реально встречаются на Windows, macOS и Linux.
+        /// </summary>
+        [Test]
+        public void CjkFontRule_RecognisesRealFontNames()
+        {
+            string[] cjk =
+            {
+                "Microsoft YaHei UI", "Microsoft YaHei", "Meiryo UI", "Yu Gothic", "MS Gothic",
+                "SimHei", "SimSun", "Noto Sans CJK SC", "Noto Sans CJK JP", "Source Han Sans SC",
+                "MS Mincho", "FangSong"
+            };
+            foreach (string name in cjk)
+            {
+                Assert.IsTrue(KvLoc.LooksLikeCjkFont(name),
+                    "шрифт «" + name + "» обязан считаться CJK — иначе на этом языке интерфейс " +
+                    "покажет квадраты");
+            }
+
+            string[] notCjk = { "Arial", "Times New Roman", "Segoe UI", "Consolas", "", null };
+            foreach (string name in notCjk)
+            {
+                Assert.IsFalse(KvLoc.LooksLikeCjkFont(name),
+                    "«" + (name ?? "null") + "» НЕ CJK-шрифт, но правило его приняло — тогда " +
+                    "китайский текст будет квадратами при «найденном» шрифте");
+            }
+        }
+
+        /// <summary>
+        /// ПОРЯДОК ПРЕДПОЧТЕНИЯ: универсальный китайский шрифт идёт РАНЬШЕ японского Gothic.
+        ///
+        /// ПОЧЕМУ. `MS Gothic` даёт японские формы иероглифов для китайского текста — носитель
+        /// это замечает сразу. Поэтому `Microsoft YaHei` обязан стоять в списке выше `MS Gothic`;
+        /// если кто-то переставит строки, тест назовёт это.
+        /// </summary>
+        [Test]
+        public void CjkFontCandidates_PreferUniversalChineseFont()
+        {
+            var list = new List<string>(KvLoc.CjkFontCandidates);
+            int yahei = list.IndexOf("Microsoft YaHei UI");
+            int gothic = list.IndexOf("MS Gothic");
+
+            Assert.GreaterOrEqual(yahei, 0, "в списке нет Microsoft YaHei UI — основного CJK-шрифта Windows");
+            Assert.GreaterOrEqual(gothic, 0, "в списке нет MS Gothic — запасного японского шрифта");
+            Assert.Less(yahei, gothic,
+                "Microsoft YaHei обязан стоять ВЫШЕ MS Gothic: иначе китайский текст получит " +
+                "японские формы иероглифов");
+            Assert.Greater(list.Count, 5, "список шрифтов подозрительно короткий: " + list.Count);
+        }
+
+        /// <summary>
+        /// НА РУССКОМ CJK-ШРИФТ НЕ НУЖЕН. Проверка дешёвая, но ловит регресс, при котором
+        /// интерфейс начнёт тянуть тяжёлый системный шрифт там, где хватает встроенного.
+        /// </summary>
+        [Test]
+        public void RussianDoesNotRequireCjkFont()
+        {
+            string previous = KvLoc.CurrentCode;
+            try
+            {
+                KvLoc.SetLanguage("ru");
+                Assert.IsFalse(KvLoc.NeedsCjk, "русскому языку CJK-шрифт не нужен");
+                KvLoc.SetLanguage("zh");
+                Assert.IsTrue(KvLoc.NeedsCjk, "китайскому языку CJK-шрифт ОБЯЗАТЕЛЕН");
+            }
+            finally
+            {
+                KvLoc.SetLanguage(previous);
+            }
+        }
     }
 }

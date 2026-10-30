@@ -329,6 +329,53 @@ namespace KazistovVvUI
         }
 
         /// <summary>
+        /// ИМЕНА СИСТЕМНЫХ ШРИФТОВ, ПОДХОДЯЩИХ ДЛЯ CJK, ПО ПОРЯДКУ ПРЕДПОЧТЕНИЯ
+        /// (вынесено 30.10.2026, S44, чтобы порядок проверялся тестом, а не глазами).
+        ///
+        /// ПОЧЕМУ ПОРЯДОК ВАЖЕН. Первым идёт `Microsoft YaHei UI` — он есть на Windows и содержит
+        /// и китайские, и японские глифы. `MS Gothic` стоит ниже: он даёт ЯПОНСКИЕ формы для
+        /// китайского текста (иероглифы отличаются, и носитель это замечает сразу).
+        /// </summary>
+        public static readonly string[] CjkFontCandidates =
+        {
+            "Microsoft YaHei UI", "Microsoft YaHei", "Microsoft JhengHei",
+            "Meiryo UI", "Meiryo", "Yu Gothic UI", "Yu Gothic", "MS Gothic", "MS UI Gothic",
+            "SimHei", "SimSun", "Noto Sans CJK SC", "Noto Sans CJK JP", "Source Han Sans SC",
+            "Arial Unicode MS"
+        };
+
+        /// <summary>
+        /// ПОДХОДИТ ЛИ УСТАНОВЛЕННЫЙ ШРИФТ ДЛЯ CJK — по имени (чистая функция, проверяется тестом).
+        ///
+        /// ЗАЧЕМ ОТДЕЛЬНО. Если сборка имён не дала шрифта, код перебирает ВСЕ установленные и
+        /// берёт первое «похожее». Раньше это правило жило внутри цикла и нигде не проверялось:
+        /// ошибка в нём означала бы «шрифт не найден» при живом шрифте на машине.
+        /// </summary>
+        public static bool LooksLikeCjkFont(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return false;
+            // ПРАВИЛО ЛОВИТ ВСЕ СЕМЕЙСТВА, КОТОРЫЕ РЕАЛЬНО ВСТРЕЧАЮТСЯ (поймано тестом S44:
+            // «Meiryo UI» не подходил ни под одно условие, хотя это штатный японский шрифт
+            // Windows — и интерфейс на японском показывал бы квадраты при живом шрифте).
+            return name.IndexOf("Gothic", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   name.IndexOf("Ming", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   name.IndexOf("Mincho", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   name.IndexOf("Meiryo", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   name.IndexOf("Hei", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   name.IndexOf("Sun", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   name.IndexOf("Song", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   name.IndexOf("YaHei", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   name.IndexOf("Fang", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   name.IndexOf("Kai", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   name.IndexOf("Hiragino", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   name.IndexOf("Noto Sans CJK", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   name.IndexOf("Noto Sans JP", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   name.IndexOf("Noto Sans SC", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   name.IndexOf("Source Han", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   name.IndexOf("WenQuanYi", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>
         /// Шрифт интерфейса с учётом языка: для китайского/японского берётся системный шрифт
         /// с CJK-глифами (встроенный LegacyRuntime.ttf их не содержит — были бы «квадратики»).
         /// </summary>
@@ -338,14 +385,7 @@ namespace KazistovVvUI
             if (!NeedsCjk) return BuiltinFont();
             if (cjkFont != null) return cjkFont;
 
-            string[] candidates =
-            {
-                "Microsoft YaHei UI", "Microsoft YaHei", "Microsoft JhengHei",
-                "Meiryo UI", "Meiryo", "Yu Gothic UI", "Yu Gothic", "MS Gothic", "MS UI Gothic",
-                "SimHei", "SimSun", "Noto Sans CJK SC", "Noto Sans CJK JP", "Source Han Sans SC",
-                "Arial Unicode MS"
-            };
-            cjkFont = UnityEngine.Font.CreateDynamicFontFromOSFont(candidates, Mathf.Max(12, size));
+            cjkFont = UnityEngine.Font.CreateDynamicFontFromOSFont(CjkFontCandidates, Mathf.Max(12, size));
             if (cjkFont != null)
             {
                 cjkFontName = cjkFont.name;
@@ -358,12 +398,7 @@ namespace KazistovVvUI
             {
                 foreach (string n in installed)
                 {
-                    if (string.IsNullOrEmpty(n)) continue;
-                    if (n.IndexOf("Gothic", StringComparison.OrdinalIgnoreCase) < 0 &&
-                        n.IndexOf("Ming", StringComparison.OrdinalIgnoreCase) < 0 &&
-                        n.IndexOf("Hei", StringComparison.OrdinalIgnoreCase) < 0 &&
-                        n.IndexOf("Song", StringComparison.OrdinalIgnoreCase) < 0 &&
-                        n.IndexOf("YaHei", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    if (!LooksLikeCjkFont(n)) continue;
                     cjkFont = UnityEngine.Font.CreateDynamicFontFromOSFont(n, Mathf.Max(12, size));
                     if (cjkFont != null)
                     {
@@ -374,10 +409,28 @@ namespace KazistovVvUI
                 }
             }
 
-            Debug.LogWarning("[KvLoc] системный шрифт с CJK-глифами не найден — " +
-                             "китайский/японский текст может отображаться квадратами");
+            // ЧЕСТНАЯ СТРОКА О КВАДРАТАХ (30.10.2026). Раньше было только предупреждение «может
+            // отображаться квадратами». Теперь в строке ЯЗЫК и ЧИСЛО проверенных имён: по ней на
+            // устройстве видно, что дело не в переводе, а в отсутствии шрифта, и сколько
+            // вариантов перебрали.
+            Debug.LogWarning("[KvLoc] системный шрифт с CJK-глифами не найден (язык " + current +
+                             ", проверено " + CjkFontCandidates.Length + " имён и " +
+                             (installed != null ? installed.Length : 0) +
+                             " установленных) — китайский/японский текст будет квадратами. " +
+                             "Решение — приложить шрифт в проект (долг 5.27)");
+            cjkFontFallbackReported = true;
             return BuiltinFont();
         }
+
+        private static bool cjkFontFallbackReported;
+
+        /// <summary>
+        /// БЫЛ ЛИ ОТКАЗ ОТ CJK-ШРИФТА (для экрана «Состояние» и тестов).
+        ///
+        /// Зачем: «квадраты в китайском» оператор спишет на перевод, а причина — отсутствующий
+        /// шрифт. Флаг делает это состояние НАЗВАННЫМ.
+        /// </summary>
+        public static bool CjkFontMissing { get { return NeedsCjk && cjkFontFallbackReported; } }
 
         /// <summary>Имя фактического шрифта (диагностика).</summary>
         public static string FontName
