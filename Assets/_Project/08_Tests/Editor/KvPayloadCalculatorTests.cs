@@ -849,35 +849,161 @@ namespace KazistovVvTests
         }
 
         // ==========================================================================================
-        //  Явная фиксация пробела: физическое ядро требует сцены
+        //  ФИЗИЧЕСКОЕ ЯДРО — БЕЗ СЦЕНЫ (закрыто 30.10.2026, аудит S43)
+        //
+        //  Раньше здесь стоял ОДИН тест с `Assert.Ignore` и длинным объяснением, почему формулы
+        //  нагрузки «невозможно» проверить: `Evaluate` и `JointTorques` требуют живого
+        //  `flow.Validator.Ready`. Это было честно, но означало, что главная физика проекта
+        //  (момент от груза, допустимая масса, призматическая ось) НЕ ПРОВЕРЯЛАСЬ НИ РАЗУ.
+        //
+        //  Формулы вынесены в чистые функции `KvPayloadCalculator` (TorquePerKgOnAxis,
+        //  LeverOnAxis, AllowedKg) и проверяются здесь арифметикой, а не сценой.
         // ==========================================================================================
 
         /// <summary>
-        /// Пропущенный тест-маркер: сами формулы нагрузки и моментов (M = m*g*r, доступный момент
-        /// rating / safety, запас в процентах, лимиты по осям и их граница ±1e-4) в EditMode
-        /// недостижимы, потому что обе публичные точки входа (Evaluate — строка 153, JointTorques —
-        /// строка 356) работают только при flow.Validator.Ready, а Ready становится true лишь после
-        /// PoseValidator.Init(RobotController) с живыми Transform-ами (PoseValidator.cs:41-168).
-        /// Создавать GameObject/MonoBehaviour в тестах запрещено условиями задачи, поэтому проверки
-        /// ядра отложены до появления сцены либо до вынесения расчёта в чистую функцию без сцены.
-        /// Подробный перечень непокрытого — в блоке «НЕ ПОКРЫТО» в начале файла.
+        /// МОМЕНТ ОТ ГРУЗА — ЭТО `m·g·плечо`. Проверка на числе, которое можно посчитать в уме:
+        /// сустав в начале координат, ось — горизонтальная X, груз в метре ВНИЗ по Z.
+        /// Плечо 1 м, вес 9.81 Н на килограмм → момент 9.81 Н·м на кг.
         /// </summary>
         [Test]
-        public void Api_IsNotTestableWithoutRefactoring()
+        public void TorquePerKg_IsGravityTimesLever()
         {
-            Assert.Ignore(
-                "Физическое ядро расчёта нагрузки (момент от груза M = m*g*r, вклад веса звеньев, " +
-                "available = rating / safety, maxKg, запас в процентах, призматическая ось, кривая " +
-                "BuildCurve) недостижимо в EditMode без сцены: KvPayloadCalculator.Evaluate (153) и " +
-                "JointTorques (356) требуют flow.Validator.Ready, а PoseValidator.Ready (PoseValidator.cs:38) " +
-                "выставляется только в Init(RobotController) и нуждается в живых Transform-ах робота " +
-                "(RobotController : MonoBehaviour). Создание GameObject/MonoBehaviour в этих тестах " +
-                "запрещено, поэтому обе ветки расчёта всегда упираются в охрану flow == null " +
-                "(156-161, 362-363). Покрыто то, что достижимо: модель KvPayloadModel, результат " +
-                "KvPayloadResult/Line, состояние сервиса, охраняемые выходы, интервал Tick и детерминизм. " +
-                "Для полного покрытия ТЗ нужен либо PlayMode-тест со сценой, либо выделение расчёта " +
-                "моментов в чистую функцию, принимающую пивоты/оси/TCP и модель (рефакторинг кода " +
-                "условиями задачи запрещён).");
+            // Ось вращения — X. Груз висит в (0, 0, 1): r = (0,0,1), F = (0,-9.81,0).
+            // r × F = (0*0 - 1*(-9.81), 1*0 - 0*0, 0*(-9.81) - 0*0) = (9.81, 0, 0); проекция на X = 9.81.
+            float torque = KvPayloadCalculator.TorquePerKgOnAxis(
+                Vector3.zero, new Vector3(0f, 0f, 1f), Vector3.right);
+
+            Assert.AreEqual(9.81f, torque, 1e-3f, "момент на 1 кг обязан быть 9.81 Н·м (плечо 1 м)");
+            Assert.AreEqual(9.81f * 5f,
+                KvPayloadCalculator.TorquePerKgOnAxis(Vector3.zero, new Vector3(0f, 0f, 5f), Vector3.right),
+                1e-2f, "момент обязан расти линейно с плечом");
+        }
+
+        /// <summary>
+        /// ГРУЗ НАД ОСЬЮ МОМЕНТА НЕ ДАЁТ. Если TCP стоит ровно над суставом, плечо нулевое и вес
+        /// груза эту ось не нагружает — это не «0 из-за ошибки», а физика. Тест отличает одно от
+        /// другого: рядом проверяется, что при сдвиге на 1 см момент уже не нулевой.
+        /// </summary>
+        [Test]
+        public void TorquePerKg_IsZeroWhenPayloadIsAboveTheAxis()
+        {
+            Vector3 pivot = new Vector3(0f, 1f, 0f);
+            Assert.AreEqual(0f, KvPayloadCalculator.TorquePerKgOnAxis(
+                pivot, new Vector3(0f, 2f, 0f), Vector3.right), 1e-5f,
+                "груз ровно над суставом не нагружает горизонтальную ось");
+
+            // ОСЬ ПРАВИЛЬНО ВЫБРАНА? Груз, сдвинутый по X над суставом, горизонтальная ось X НЕ
+            // нагружает: r = (0.01, 1, 0), F = (0, −9.81, 0), r × F = (0, 0, −0.0981), проекция на X
+            // = 0. Момент появится только у оси Z. Проверяем именно её — иначе тест проверял бы
+            // не физику, а мою ошибку в выборе оси (прогон 30.10.2026 поймал ровно это).
+            Assert.AreEqual(0f, KvPayloadCalculator.TorquePerKgOnAxis(
+                pivot, new Vector3(0.01f, 2f, 0f), Vector3.right), 1e-5f,
+                "сдвиг по X не нагружает ось X — плечо в плоскости YZ нулевое");
+
+            Assert.AreEqual(9.81f * 0.01f, KvPayloadCalculator.TorquePerKgOnAxis(
+                pivot, new Vector3(0.01f, 2f, 0f), Vector3.forward), 1e-4f,
+                "сдвиг на 1 см по X относительно оси Z даёт 9.81·0.01 = 0.0981 Н·м");
+        }
+
+        /// <summary>
+        /// СИЛА ВДОЛЬ ОСИ МОМЕНТА НЕ ДАЁТ — та же ловушка, что «груз над осью», но для
+        /// вертикальной оси: груз, висящий над вертикальным суставом, не создаёт момента, сколько
+        /// бы он ни весил. Если это сломается, расчёт начнёт занижать допустимую нагрузку.
+        /// </summary>
+        [Test]
+        public void TorquePerKg_IsZeroForVerticalAxis()
+        {
+            Assert.AreEqual(0f, KvPayloadCalculator.TorquePerKgOnAxis(
+                Vector3.zero, new Vector3(0.5f, -1f, 0.3f), Vector3.up), 1e-5f,
+                "вес направлен вдоль вертикальной оси — момента нет");
+        }
+
+        /// <summary>
+        /// ВЫРОЖДЕННАЯ ОСЬ — НЕ ИСКЛЮЧЕНИЕ. Нулевая ось означает «данных о суставе нет»;
+        /// функция обязана вернуть 0, а не бросать или выдавать NaN, иначе один битый сустав
+        /// обнулит весь расчёт нагрузки.
+        /// </summary>
+        [Test]
+        public void TorquePerKg_HandlesDegenerateAxisAndLever()
+        {
+            Assert.AreEqual(0f, KvPayloadCalculator.TorquePerKgOnAxis(
+                Vector3.zero, Vector3.one, Vector3.zero), 1e-6f, "нулевая ось — 0, без исключения");
+            Assert.AreEqual(0f, KvPayloadCalculator.LeverOnAxis(
+                Vector3.zero, Vector3.one, Vector3.zero), 1e-6f, "нулевая ось — плечо 0");
+            Assert.IsFalse(float.IsNaN(KvPayloadCalculator.TorquePerKgOnAxis(
+                Vector3.zero, Vector3.one, Vector3.zero)), "NaN недопустим");
+        }
+
+        /// <summary>
+        /// ПЛЕЧО — РАССТОЯНИЕ ДО ОСИ, а не длина `r`. Груз, висящий вдоль оси (высоко над ней),
+        /// имеет большое `r`, но нулевое плечо. Тест фиксирует именно это различие: иначе
+        /// «плечо» в подсказке оператору врало бы при вертикальной руке.
+        /// </summary>
+        [Test]
+        public void Lever_IsDistanceToAxis_NotLengthOfRadius()
+        {
+            Vector3 pivot = Vector3.zero;
+            Vector3 axis = Vector3.up;
+            Vector3 high = new Vector3(0f, 3f, 0f);       // строго на оси, r = 3 м
+            Assert.AreEqual(0f, KvPayloadCalculator.LeverOnAxis(pivot, high, axis), 1e-5f,
+                "груз на самой оси имеет нулевое плечо, хотя r = 3 м");
+
+            Vector3 sideways = new Vector3(2f, 3f, 0f);   // 2 м от оси
+            Assert.AreEqual(2f, KvPayloadCalculator.LeverOnAxis(pivot, sideways, axis), 1e-5f,
+                "плечо — проекция на плоскость, перпендикулярную оси");
+        }
+
+        /// <summary>
+        /// ДОПУСТИМЫЙ ГРУЗ = (номинал / запас − момент звеньев) / момент на килограмм.
+        /// Числа взяты такие, чтобы ответ считался в уме: (100 / 2 − 20) / 9.81 = 3.058 кг.
+        /// </summary>
+        [Test]
+        public void AllowedKg_FollowsRatedTorqueOverSafety()
+        {
+            float kg = KvPayloadCalculator.AllowedKg(100f, 2f, 20f, 9.81f);
+            Assert.AreEqual((100f / 2f - 20f) / 9.81f, kg, 1e-3f,
+                "допустимая масса = (номинал/запас − момент звеньев) / момент на кг");
+        }
+
+        /// <summary>
+        /// ЗАПАС НЕ МОЖЕТ БЫТЬ МЕНЬШЕ ЕДИНИЦЫ: `safety = 0.5` — это ошибка настройки, и она не
+        /// должна РАЗРЕШАТЬ вдвое больше, чем номинал сустава. Проверяется, что при запасе ниже
+        /// единицы результат равен результату при единице.
+        /// </summary>
+        [Test]
+        public void AllowedKg_ClampsSafetyToOne()
+        {
+            float atHalf = KvPayloadCalculator.AllowedKg(100f, 0.5f, 0f, 10f);
+            float atOne = KvPayloadCalculator.AllowedKg(100f, 1f, 0f, 10f);
+            Assert.AreEqual(atOne, atHalf, 1e-4f,
+                "запас меньше единицы обязан читаться как единица — иначе номинал сустава превышается вдвое");
+        }
+
+        /// <summary>
+        /// НЕТ ЗАПАСА — НОЛЬ, А НЕ ОТРИЦАТЕЛЬНАЯ МАССА. Если вес звеньев уже съел весь доступный
+        /// момент, допустимый груз — 0 кг. Отрицательное число в интерфейсе читалось бы как
+        /// «можно антивещество».
+        /// </summary>
+        [Test]
+        public void AllowedKg_IsZeroWhenLinksConsumeAllTorque()
+        {
+            Assert.AreEqual(0f, KvPayloadCalculator.AllowedKg(100f, 2f, 60f, 9.81f), 1e-4f,
+                "доступный момент 50 Н·м, момент звеньев 60 — грузить нечего");
+            Assert.AreEqual(0f, KvPayloadCalculator.AllowedKg(0f, 2f, 0f, 9.81f), 1e-4f,
+                "сустав без номинала не держит ничего");
+        }
+
+        /// <summary>
+        /// ОСЬ, НА КОТОРУЮ ГРУЗ НЕ ДЕЙСТВУЕТ, НЕ ОГРАНИЧИВАЕТ НИЧЕГО. Это важно: `Evaluate` берёт
+        /// минимум по всем осям, и если такая ось вернёт 0 вместо «очень много», весь результат
+        /// станет нулевым.
+        /// </summary>
+        [Test]
+        public void AllowedKg_UnlimitedWhenPayloadCannotLoadTheAxis()
+        {
+            Assert.AreEqual(float.MaxValue,
+                KvPayloadCalculator.AllowedKg(100f, 2f, 0f, 0f), 1f,
+                "нулевой момент на килограмм означает «ограничения по этой оси нет»");
         }
     }
 }

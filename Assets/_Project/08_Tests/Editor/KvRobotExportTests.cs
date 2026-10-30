@@ -28,7 +28,7 @@
 //
 //  ЗАЩИТА ОТ ХРУПКОСТИ. [SetUp] разрешает внутренний API по именам и проверяет сигнатуры.
 //  Если метод переименован, сигнатура изменилась или KvExportPoint не создаётся через Activator,
-//  тест получает Assert.Ignore с сообщением «внутренний API изменился» — НЕ красный тест и
+//  тест получает Assert.Fail с сообщением «внутренний API изменился» — КРАСНЫЙ тест.
 //  НЕ NullReferenceException. То же для каждого private-форматтера: отсутствующий форматтер
 //  игнорирует только свои тесты.
 //
@@ -85,14 +85,14 @@ namespace KazistovVvTests
 
         /// <summary>
         /// Разрешить внутренний API один раз перед каждым тестом. Любое расхождение с ожидаемой
-        /// формой private-членов даёт Assert.Ignore («внутренний API изменился»), а не падение.
+        /// формой private-членов даёт Assert.Fail («внутренний API изменился») — прогон НЕ останется зелёным.
         /// </summary>
         [SetUp]
         public void ResolveInternalApi()
         {
             pointType = typeof(KvRobotExporter).GetNestedType("KvExportPoint", BindingFlags.NonPublic);
             if (pointType == null)
-                Assert.Ignore("Внутренний API изменился: у KvRobotExporter нет private-вложенного " +
+                Assert.Fail("Внутренний API изменился: у KvRobotExporter нет private-вложенного " +
                               "типа KvExportPoint (в исходнике — стр. 216).");
 
             const BindingFlags anyInstance =
@@ -102,7 +102,7 @@ namespace KazistovVvTests
             fFlange = pointType.GetField("flange", anyInstance);
             fTime = pointType.GetField("time", anyInstance);
             if (fQ == null || fTcp == null || fFlange == null || fTime == null)
-                Assert.Ignore("Внутренний API изменился: у KvExportPoint нет ожидаемых полей " +
+                Assert.Fail("Внутренний API изменился: у KvExportPoint нет ожидаемых полей " +
                               "q / tcp / flange / time (в исходнике — стр. 218–221).");
 
             mBuildKrl = FindBuilder("BuildKrl");
@@ -118,7 +118,7 @@ namespace KazistovVvTests
             }
             catch (Exception e)
             {
-                Assert.Ignore("KvRobotExporter больше не создаётся через Activator: " +
+                Assert.Fail("KvRobotExporter больше не создаётся через Activator: " +
                               e.GetType().Name + ": " + e.Message);
             }
         }
@@ -134,7 +134,7 @@ namespace KazistovVvTests
             MethodInfo m = typeof(KvRobotExporter).GetMethod(
                 name, BindingFlags.NonPublic | BindingFlags.Instance);
             if (m == null)
-                Assert.Ignore("Внутренний API изменился: private-метод " + name +
+                Assert.Fail("Внутренний API изменился: private-метод " + name +
                               " не найден у KvRobotExporter (в исходнике — стр. 252/324/395).");
             return m;
         }
@@ -150,18 +150,18 @@ namespace KazistovVvTests
                       && ps[1].ParameterType == typeof(string)
                       && ps[3].ParameterType == typeof(int);
             if (!ok)
-                Assert.Ignore("Внутренний API изменился: сигнатура " + builder.Name +
+                Assert.Fail("Внутренний API изменился: сигнатура " + builder.Name +
                               " отличается от (List<KvExportPoint>, string, TrajectoryCandidate, int).");
             candidateType = ps[2].ParameterType;
         }
 
-        /// <summary>Private static форматтер по имени; отсутствие — Assert.Ignore, а не падение.</summary>
+        /// <summary>Private static форматтер по имени; отсутствие — Assert.Fail (красный тест, не пропуск).</summary>
         private static MethodInfo Formatter(string name)
         {
             MethodInfo m = typeof(KvRobotExporter).GetMethod(
                 name, BindingFlags.NonPublic | BindingFlags.Static);
             if (m == null)
-                Assert.Ignore("Внутренний API изменился: private static метод " + name +
+                Assert.Fail("Внутренний API изменился: private static метод " + name +
                               " не найден у KvRobotExporter.");
             return m;
         }
@@ -176,7 +176,7 @@ namespace KazistovVvTests
             }
             catch (Exception e)
             {
-                Assert.Ignore("KvExportPoint больше не создаётся через Activator.CreateInstance: " +
+                Assert.Fail("KvExportPoint больше не создаётся через Activator.CreateInstance: " +
                               e.GetType().Name + ": " + e.Message);
                 return null;
             }
@@ -228,7 +228,7 @@ namespace KazistovVvTests
             }
             catch (Exception e)
             {
-                Assert.Ignore("TrajectoryCandidate больше не создаётся через Activator: " +
+                Assert.Fail("TrajectoryCandidate больше не создаётся через Activator: " +
                               e.GetType().Name + ": " + e.Message);
                 return null;
             }
@@ -244,7 +244,7 @@ namespace KazistovVvTests
             FieldInfo f = candidate.GetType().GetField(
                 name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
             if (f == null)
-                Assert.Ignore("Поле TrajectoryCandidate." + name + " не найдено — генератор читает " +
+                Assert.Fail("Поле TrajectoryCandidate." + name + " не найдено — генератор читает " +
                               "его в строке-комментарии (стр. 265/335/406).");
             f.SetValue(candidate, value);
         }
@@ -983,7 +983,7 @@ namespace KazistovVvTests
               вообще (есть только Karel, стр. 17/90), проверять нечего; расхождение с формулировкой
               ТЗ зафиксировано здесь.
           10) Хрупкость приватного API: тесты вызывают private-члены, поэтому при рефакторинге
-              KvRobotExport.cs они сообщат «внутренний API изменился» через Assert.Ignore, а не
+              KvRobotExport.cs они сообщат «внутренний API изменился» через Assert.Fail (красный прогон), а не
               упадут. Это осознанный компромисс варианта «тестировать без правок продакшна».
            ========================================================================================== */
     }

@@ -266,8 +266,16 @@ namespace KazistovVvTests
         public void ToolsScripts_WithCyrillic_HaveUtf8Bom()
         {
             string toolsRoot = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Tools"));
-            if (!Directory.Exists(toolsRoot))
-                Assert.Ignore("нет папки Tools рядом с проектом: " + toolsRoot);
+
+            // ПОЧЕМУ БОЛЬШЕ НЕ `Assert.Ignore` (закрыто 30.10.2026, аудит S43).
+            //
+            // Раньше отсутствие папки `Tools` давало Assert.Ignore — то есть «зелёный» прогон,
+            // в котором ничего не проверено. Именно так и теряются дефекты: скопировали проект
+            // без `Tools`, прогнали тесты, увидели «0 упало» и успокоились. Отсутствие папки
+            // здесь — это ОШИБКА ОКРУЖЕНИЯ, о которой нужно узнать сразу, а не «пропуск».
+            Assert.IsTrue(Directory.Exists(toolsRoot),
+                "нет папки Tools рядом с проектом: " + toolsRoot +
+                ". Проверка BOM (дефект A19) не выполнена — это НЕ «зелёный» результат");
 
             string[] scripts = Directory.GetFiles(toolsRoot, "*.ps1", SearchOption.AllDirectories);
             Assert.Greater(scripts.Length, 0, "в Tools нет ни одного .ps1 — тест ничего не проверил");
