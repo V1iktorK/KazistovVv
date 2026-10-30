@@ -250,11 +250,34 @@ namespace KazistovVvXr
         /// </summary>
         public static bool IsHandInView(Vector3 handPosition, Vector3 headPosition, Quaternion headRotation)
         {
+            // ОТСЕВ НЕЧИСЕЛ ДОБАВЛЕН 30.10.2026 (S44) — тот же класс, что найден в
+            // KvXrControllerVisuals. Без него дефект был бы здесь ТИШЕ и потому опаснее:
+            //   • `offset.magnitude > MaxDistance` для NaN даёт false — проверка «далеко» НЕ срабатывает;
+            //   • `Vector3.Dot` для NaN даёт NaN, а `NaN >= MinForward` — тоже false.
+            // Итог: жест МОЛЧА игнорируется. Оператор делает движение, панель не реагирует, и понять
+            // почему невозможно — ни ошибки, ни строки в журнале.
+            //
+            // ПОЧЕМУ ОТКАЗ, А НЕ «ПРОПУСТИТЬ»: если поза нечисловая, доверять ей нельзя вообще.
+            // Реакция на жест, вычисленный по мусорным координатам, может нажать что угодно.
+            if (IsNotFinite(handPosition) || IsNotFinite(headPosition)) return false;
+
             Vector3 offset = handPosition - headPosition;
+            if (IsNotFinite(offset)) return false;              // вычитание нечисла даёт нечисло
             if (offset.magnitude > MaxDistanceFromHeadMeters) return false;
 
             Vector3 forward = headRotation * Vector3.forward;
-            return Vector3.Dot(offset, forward) >= MinForwardMeters;
+            if (IsNotFinite(forward)) return false;             // повреждённый поворот головы
+            float dot = Vector3.Dot(offset, forward);
+            if (float.IsNaN(dot)) return false;
+
+            return dot >= MinForwardMeters;
+        }
+
+        /// <summary>Есть ли в векторе NaN или бесконечность (один вызов вместо шести проверок).</summary>
+        private static bool IsNotFinite(Vector3 v)
+        {
+            return float.IsNaN(v.x) || float.IsNaN(v.y) || float.IsNaN(v.z) ||
+                   float.IsInfinity(v.x) || float.IsInfinity(v.y) || float.IsInfinity(v.z);
         }
 
         /// <summary>
