@@ -234,6 +234,29 @@ namespace KazistovVvFeatures
             if (Down(KeyCode.F12)) ToggleHealth();
         }
 
+        /// <summary>
+        /// ЗАПАСНОЙ ПУТЬ ПО КЛАВИАТУРЕ СЛОМАЛСЯ — СКАЗАТЬ ОДИН РАЗ (30.10.2026, аудит S43).
+        ///
+        /// ПОЧЕМУ НЕ МОЛЧА. Оба метода ниже (`IsHeld`, `Down`) сначала пробуют новое Input System,
+        /// а при исключении откатываются на старый Input Manager. Это правильно. Но пустой
+        /// `catch {}` означал, что если новое API начнёт падать (например, после обновления
+        /// пакета), оператор узнает об этом только по «клавиши не работают» — и будет искать
+        /// причину в железе.
+        ///
+        /// ПОЧЕМУ ОДИН РАЗ. Методы вызываются из кадрового `Update`: строка на исключение
+        /// затопила бы журнал и утопила остальные улики.
+        /// </summary>
+        private static bool inputFallbackLogged;
+
+        private static void LogInputFallback(Exception e)
+        {
+            if (inputFallbackLogged) return;
+            inputFallbackLogged = true;
+            Debug.LogWarning("[Input] новое Input System недоступно (" + e.GetType().Name + ": " +
+                             e.Message + ") — работаю через старый Input Manager. " +
+                             "Если клавиши перестали отвечать, ищите причину здесь");
+        }
+
         private static bool IsHeld(KeyCode code)
         {
             try
@@ -241,7 +264,17 @@ namespace KazistovVvFeatures
                 Keyboard k = Keyboard.current;
                 if (k != null) return KeyOf(k, code) != null && KeyOf(k, code).isPressed;
             }
-            catch { }
+            catch (Exception e)
+            {
+                // ПУСТОЙ CATCH ЗАМЕНЁН (30.10.2026, аудит S43, пункт 5.7).
+                //
+                // Запасной путь ниже правильный — новое Input System не всегда доступно, и тогда
+                // работает старый Input Manager. Но МОЛЧА глотать исключение нельзя: если новое
+                // API начало падать (например, после обновления пакета), оператор узнает об этом
+                // только по «клавиши не работают». Печатаем ОДИН раз за сеанс, чтобы не залить
+                // журнал строкой на каждый кадр.
+                LogInputFallback(e);
+            }
             return Input.GetKey(code);
         }
 
@@ -256,7 +289,10 @@ namespace KazistovVvFeatures
                     if (key != null) return key.wasPressedThisFrame;
                 }
             }
-            catch { }
+            catch (Exception e)
+            {
+                LogInputFallback(e);   // см. пояснение в IsHeld: печатается один раз за сеанс
+            }
             return Input.GetKeyDown(code);
         }
 

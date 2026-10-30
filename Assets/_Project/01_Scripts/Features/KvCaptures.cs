@@ -92,7 +92,15 @@ namespace KazistovVvFeatures
                     string dir = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
                     if (!string.IsNullOrEmpty(dir)) return dir;
                 }
-                catch { }
+                catch (Exception e)
+                {
+                    // ПУСТОЙ CATCH ЗАМЕНЁН (30.10.2026, аудит S43, пункт 5.7). Здесь это не ошибка:
+                    // у пользователя может не быть папки «Видео», и тогда работает запасной путь
+                    // ниже. Но причина обязана попасть в журнал — иначе «видео не сохраняется»
+                    // будет выглядеть как поломка записи, а не как отсутствующая папка.
+                    UnityEngine.Debug.Log("[Captures] папка «Видео» недоступна (" + e.GetType().Name +
+                                          ": " + e.Message + ") — сохраню рядом с профилем");
+                }
                 string profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
                 if (!string.IsNullOrEmpty(profile)) return Path.Combine(profile, "Videos");
                 return Application.persistentDataPath;
