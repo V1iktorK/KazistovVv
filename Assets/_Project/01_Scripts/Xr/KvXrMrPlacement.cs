@@ -140,6 +140,55 @@ namespace KazistovVvXr
             get { return false; }
         }
 
+        /// <summary>
+        /// КАКОЙ МАСШТАБ НУЖЕН, ЧТОБЫ ВИРТУАЛЬНЫЙ СТОЛ СОВПАЛ С РЕАЛЬНЫМ (добавлено 30.10.2026, S44).
+        ///
+        /// ЗАЧЕМ. Карточки Б4/Б5 висят с 28.09.2026 с формулировкой «масштаб не совпадает, нужен
+        /// замер». Замер требуется не «вообще», а КОНКРЕТНОГО ЧИСЛА. Здесь считается, какое число
+        /// надо получить и что оно значит, — чтобы в шлеме оставалось его ПОДТВЕРДИТЬ, а не
+        /// подбирать на глаз.
+        ///
+        /// КАК СЧИТАЕТСЯ. Всё берётся из габаритов: масштаб по ширине = ширина реального стола /
+        /// ширина виртуального; то же по глубине и по высоте. Если мир метрический, все три
+        /// отношения равны 1 — и это проверяется тестом.
+        ///
+        /// ПОЧЕМУ ТРИ ЧИСЛА, А НЕ ОДНО. Если отношения по ширине и глубине расходятся, виртуальный
+        /// стол не просто «другого размера», а ДРУГОЙ ПРОПОРЦИИ: тогда единый масштаб его к
+        /// реальному не приведёт, и никакой коэффициент не поможет. Это надо знать ДО того, как
+        /// подбирать масштаб в шлеме.
+        /// </summary>
+        public static KvScaleFit FitTableScale(float virtualWidth, float virtualDepth, float virtualHeight,
+            float realWidth, float realDepth, float realHeight)
+        {
+            var fit = new KvScaleFit();
+            fit.byWidth = virtualWidth > 0.0001f ? realWidth / virtualWidth : 0f;
+            fit.byDepth = virtualDepth > 0.0001f ? realDepth / virtualDepth : 0f;
+            fit.byHeight = virtualHeight > 0.0001f ? realHeight / virtualHeight : 0f;
+
+            // Единый масштаб — по ШИРИНЕ: она у стола задающая (глубину определяет столешница,
+            // а высоту — ножки, и по ним ошибка обычно меньше).
+            fit.scale = fit.byWidth;
+
+            // Пропорция совпадает, если отношения по ширине и глубине отличаются меньше чем на 5 %:
+            // больше — это уже не «другой размер», а «другая форма», и единым масштабом не лечится.
+            fit.proportionMatches = fit.byWidth > 0f && fit.byDepth > 0f &&
+                                    System.Math.Abs(fit.byDepth - fit.byWidth) / fit.byWidth < 0.05f;
+            return fit;
+        }
+
+        /// <summary>Строка о требуемом масштабе — для журнала и для экрана «Состояние».</summary>
+        public static string DescribeTableScale(KvScaleFit fit)
+        {
+            var c = System.Globalization.CultureInfo.InvariantCulture;
+            return "масштаб стола: по ширине " + fit.byWidth.ToString("0.000", c) +
+                   " · по глубине " + fit.byDepth.ToString("0.000", c) +
+                   " · по высоте " + fit.byHeight.ToString("0.000", c) +
+                   (fit.proportionMatches
+                       ? " · пропорция совпадает, единый масштаб " + fit.scale.ToString("0.000", c)
+                       : " · ПРОПОРЦИЯ НЕ СОВПАДАЕТ: единым масштабом не приводится");
+        }
+
+
         /// <summary>Метры в юниты сцены.</summary>
         public static float FromMeters(float meters)
         {
@@ -223,4 +272,28 @@ namespace KazistovVvXr
                 zoneOk ? "помещается" : "НЕ ПОМЕЩАЕТСЯ (нужно больше места или меньше зона)");
         }
     }
+
+    /// <summary>
+    /// РЕЗУЛЬТАТ ПОДБОРА МАСШТАБА СТОЛА (добавлено 30.10.2026, S44).
+    ///
+    /// Отдельным типом, а не тремя `out`-параметрами: у результата есть СМЫСЛ (пропорция
+    /// совпадает или нет), и его нужно передавать целиком в подпись журнала.
+    ///</summary>
+    public struct KvScaleFit
+    {
+        /// <summary>Масштаб, при котором ширина совпадёт с реальной.</summary>
+        public float byWidth;
+        /// <summary>Масштаб, при котором глубина совпадёт с реальной.</summary>
+        public float byDepth;
+        /// <summary>Масштаб, при котором высота совпадёт с реальной.</summary>
+        public float byHeight;
+        /// <summary>Единый масштаб, который следует применять (по ширине).</summary>
+        public float scale;
+        /// <summary>
+        /// true — виртуальный стол отличается только размером (единый масштаб лечит).
+        /// false — отличается ПРОПОРЦИЕЙ: единый масштаб не поможет, нужна другая модель.
+        ///</summary>
+        public bool proportionMatches;
+    }
 }
+
