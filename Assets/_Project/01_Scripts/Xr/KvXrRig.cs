@@ -107,6 +107,10 @@ namespace KazistovVvXr
             KvXrControllerVisuals.Ensure(transform, camera);
             KvXrHands.Ensure(transform, camera);
             KvXrGestures.Ensure(transform);
+
+            // §44: подача взгляда в сервис отслеживания. Без этого компонента взгляд, фиксации и
+            // выбор взглядом получали данные только из диагностики — то есть в сборке молчали.
+            KvXrGazeFeed.Ensure(transform);
             KvXrSecondaryRay.Ensure(transform, camera);   // §39: второй луч — только указатель
 
             // §39: курсору на конце луча нужна камера, чтобы разворачиваться к оператору.

@@ -150,6 +150,14 @@ namespace KazistovVvFeatures
             // Теперь `KvXrHands` каждый кадр передаёт точки сюда через этот мост.
             KazistovVvXr.KvXrHands.GestureSink = Hands;
             Eyes = new KvEyeTrackingService();
+
+            // ПОДКЛЮЧИТЬ ВЗГЛЯД К СЕРВИСУ ОТСЛЕЖИВАНИЯ (30.10.2026, S44, пункт 5.23).
+            //
+            // Та же история, что с кистями: `KvEyeTrackingService` получал данные ТОЛЬКО из
+            // диагностики, поэтому фиксации, выбор взглядом и фовеальное зрение в собранном
+            // приложении молчали. Теперь компонент `KvXrGazeFeed` подаёт направление взгляда
+            // каждый кадр (по позе головы — честное упрощение, см. пояснение в его шапке).
+            KazistovVvXr.KvXrGazeFeed.Sink = Eyes;
             Foveated = new KvFoveatedRendering();
             Script = new KvScriptEngine();
             Behavior = new KvBehaviorTree();
