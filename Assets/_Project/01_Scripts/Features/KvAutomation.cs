@@ -531,6 +531,27 @@ namespace KazistovVvFeatures
         public KvScriptError LastError { get { return error; } }
         public int CurrentLine { get { return currentLine; } }
         public IList<string> Output { get { return output; } }
+        /// <summary>
+        /// СПИСОК МАКРОСОВ ИЗМЕНИЛСЯ (реализовано 30.10.2026, S44, пункт 5.25).
+        ///
+        /// ЧТО БЫЛО. `RefreshMacroList()` был ПУСТЫМ методом (`private void RefreshMacroList() { }`),
+        /// и его вызывали после сохранения и после удаления макроса. То есть код «делал вид», что
+        /// обновляет список, а на деле не делал ничего. Последствие для оператора: сохранил макрос —
+        /// а в списке его нет; удалил — а он там остался. Приходилось перезапускать окно.
+        ///
+        /// ПОЧЕМУ СОБЫТИЕ, А НЕ ПРЯМОЙ ВЫЗОВ ОКНА. Движок макросов НЕ ДОЛЖЕН знать про окна
+        /// интерфейса: иначе появляется обратная зависимость «движок зависит от UI». Событие —
+        /// единственный способ уведомить всех, кто показывает список, не зная, кто это.
+        ///
+        /// ВАЖНО ПРО ОТПИСКУ. Подписчик обязан отписаться в `OnDestroy`: иначе закрытое окно
+        /// останется в списке подписчиков и после переоткрытия будет обновляться дважды — та же
+        /// утечка, что закрывали в §27 (43 подписки без отписки).
+        /// </summary>
+        public event Action MacroListChanged;
+
+        /// <summary>Есть ли подписчики на изменение списка (для диагностики и тестов).</summary>
+        public bool HasMacroListSubscribers { get { return MacroListChanged != null; } }
+
         public IList<KvScriptMacro> Macros { get { return macros; } }
         public string Name { get { return name; } }
         public string Source { get { return source; } }
@@ -1198,7 +1219,30 @@ namespace KazistovVvFeatures
             }
         }
 
-        private void RefreshMacroList() { }
+        /// <summary>
+        /// СООБЩИТЬ, ЧТО СПИСОК МАКРОСОВ ИЗМЕНИЛСЯ (было пустым методом — см. `MacroListChanged`).
+        ///
+        /// ВЫЗЫВАЕТСЯ ПОСЛЕ СОХРАНЕНИЯ И УДАЛЕНИЯ. Раньше это был пустой метод: список в
+        /// интерфейсе не обновлялся, и оператор не видел ни нового макроса, ни удалённого.
+        ///
+        /// ИСКЛЮЧЕНИЕ В ПОДПИСЧИКЕ НЕ ДОЛЖНО ЛОМАТЬ СОХРАНЕНИЕ. Если окно интерфейса упадёт,
+        /// макрос всё равно записан на диск — сообщение о падении идёт в журнал, а работа движка
+        /// продолжается. Это важно: сохранение макроса не должно зависеть от состояния UI.
+        /// </summary>
+        private void RefreshMacroList()
+        {
+            Action handler = MacroListChanged;
+            if (handler == null) return;
+            try
+            {
+                handler();
+            }
+            catch (Exception e)
+            {
+                Report("список макросов не обновлён в интерфейсе: " + e.Message +
+                       " (сам макрос при этом сохранён на диск)");
+            }
+        }
 
         private KvScriptMacro Find(string macroName)
         {
