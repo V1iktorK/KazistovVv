@@ -39,7 +39,41 @@ namespace KazistovVvXrEditor
         public static readonly string[][] RequiredMetaData =
         {
             new[] { "controller", "1" },   // PICO SDK ставит её сам; оставлено как страховка и как утверждение «нужны контроллеры»
+
+            // ---------------------------------------------------------------- MR/AR (30.10.2026, S44)
+            //
+            // ЗАЧЕМ. Аудит S44 показал: манифест проекта был МЕТА-ориентированным
+            // (`com.oculus.*`), а PICO-метаданных для сквозного вида не было вовсе. То есть
+            // карточка Б3 «passthrough включён» опиралась на фичу OpenXR, но НЕ на манифест —
+            // и на устройстве приложение запускалось в чистом VR, показывая виртуальную
+            // лабораторию вместо комнаты оператора. Для MR (суббота) это первое, что нужно.
+            //
+            // ПОЧЕМУ ИМЕННО ЭТИ ПАРЫ. `seeThroughMode` = 1 включает сквозной вид; `virtualEnvironment`
+            // = 0 выключает фон PICO (иначе поверх камеры висит их заставка); `handtracking` = 1
+            // включает отслеживание рук (жесты, этап 6). Значения — те, что ставит SDK PICO;
+            // здесь они только в XML, вендорский SDK по-прежнему НЕ подключается ([R3] в силе).
+            //
+            // ВАЖНО. Ни одна из них не тянет за собой проверку «приложение из магазина» — в отличие
+            // от `pvr.app.type = vr`, которая снимает сбоку установленное приложение (см. ниже).
+            new[] { "seeThroughMode", "1" },
+            new[] { "virtualEnvironment", "0" },
+            new[] { "handtracking", "1" },
         };
+
+        /// <summary>
+        /// РАЗРЕШЕНИЯ, КОТОРЫЕ ОБЯЗАНЫ БЫТЬ: камера мира и отслеживание рук.
+        ///
+        /// ПОЧЕМУ ЧЕРЕЗ МАНИФЕСТ, А НЕ «НАДЕЖДА НА ПАКЕТ». OpenXR — платформенный слой, он не
+        /// обязан добавлять PICO-разрешения. Без `CAMERA` сквозной вид не дадут, без
+        /// `com.picovr.permission.HAND_TRACKING` подсистема кистей не поднимется — и в журнале
+        /// это будет выглядеть как «кисти НЕТ», то есть как поломка железа (карточка Б41).
+        /// </summary>
+        public static readonly string[] RequiredPermissions =
+        {
+            "android.permission.CAMERA",
+            "com.picovr.permission.HAND_TRACKING",
+        };
+
 
         /// <summary>
         /// ЧЕГО ЗДЕСЬ СОЗНАТЕЛЬНО НЕТ: `pvr.app.type = vr`, хотя SDK PICO его ставит.
@@ -158,6 +192,33 @@ namespace KazistovVvXrEditor
                     }
                 }
 
+                // ---------------------------------------------------------------- РАЗРЕШЕНИЯ (30.10.2026)
+                //
+                // ПОЧЕМУ ЗДЕСЬ, А НЕ В Assets/Plugins/Android/AndroidManifest.xml. Тот файл —
+                // МЕТА-ориентированный (`com.oculus.*`) и служит основой; PICO-разрешения
+                // добавляются здесь, в сгенерированный манифест, и в строке журнала видно, что
+                // именно добавлено. Так же уже сделано с мета-данными выше.
+                int permissionsAdded = 0;
+                foreach (string permission in RequiredPermissions)
+                {
+                    bool present = false;
+                    foreach (XmlNode node in document.SelectNodes("/manifest/uses-permission"))
+                    {
+                        XmlAttribute name = node.Attributes != null ? node.Attributes["android:name"] : null;
+                        if (name != null && name.Value == permission) { present = true; break; }
+                    }
+                    if (present) continue;
+
+                    XmlElement element = document.CreateElement("uses-permission");
+                    XmlAttribute nameAttribute = document.CreateAttribute("android", "name",
+                        "http://schemas.android.com/apk/res/android");
+                    nameAttribute.Value = permission;
+                    element.Attributes.Append(nameAttribute);
+                    document.DocumentElement.AppendChild(element);
+                    permissionsAdded++;
+                    sb.Append("  разрешение добавлено: ").Append(permission).AppendLine();
+                }
+
                 using (var writer = new XmlTextWriter(manifestPath, new UTF8Encoding(false)))
                 {
                     writer.Formatting = Formatting.Indented;
@@ -167,6 +228,7 @@ namespace KazistovVvXrEditor
                 // СТРОКА-ДОКАЗАТЕЛЬСТВО: попала ли заявка в манифест сборки.
                 Debug.Log("[KvManifest] мета-данные PICO в AndroidManifest: добавлено " + added +
                           " · выставлено " + updated + " · удалено " + removed +
+                          " · разрешений добавлено " + permissionsAdded +
                           " · файл " + manifestPath + Environment.NewLine + sb +
                           "  (" + SkippedMetaDataReason + ")");
             }
