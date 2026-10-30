@@ -1538,9 +1538,242 @@ namespace KazistovVvFeatures
                 }
             });
 
+            // --- ИЗМЕРЕНИЕ И СЕТКА: БЫЛИ ЗАГЛУШКАМИ, СТАЛИ ДЕЙСТВИЯМИ (30.10.2026, S44)
+            //
+            // ПОЧЕМУ ЗДЕСЬ, А НЕ В ШТАТНЫХ КОМАНДАХ. Менеджер интерфейса регистрирует заглушки
+            // `tool.measure` и `tool.grid` ПЕРВЫМ, а этот хаб — ПОСЛЕ, и реестр заменяет команду
+            // с тем же id. Так и задумано: реальная реализация перекрывает заглушку, а не
+            // сосуществует с ней (см. комментарий у `RegisterCommands` выше).
+            KvCommands.Register(new KvCommand
+            {
+                Id = "tool.measure",
+                Title = "Измерение",
+                Description = "Линейка: первое нажатие — первая точка, второе — расстояние с проекциями по осям",
+                Icon = "curve",
+                MenuPath = "Сервис/Инструменты/Измерение",
+                Execute = delegate
+                {
+                    // Точка прицела: если луч никуда не попал, честно говорим это, а не «ноль метров».
+                    Vector3 point;
+                    if (!hub.TryAim(out point))
+                    {
+                        hub.Log.Add(KvLogKind.System, "линейка: луч не попал в сцену — наведите на объект");
+                        return;
+                    }
+                    hub.MeasureAt(point);
+                }
+            });
+
+            KvCommands.Register(new KvCommand
+            {
+                Id = "tool.measure.reset",
+                Title = "Измерение: сбросить",
+                Description = "Забыть первую точку замера",
+                Icon = "curve",
+                MenuPath = "Сервис/Инструменты/Измерение: сбросить",
+                Execute = delegate
+                {
+                    hub.ResetMeasure();
+                    hub.Log.Add(KvLogKind.System, "линейка: сброшена");
+                }
+            });
+
+            KvCommands.Register(new KvCommand
+            {
+                Id = "tool.grid",
+                Title = "Сетка рабочей зоны",
+                Description = "Плоская сетка на столешнице: шаг подбирается по размеру области",
+                Icon = "workspace",
+                MenuPath = "Сервис/Инструменты/Сетка рабочей зоны",
+                Execute = delegate
+                {
+                    // Размер области берётся с текущей видимой рабочей зоны; если её нет —
+                    // используется типовой стол оператора (1,0 × 0,7 м, решение [D7]).
+                    // Размер области — типовой стол оператора (1,0 × 0,7 м, решение [D7]);
+                    // центр — точка прицела, а если луч никуда не попал, то место перед оператором.
+                    Vector3 origin;
+                    if (!hub.TryAim(out origin)) origin = new Vector3(0f, 0.78f, 0f);
+                    hub.ShowWorkspaceGrid(1.0f, 0.7f, origin);
+                }
+            });
+
+            KvCommands.Register(new KvCommand
+            {
+                Id = "tool.grid.clear",
+                Title = "Сетка: убрать",
+                Description = "Снять построенную сетку рабочей зоны",
+                Icon = "workspace",
+                MenuPath = "Сервис/Инструменты/Сетка: убрать",
+                Execute = delegate { hub.ClearWorkspaceGrid(); }
+            });
+
+
             if (hub.logEvents)
                 Debug.Log("[Features] команды этапов 1–20 зарегистрированы · всего команд: " +
                           KvCommands.All.Count);
+        }
+
+        // ------------------------------------------------------------------ измерение и сетка
+
+        /// <summary>
+        /// ИЗМЕРЕНИЕ РАССТОЯНИЯ МЕЖДУ ДВУМЯ ТОЧКАМИ ПРИЦЕЛА (закрыто 30.10.2026, S44).
+        ///
+        /// ЧТО БЫЛО. Команда `tool.measure` стояла ЗАГЛУШКОЙ с подписью «пункт задел»: кнопка
+        /// есть, нажатие отвечает «в разработке». Оператору это не даёт ничего.
+        ///
+        /// КАК РАБОТАЕТ. Первое нажатие запоминает точку прицела, второе — считает расстояние до
+        /// новой и печатает показание с проекциями по осям. Следующее нажатие начинает новый
+        /// замер. Так линейка ведёт себя ожидаемо и не требует отдельной кнопки «сброс».
+        /// </summary>
+        private Vector3 measureFrom;
+        private bool measureHasFirst;
+
+        public void MeasureAt(Vector3 point)
+        {
+            if (!measureHasFirst)
+            {
+                measureFrom = point;
+                measureHasFirst = true;
+                Log.Add(KvLogKind.System, "линейка: первая точка " + point.ToString("0.000") +
+                                          " — укажите вторую");
+                return;
+            }
+
+            if ((point - measureFrom).sqrMagnitude < 1e-8f)
+            {
+                // Двойной удар в ту же точку — это промах, а не «ноль метров»: говорим прямо.
+                measureHasFirst = false;
+                Log.Add(KvLogKind.System, "линейка: вторая точка совпала с первой — замер отменён");
+                return;
+            }
+
+            string text = KvMeasureKit.Describe(measureFrom, point);
+            Log.Add(KvLogKind.System, "линейка: " + text);
+            Debug.Log("[Measure] расстояние " + text);
+            measureHasFirst = false;
+        }
+
+        /// <summary>
+        /// ТОЧКА ПРИЦЕЛА, ЕСЛИ ЛУЧ ВО ЧТО-ТО ПОПАЛ. Единственное место, где инструменты СЕРВИСА
+        /// узнают, куда смотрит оператор: `CreateZone` делал это вручную, и вторая копия того же
+        /// разбора неизбежно разошлась бы с первой.
+        ///
+        /// Возвращает false, когда риг не найден ИЛИ луч ушёл в пустоту — и тогда вызывающий
+        /// обязан сказать это словами, а не строить объект в начале координат.
+        /// </summary>
+        public bool TryAim(out Vector3 point)
+        {
+            point = Vector3.zero;
+            if (rig == null) rig = ui != null ? ui.CameraRig : null;
+            if (rig == null || !rig.AimHitPublic) return false;
+            point = rig.AimPointPublic;
+            return true;
+        }
+
+        /// <summary>Сбросить начатую линейку (после смены робота или сцены).</summary>
+        public void ResetMeasure()
+        {
+            measureHasFirst = false;
+        }
+
+        /// <summary>
+        /// СЕТКА РАБОЧЕЙ ЗОНЫ (закрыто 30.10.2026, S44). Команда `tool.grid` тоже была заглушкой.
+        ///
+        /// ЧТО ДЕЛАЕТ. Строит плоскую сетку на плоскости стола по заданной области и сообщает
+        /// числами: размер, шаг, сколько линий. Расчёт сетки — в `KvMeasureKit` (он проверяется
+        /// тестами), здесь только рисование и журнал.
+        /// </summary>
+        public void ShowWorkspaceGrid(float width, float height, Vector3 origin)
+        {
+            if (width <= 0.01f || height <= 0.01f)
+            {
+                Log.Add(KvLogKind.System, "сетка: размер области не задан (" +
+                                          width.ToString("0.00") + " × " + height.ToString("0.00") +
+                                          " м) — сетка не построена");
+                return;
+            }
+
+            string line = KvMeasureKit.DescribeGrid(width, height);
+            float step = KvMeasureKit.GridStep(Mathf.Max(width, height));
+            int linesX = KvMeasureKit.GridLines(width, step);
+            int linesZ = KvMeasureKit.GridLines(height, step);
+
+            // Число проведённых линий — ДОКАЗАТЕЛЬСТВО, что сетка построена: по нему видно, что
+            // шаг подобран под размер, а не взят наугад.
+            int drawn = 0;
+            drawn += DrawGridLines(origin, Vector3.right, Vector3.forward, width, step, linesX);
+            drawn += DrawGridLines(origin, Vector3.forward, Vector3.right, height, step, linesZ);
+
+            Log.Add(KvLogKind.System, line + " · проведено линий " + drawn);
+            Debug.Log("[Grid] " + line + " · проведено линий " + drawn);
+        }
+
+        /// <summary>
+        /// Провести линии сетки вдоль одного направления. Отдельным методом — чтобы «сколько
+        /// линий провели» считалось в одном месте, а не в двух копиях цикла.
+        /// </summary>
+        private int DrawGridLines(Vector3 origin, Vector3 along, Vector3 across, float length,
+            float step, int count)
+        {
+            if (count <= 0 || step <= 0.0001f) return 0;
+            int drawn = 0;
+            for (int i = 0; i < count; i++)
+            {
+                Vector3 start = origin + across * (i * step);
+                Vector3 end = start + along * length;
+                if (DrawLine(start, end) != null) drawn++;
+            }
+            return drawn;
+        }
+
+        /// <summary>
+        /// НАРИСОВАТЬ ОДНУ ЛИНИЮ СЕТКИ. Возвращает объект линии или null, если рисование
+        /// недоступно. Единственное место, где сетка касается графики: заменить рисование
+        /// (например, на GPU-инстансинг в MR) можно здесь, не трогая расчёт сетки.
+        ///
+        /// Материал берётся ЧЕРЕЗ ФАБРИКУ `KvRenderPipelineShaders` — прямые обращения к шейдерам
+        /// HDRP под URP давали розовые линии (дефект A8).
+        /// </summary>
+        private LineRenderer DrawLine(Vector3 from, Vector3 to)
+        {
+            try
+            {
+                var go = new GameObject("KvGridLine");
+                go.transform.SetParent(gridRoot != null ? gridRoot : null, false);
+                var line = go.AddComponent<LineRenderer>();
+                line.useWorldSpace = true;
+                line.positionCount = 2;
+                line.SetPosition(0, from);
+                line.SetPosition(1, to);
+                line.startWidth = 0.004f;
+                line.endWidth = 0.004f;
+                Material material = KazistovVvFeatures.KvRenderPipelineShaders.CreateLine(
+                    "Материал_сетки", new Color(0.5f, 0.75f, 1f, 0.55f));
+                if (material != null) line.material = material;
+                if (gridLines.Count < 4000) gridLines.Add(go);
+                return line;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[Grid] линия сетки не нарисована: " + e.GetType().Name + ": " + e.Message);
+                return null;
+            }
+        }
+
+        private Transform gridRoot;
+        private readonly System.Collections.Generic.List<GameObject> gridLines =
+            new System.Collections.Generic.List<GameObject>();
+
+        /// <summary>Убрать нарисованную сетку (смена области, выход из режима).</summary>
+        public void ClearWorkspaceGrid()
+        {
+            for (int i = 0; i < gridLines.Count; i++)
+            {
+                if (gridLines[i] != null) UnityEngine.Object.Destroy(gridLines[i]);
+            }
+            int removed = gridLines.Count;
+            gridLines.Clear();
+            if (removed > 0) Log.Add(KvLogKind.System, "сетка убрана · линий " + removed);
         }
 
         // ------------------------------------------------------------------ вспомогательные действия
