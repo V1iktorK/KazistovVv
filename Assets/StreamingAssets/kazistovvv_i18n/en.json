@@ -1647,6 +1647,502 @@
     {
       "key": "mode.toggle",
       "text": "TAB — switch"
+    },
+    {
+      "key": "cmd.bt.tab",
+      "text": "Behaviour tree"
+    },
+    {
+      "key": "cmd.bt.tab.desc",
+      "text": "Visual behaviour-tree editor"
+    },
+    {
+      "key": "cmd.cameras.tab",
+      "text": "Cameras and PiP"
+    },
+    {
+      "key": "cmd.cameras.tab.desc",
+      "text": "Top, side and first-person views in separate windows"
+    },
+    {
+      "key": "cmd.cine.toggle",
+      "text": "Cinematic mode"
+    },
+    {
+      "key": "cmd.cine.toggle.desc",
+      "text": "Widescreen and smooth camera movement"
+    },
+    {
+      "key": "cmd.collision.tab",
+      "text": "Collision proxies"
+    },
+    {
+      "key": "cmd.collision.tab.desc",
+      "text": "Automatic simplified hulls"
+    },
+    {
+      "key": "cmd.collision.toggle",
+      "text": "Proxies on/off"
+    },
+    {
+      "key": "cmd.collision.toggle.desc",
+      "text": "Enable or disable simplified hulls"
+    },
+    {
+      "key": "cmd.env.next",
+      "text": "Change environment"
+    },
+    {
+      "key": "cmd.env.next.desc",
+      "text": "Hangar, laboratory, workshop, clean room"
+    },
+    {
+      "key": "cmd.eyes.toggle",
+      "text": "Gaze tracking"
+    },
+    {
+      "key": "cmd.eyes.toggle.desc",
+      "text": "Fixations, gaze selection, foveal vision"
+    },
+    {
+      "key": "cmd.fail.clear",
+      "text": "Clear fault"
+    },
+    {
+      "key": "cmd.fail.clear.desc",
+      "text": "Clear the fault state after a simulation"
+    },
+    {
+      "key": "cmd.fail.comms",
+      "text": "Communication loss (simulation)"
+    },
+    {
+      "key": "cmd.fail.comms.desc",
+      "text": "Check system behaviour on communication loss"
+    },
+    {
+      "key": "cmd.fail.joint",
+      "text": "Joint failure (simulation)"
+    },
+    {
+      "key": "cmd.fail.joint.desc",
+      "text": "Check behaviour on torque loss"
+    },
+    {
+      "key": "cmd.fail.tab",
+      "text": "Fault simulation"
+    },
+    {
+      "key": "cmd.fail.tab.desc",
+      "text": "Joint failure, communication loss, overload"
+    },
+    {
+      "key": "cmd.forces.tab",
+      "text": "Forces and torques"
+    },
+    {
+      "key": "cmd.forces.tab.desc",
+      "text": "Joint torque vectors and tool force"
+    },
+    {
+      "key": "cmd.hands.toggle",
+      "text": "Hand tracking"
+    },
+    {
+      "key": "cmd.hands.toggle.desc",
+      "text": "Gestures: touch, swipe, grab"
+    },
+    {
+      "key": "cmd.heat.time",
+      "text": "Reachability time map"
+    },
+    {
+      "key": "cmd.heat.time.desc",
+      "text": "Heat map of time in seconds"
+    },
+    {
+      "key": "cmd.lab.run",
+      "text": "Run the bench"
+    },
+    {
+      "key": "cmd.lab.run.desc",
+      "text": "Run the task set and get a metrics table"
+    },
+    {
+      "key": "cmd.lab.tab",
+      "text": "Planner bench"
+    },
+    {
+      "key": "cmd.lab.tab.desc",
+      "text": "Comparison of RRT*, BiRRT and optimisation: 100+ tasks"
+    },
+    {
+      "key": "cmd.lab.tree",
+      "text": "RRT tree on screen"
+    },
+    {
+      "key": "cmd.lab.tree.desc",
+      "text": "Show the planner tree being built"
+    },
+    {
+      "key": "cmd.light.next",
+      "text": "Change lighting"
+    },
+    {
+      "key": "cmd.light.next.desc",
+      "text": "Day, night, studio, dramatic light"
+    },
+    {
+      "key": "cmd.logtools.export",
+      "text": "Export visible log"
+    },
+    {
+      "key": "cmd.logtools.export.desc",
+      "text": "Save the filtered entries to a file"
+    },
+    {
+      "key": "cmd.logtools.tab",
+      "text": "Log: levels and search"
+    },
+    {
+      "key": "cmd.logtools.tab.desc",
+      "text": "Level filter, search, colours, export"
+    },
+    {
+      "key": "cmd.mat.tab",
+      "text": "Materials"
+    },
+    {
+      "key": "cmd.mat.tab.desc",
+      "text": "Edit colour, metalness and emission at runtime"
+    },
+    {
+      "key": "cmd.mobile.toggle",
+      "text": "Mobile pendant"
+    },
+    {
+      "key": "cmd.mobile.toggle.desc",
+      "text": "Receive commands from a tablet over UDP"
+    },
+    {
+      "key": "cmd.net.tab",
+      "text": "Network and monitoring"
+    },
+    {
+      "key": "cmd.net.tab.desc",
+      "text": "Collaboration, web dashboard, mobile pendant"
+    },
+    {
+      "key": "cmd.report.make",
+      "text": "Create report"
+    },
+    {
+      "key": "cmd.report.make.desc",
+      "text": "Generate the PDF report right now"
+    },
+    {
+      "key": "cmd.report.pdf",
+      "text": "PDF report"
+    },
+    {
+      "key": "cmd.report.pdf.desc",
+      "text": "Report with trajectory, metrics, snapshots and kinematics"
+    },
+    {
+      "key": "cmd.scara.recalibrate",
+      "text": "Recalculate SCARA kinematics"
+    },
+    {
+      "key": "cmd.scara.recalibrate.desc",
+      "text": "Recalculate prism stroke limits and rebind the flow (heavy operation)"
+    },
+    {
+      "key": "cmd.script.tab",
+      "text": "Macros (scripts)"
+    },
+    {
+      "key": "cmd.script.tab.desc",
+      "text": "Automate robot actions in a sandbox"
+    },
+    {
+      "key": "cmd.titles.tab",
+      "text": "Titles and captions"
+    },
+    {
+      "key": "cmd.titles.tab.desc",
+      "text": "Titles, subtitles, notes and subtitle file"
+    },
+    {
+      "key": "cmd.valid.mannequins",
+      "text": "Include mannequins in the check"
+    },
+    {
+      "key": "cmd.valid.mannequins.desc",
+      "text": "Two mannequins next to the work zone are counted together with the operator"
+    },
+    {
+      "key": "cmd.valid.run",
+      "text": "START with check"
+    },
+    {
+      "key": "cmd.valid.run.desc",
+      "text": "Check the trajectory and start the motion"
+    },
+    {
+      "key": "cmd.valid.tab",
+      "text": "Pre-start check"
+    },
+    {
+      "key": "cmd.valid.tab.desc",
+      "text": "Trajectory findings and operator confirmation"
+    },
+    {
+      "key": "cmd.vo.tab",
+      "text": "Narrator voice"
+    },
+    {
+      "key": "cmd.vo.tab.desc",
+      "text": "Voice recording and synchronisation with the video"
+    },
+    {
+      "key": "cmd.voice.toggle",
+      "text": "Voice commands"
+    },
+    {
+      "key": "cmd.voice.toggle.desc",
+      "text": "Listen to the microphone and execute commands"
+    },
+    {
+      "key": "cmd.web.toggle",
+      "text": "Web dashboard"
+    },
+    {
+      "key": "cmd.web.toggle.desc",
+      "text": "Robot state monitoring page in the browser"
+    },
+    {
+      "key": "cmd.tool.grid.clear",
+      "text": "Grid: clear"
+    },
+    {
+      "key": "cmd.tool.grid.clear.desc",
+      "text": "Remove the built workspace grid"
+    },
+    {
+      "key": "cmd.tool.measure.reset",
+      "text": "Measure: reset"
+    },
+    {
+      "key": "cmd.tool.measure.reset.desc",
+      "text": "Forget the first measurement point"
+    },
+    {
+      "key": "cmd.demo.quick",
+      "text": "Show demo"
+    },
+    {
+      "key": "cmd.demo.quick.desc",
+      "text": "Automatic demo: point → 8 trajectories → phantoms → robot motion"
+    },
+    {
+      "key": "cmd.post.auto",
+      "text": "Auto-smooth after planning"
+    },
+    {
+      "key": "cmd.post.auto.desc",
+      "text": "On: every new point immediately yields smoothed trajectory variants"
+    },
+    {
+      "key": "cmd.post.energy",
+      "text": "Eco profile"
+    },
+    {
+      "key": "cmd.post.energy.desc",
+      "text": "Motion profile with minimum energy consumption (metric «energy efficiency»)"
+    },
+    {
+      "key": "cmd.post.smooth",
+      "text": "Trajectory smoothing"
+    },
+    {
+      "key": "cmd.post.smooth.desc",
+      "text": "Open the smoothing tab: level 0–100 %, method, before/after metrics"
+    },
+    {
+      "key": "cmd.post.timeoptimal",
+      "text": "Time-optimal"
+    },
+    {
+      "key": "cmd.post.timeoptimal.desc",
+      "text": "Fastest trajectory under the given velocity, acceleration and jerk limits"
+    },
+    {
+      "key": "cmd.startmenu.show",
+      "text": "Main menu"
+    },
+    {
+      "key": "cmd.startmenu.show.desc",
+      "text": "Start screen: new project, open session, demo, settings, exit"
+    },
+    {
+      "key": "cmd.tut.toggle",
+      "text": "Tutorial"
+    },
+    {
+      "key": "cmd.tut.toggle.desc",
+      "text": "Step-by-step tutorial with element highlighting; progress is saved"
+    },
+    {
+      "key": "cmd.workbench.toggle",
+      "text": "Post-processing workbench"
+    },
+    {
+      "key": "cmd.workbench.toggle.desc",
+      "text": "Tabs: smoothing, time-optimal trajectory, energy"
+    },
+    {
+      "key": "cmd.calib.tab",
+      "text": "Calibration wizard"
+    },
+    {
+      "key": "cmd.calib.tab.desc",
+      "text": "TCP by 4 points, robot base by 3 points, camera (stub), calibration file"
+    },
+    {
+      "key": "cmd.constr.tab",
+      "text": "Constraints tab"
+    },
+    {
+      "key": "cmd.constr.tab.desc",
+      "text": "Constraint type, tilt limit, tolerance, check and snap of the trajectory"
+    },
+    {
+      "key": "cmd.constr.toggle",
+      "text": "Planning constraints"
+    },
+    {
+      "key": "cmd.constr.toggle.desc",
+      "text": "Constraint check: vertical tool, tilt limit, look-at object"
+    },
+    {
+      "key": "cmd.export.lang",
+      "text": "Export language (KRL / KAREL / RAPID)"
+    },
+    {
+      "key": "cmd.export.lang.desc",
+      "text": "Switch the robot language for trajectory export"
+    },
+    {
+      "key": "cmd.export.robot",
+      "text": "Export to robot language"
+    },
+    {
+      "key": "cmd.export.robot.desc",
+      "text": "Motion code for the selected trajectory: KUKA KRL (.src), FANUC KAREL (.kl), ABB RAPID (.mod)"
+    },
+    {
+      "key": "cmd.import.tab",
+      "text": "Robot model import"
+    },
+    {
+      "key": "cmd.import.tab.desc",
+      "text": "URDF (working kinematics) and STEP (basic support) + kinematics check"
+    },
+    {
+      "key": "cmd.payload.tab",
+      "text": "Payload calculator"
+    },
+    {
+      "key": "cmd.payload.tab.desc",
+      "text": "Maximum payload in the current pose and a curve vs distance to the base"
+    },
+    {
+      "key": "cmd.wp.clear",
+      "text": "Clear waypoint constraints"
+    },
+    {
+      "key": "cmd.wp.clear.desc",
+      "text": "Return the selected point to normal behaviour"
+    },
+    {
+      "key": "cmd.wp.detour",
+      "text": "Obstacle detour (waypoint)"
+    },
+    {
+      "key": "cmd.wp.detour.desc",
+      "text": "Force the route to avoid the obstacle neighbourhood at the selected point"
+    },
+    {
+      "key": "cmd.wp.orient",
+      "text": "Waypoint orientation"
+    },
+    {
+      "key": "cmd.wp.orient.desc",
+      "text": "Set the required tool axis direction at the selected point (as now)"
+    },
+    {
+      "key": "cmd.wp.pause",
+      "text": "Waypoint pause"
+    },
+    {
+      "key": "cmd.wp.pause.desc",
+      "text": "Stop and wait at the selected point"
+    },
+    {
+      "key": "cmd.wp.speed",
+      "text": "Waypoint speed"
+    },
+    {
+      "key": "cmd.wp.speed.desc",
+      "text": "Enable/disable the TCP speed limit at the selected point"
+    },
+    {
+      "key": "cmd.wp.tab",
+      "text": "Waypoint constraints"
+    },
+    {
+      "key": "cmd.wp.tab.desc",
+      "text": "Tab of waypoint limits: orientation, speed, detour, pause"
+    },
+    {
+      "key": "cmd.graphics.tab",
+      "text": "Graphics: settings"
+    },
+    {
+      "key": "cmd.graphics.tab.desc",
+      "text": "Graphics section of the settings panel: presets, quality, performance, diagnostics"
+    },
+    {
+      "key": "cmd.graphics.detect",
+      "text": "Detect graphics from hardware"
+    },
+    {
+      "key": "cmd.graphics.detect.desc",
+      "text": "Re-detect GPU, memory and CPU and recompute the preset"
+    },
+    {
+      "key": "cmd.graphics.benchmark",
+      "text": "Graphics benchmark"
+    },
+    {
+      "key": "cmd.graphics.benchmark.desc",
+      "text": "5-second frame-rate measurement: average, minimum FPS and drops"
+    },
+    {
+      "key": "cmd.graphics.metrics",
+      "text": "Graphics metrics"
+    },
+    {
+      "key": "cmd.graphics.metrics.desc",
+      "text": "Overlay: FPS, frame time, draw calls, triangles, video memory"
+    },
+    {
+      "key": "cmd.graphics.reset",
+      "text": "Reset graphics"
+    },
+    {
+      "key": "cmd.graphics.reset.desc",
+      "text": "Return to «Auto» mode and default graphics settings"
     }
   ]
 }

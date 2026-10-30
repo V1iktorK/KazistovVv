@@ -1647,6 +1647,502 @@
     {
       "key": "mode.toggle",
       "text": "TAB — cambiar"
+    },
+    {
+      "key": "cmd.bt.tab",
+      "text": "Árbol de comportamiento"
+    },
+    {
+      "key": "cmd.bt.tab.desc",
+      "text": "Editor visual del árbol de comportamiento"
+    },
+    {
+      "key": "cmd.cameras.tab",
+      "text": "Cámaras y PiP"
+    },
+    {
+      "key": "cmd.cameras.tab.desc",
+      "text": "Vistas superior, lateral y en primera persona en ventanas separadas"
+    },
+    {
+      "key": "cmd.cine.toggle",
+      "text": "Modo cinematográfico"
+    },
+    {
+      "key": "cmd.cine.toggle.desc",
+      "text": "Pantalla ancha y movimiento de cámara suave"
+    },
+    {
+      "key": "cmd.collision.tab",
+      "text": "Proxies de colisión"
+    },
+    {
+      "key": "cmd.collision.tab.desc",
+      "text": "Envolventes simplificadas automáticas"
+    },
+    {
+      "key": "cmd.collision.toggle",
+      "text": "Proxies activados/desactivados"
+    },
+    {
+      "key": "cmd.collision.toggle.desc",
+      "text": "Activar o desactivar las envolventes simplificadas"
+    },
+    {
+      "key": "cmd.env.next",
+      "text": "Cambiar entorno"
+    },
+    {
+      "key": "cmd.env.next.desc",
+      "text": "Hangar, laboratorio, taller, sala limpia"
+    },
+    {
+      "key": "cmd.eyes.toggle",
+      "text": "Seguimiento de mirada"
+    },
+    {
+      "key": "cmd.eyes.toggle.desc",
+      "text": "Fijaciones, selección con la mirada, visión foveal"
+    },
+    {
+      "key": "cmd.fail.clear",
+      "text": "Borrar fallo"
+    },
+    {
+      "key": "cmd.fail.clear.desc",
+      "text": "Quitar el estado de avería tras la simulación"
+    },
+    {
+      "key": "cmd.fail.comms",
+      "text": "Pérdida de comunicación (simulación)"
+    },
+    {
+      "key": "cmd.fail.comms.desc",
+      "text": "Comprobar el comportamiento ante pérdida de comunicación"
+    },
+    {
+      "key": "cmd.fail.joint",
+      "text": "Fallo de articulación (simulación)"
+    },
+    {
+      "key": "cmd.fail.joint.desc",
+      "text": "Comprobar el comportamiento al perder el par"
+    },
+    {
+      "key": "cmd.fail.tab",
+      "text": "Simulación de fallos"
+    },
+    {
+      "key": "cmd.fail.tab.desc",
+      "text": "Fallo de articulación, pérdida de comunicación, sobrecarga"
+    },
+    {
+      "key": "cmd.forces.tab",
+      "text": "Fuerzas y pares"
+    },
+    {
+      "key": "cmd.forces.tab.desc",
+      "text": "Vectores de par por articulación y fuerza en la herramienta"
+    },
+    {
+      "key": "cmd.hands.toggle",
+      "text": "Seguimiento de manos"
+    },
+    {
+      "key": "cmd.hands.toggle.desc",
+      "text": "Gestos: toque, deslizar, agarrar"
+    },
+    {
+      "key": "cmd.heat.time",
+      "text": "Mapa de tiempo de alcance"
+    },
+    {
+      "key": "cmd.heat.time.desc",
+      "text": "Mapa de calor del tiempo en segundos"
+    },
+    {
+      "key": "cmd.lab.run",
+      "text": "Ejecutar el banco"
+    },
+    {
+      "key": "cmd.lab.run.desc",
+      "text": "Ejecutar el conjunto de tareas y obtener la tabla de métricas"
+    },
+    {
+      "key": "cmd.lab.tab",
+      "text": "Banco de planificadores"
+    },
+    {
+      "key": "cmd.lab.tab.desc",
+      "text": "Comparación de RRT*, BiRRT y optimización: más de 100 tareas"
+    },
+    {
+      "key": "cmd.lab.tree",
+      "text": "Árbol RRT en pantalla"
+    },
+    {
+      "key": "cmd.lab.tree.desc",
+      "text": "Mostrar la construcción del árbol del planificador"
+    },
+    {
+      "key": "cmd.light.next",
+      "text": "Cambiar iluminación"
+    },
+    {
+      "key": "cmd.light.next.desc",
+      "text": "Día, noche, estudio, luz dramática"
+    },
+    {
+      "key": "cmd.logtools.export",
+      "text": "Exportar el registro visible"
+    },
+    {
+      "key": "cmd.logtools.export.desc",
+      "text": "Guardar las entradas filtradas en un archivo"
+    },
+    {
+      "key": "cmd.logtools.tab",
+      "text": "Registro: niveles y búsqueda"
+    },
+    {
+      "key": "cmd.logtools.tab.desc",
+      "text": "Filtro por nivel, búsqueda, colores, exportación"
+    },
+    {
+      "key": "cmd.mat.tab",
+      "text": "Materiales"
+    },
+    {
+      "key": "cmd.mat.tab.desc",
+      "text": "Editar color, metalicidad y emisión en marcha"
+    },
+    {
+      "key": "cmd.mobile.toggle",
+      "text": "Pendiente móvil"
+    },
+    {
+      "key": "cmd.mobile.toggle.desc",
+      "text": "Recibir comandos desde una tableta por UDP"
+    },
+    {
+      "key": "cmd.net.tab",
+      "text": "Red y monitorización"
+    },
+    {
+      "key": "cmd.net.tab.desc",
+      "text": "Colaboración, panel web, péndulo móvil"
+    },
+    {
+      "key": "cmd.report.make",
+      "text": "Crear informe"
+    },
+    {
+      "key": "cmd.report.make.desc",
+      "text": "Generar el informe PDF ahora mismo"
+    },
+    {
+      "key": "cmd.report.pdf",
+      "text": "Informe PDF"
+    },
+    {
+      "key": "cmd.report.pdf.desc",
+      "text": "Informe con trayectoria, métricas, capturas y cinemática"
+    },
+    {
+      "key": "cmd.scara.recalibrate",
+      "text": "Recalcular cinemática SCARA"
+    },
+    {
+      "key": "cmd.scara.recalibrate.desc",
+      "text": "Recalcular los límites del prisma y reconectar el flujo (operación pesada)"
+    },
+    {
+      "key": "cmd.script.tab",
+      "text": "Macros (scripts)"
+    },
+    {
+      "key": "cmd.script.tab.desc",
+      "text": "Automatizar acciones del robot en un entorno aislado"
+    },
+    {
+      "key": "cmd.titles.tab",
+      "text": "Títulos y rótulos"
+    },
+    {
+      "key": "cmd.titles.tab.desc",
+      "text": "Títulos, subtítulos, notas y archivo de subtítulos"
+    },
+    {
+      "key": "cmd.valid.mannequins",
+      "text": "Incluir maniquíes en la verificación"
+    },
+    {
+      "key": "cmd.valid.mannequins.desc",
+      "text": "Dos maniquíes junto a la zona se cuentan junto con el operador"
+    },
+    {
+      "key": "cmd.valid.run",
+      "text": "INICIO con verificación"
+    },
+    {
+      "key": "cmd.valid.run.desc",
+      "text": "Verificar la trayectoria e iniciar el movimiento"
+    },
+    {
+      "key": "cmd.valid.tab",
+      "text": "Verificación previa"
+    },
+    {
+      "key": "cmd.valid.tab.desc",
+      "text": "Observaciones de la trayectoria y confirmación del operador"
+    },
+    {
+      "key": "cmd.vo.tab",
+      "text": "Voz del narrador"
+    },
+    {
+      "key": "cmd.vo.tab.desc",
+      "text": "Grabación de voz y sincronización con el vídeo"
+    },
+    {
+      "key": "cmd.voice.toggle",
+      "text": "Comandos de voz"
+    },
+    {
+      "key": "cmd.voice.toggle.desc",
+      "text": "Escuchar el micrófono y ejecutar comandos"
+    },
+    {
+      "key": "cmd.web.toggle",
+      "text": "Panel web"
+    },
+    {
+      "key": "cmd.web.toggle.desc",
+      "text": "Página de monitorización del robot en el navegador"
+    },
+    {
+      "key": "cmd.tool.grid.clear",
+      "text": "Rejilla: quitar"
+    },
+    {
+      "key": "cmd.tool.grid.clear.desc",
+      "text": "Quitar la rejilla del espacio de trabajo"
+    },
+    {
+      "key": "cmd.tool.measure.reset",
+      "text": "Medición: reiniciar"
+    },
+    {
+      "key": "cmd.tool.measure.reset.desc",
+      "text": "Olvidar el primer punto de medición"
+    },
+    {
+      "key": "cmd.demo.quick",
+      "text": "Mostrar demostración"
+    },
+    {
+      "key": "cmd.demo.quick.desc",
+      "text": "Demostración automática: punto → 8 trayectorias → fantasmas → movimiento del robot"
+    },
+    {
+      "key": "cmd.post.auto",
+      "text": "Suavizado automático tras planificar"
+    },
+    {
+      "key": "cmd.post.auto.desc",
+      "text": "Activado: cada punto nuevo produce variantes suavizadas"
+    },
+    {
+      "key": "cmd.post.energy",
+      "text": "Perfil ecológico"
+    },
+    {
+      "key": "cmd.post.energy.desc",
+      "text": "Perfil de movimiento con consumo mínimo (métrica «eficiencia energética»)"
+    },
+    {
+      "key": "cmd.post.smooth",
+      "text": "Suavizado de trayectoria"
+    },
+    {
+      "key": "cmd.post.smooth.desc",
+      "text": "Abrir la pestaña: nivel 0–100 %, método, métricas antes/después"
+    },
+    {
+      "key": "cmd.post.timeoptimal",
+      "text": "Tiempo óptimo"
+    },
+    {
+      "key": "cmd.post.timeoptimal.desc",
+      "text": "Trayectoria más rápida con los límites de velocidad, aceleración y jerk dados"
+    },
+    {
+      "key": "cmd.startmenu.show",
+      "text": "Menú principal"
+    },
+    {
+      "key": "cmd.startmenu.show.desc",
+      "text": "Pantalla de inicio: proyecto nuevo, abrir sesión, demostración, ajustes, salir"
+    },
+    {
+      "key": "cmd.tut.toggle",
+      "text": "Tutorial"
+    },
+    {
+      "key": "cmd.tut.toggle.desc",
+      "text": "Tutorial paso a paso con resaltado; el progreso se guarda"
+    },
+    {
+      "key": "cmd.workbench.toggle",
+      "text": "Banco de posprocesado"
+    },
+    {
+      "key": "cmd.workbench.toggle.desc",
+      "text": "Pestañas: suavizado, trayectoria tiempo-óptima, energía"
+    },
+    {
+      "key": "cmd.calib.tab",
+      "text": "Asistente de calibración"
+    },
+    {
+      "key": "cmd.calib.tab.desc",
+      "text": "TCP por 4 puntos, base del robot por 3 puntos, cámara (marcador), archivo de calibración"
+    },
+    {
+      "key": "cmd.constr.tab",
+      "text": "Pestaña de restricciones"
+    },
+    {
+      "key": "cmd.constr.tab.desc",
+      "text": "Tipo de restricción, límite de inclinación, tolerancia, verificación y corrección de la trayectoria"
+    },
+    {
+      "key": "cmd.constr.toggle",
+      "text": "Restricciones de planificación"
+    },
+    {
+      "key": "cmd.constr.toggle.desc",
+      "text": "Verificación: herramienta vertical, límite de inclinación, mirar al objeto"
+    },
+    {
+      "key": "cmd.export.lang",
+      "text": "Idioma de exportación (KRL / KAREL / RAPID)"
+    },
+    {
+      "key": "cmd.export.lang.desc",
+      "text": "Cambiar el lenguaje del robot para exportar trayectorias"
+    },
+    {
+      "key": "cmd.export.robot",
+      "text": "Exportar al lenguaje del robot"
+    },
+    {
+      "key": "cmd.export.robot.desc",
+      "text": "Código de movimiento de la trayectoria elegida: KUKA KRL (.src), FANUC KAREL (.kl), ABB RAPID (.mod)"
+    },
+    {
+      "key": "cmd.import.tab",
+      "text": "Importar modelo de robot"
+    },
+    {
+      "key": "cmd.import.tab.desc",
+      "text": "URDF (cinemática funcional) y STEP (soporte básico) + verificación cinemática"
+    },
+    {
+      "key": "cmd.payload.tab",
+      "text": "Calculadora de carga"
+    },
+    {
+      "key": "cmd.payload.tab.desc",
+      "text": "Carga máxima en la postura actual y curva frente a la distancia a la base"
+    },
+    {
+      "key": "cmd.wp.clear",
+      "text": "Quitar restricciones del punto"
+    },
+    {
+      "key": "cmd.wp.clear.desc",
+      "text": "Devolver el punto seleccionado al comportamiento normal"
+    },
+    {
+      "key": "cmd.wp.detour",
+      "text": "Rodeo de obstáculo (punto)"
+    },
+    {
+      "key": "cmd.wp.detour.desc",
+      "text": "Obligar a la ruta a evitar el entorno del obstáculo en el punto elegido"
+    },
+    {
+      "key": "cmd.wp.orient",
+      "text": "Orientación del punto"
+    },
+    {
+      "key": "cmd.wp.orient.desc",
+      "text": "Fijar la dirección del eje de la herramienta en el punto elegido (como ahora)"
+    },
+    {
+      "key": "cmd.wp.pause",
+      "text": "Pausa del punto"
+    },
+    {
+      "key": "cmd.wp.pause.desc",
+      "text": "Detenerse y esperar en el punto seleccionado"
+    },
+    {
+      "key": "cmd.wp.speed",
+      "text": "Velocidad del punto"
+    },
+    {
+      "key": "cmd.wp.speed.desc",
+      "text": "Activar o desactivar el límite de velocidad TCP en el punto"
+    },
+    {
+      "key": "cmd.wp.tab",
+      "text": "Restricciones del punto"
+    },
+    {
+      "key": "cmd.wp.tab.desc",
+      "text": "Pestaña de límites del punto: orientación, velocidad, rodeo, pausa"
+    },
+    {
+      "key": "cmd.graphics.tab",
+      "text": "Gráficos: ajustes"
+    },
+    {
+      "key": "cmd.graphics.tab.desc",
+      "text": "Sección «Gráficos» del panel de ajustes: preajustes, calidad, rendimiento, diagnóstico"
+    },
+    {
+      "key": "cmd.graphics.detect",
+      "text": "Detectar gráficos por hardware"
+    },
+    {
+      "key": "cmd.graphics.detect.desc",
+      "text": "Volver a detectar GPU, memoria y CPU y recalcular el preajuste"
+    },
+    {
+      "key": "cmd.graphics.benchmark",
+      "text": "Benchmark de gráficos"
+    },
+    {
+      "key": "cmd.graphics.benchmark.desc",
+      "text": "Medición de 5 segundos: FPS medio, mínimo y caídas"
+    },
+    {
+      "key": "cmd.graphics.metrics",
+      "text": "Métricas de gráficos"
+    },
+    {
+      "key": "cmd.graphics.metrics.desc",
+      "text": "Superposición: FPS, tiempo de fotograma, llamadas de dibujo, triángulos, memoria de vídeo"
+    },
+    {
+      "key": "cmd.graphics.reset",
+      "text": "Restablecer gráficos"
+    },
+    {
+      "key": "cmd.graphics.reset.desc",
+      "text": "Volver al modo «Auto» y a los ajustes de gráficos predeterminados"
     }
   ]
 }

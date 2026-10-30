@@ -1647,6 +1647,502 @@
     {
       "key": "mode.toggle",
       "text": "TAB — переключить"
+    },
+    {
+      "key": "cmd.bt.tab",
+      "text": "Дерево поведения"
+    },
+    {
+      "key": "cmd.bt.tab.desc",
+      "text": "Визуальный редактор дерева поведения"
+    },
+    {
+      "key": "cmd.cameras.tab",
+      "text": "Камеры и PiP"
+    },
+    {
+      "key": "cmd.cameras.tab.desc",
+      "text": "Вид сверху, сбоку и от первого лица в отдельных окнах"
+    },
+    {
+      "key": "cmd.cine.toggle",
+      "text": "Кинематографический режим"
+    },
+    {
+      "key": "cmd.cine.toggle.desc",
+      "text": "Широкий экран и плавное движение камеры"
+    },
+    {
+      "key": "cmd.collision.tab",
+      "text": "Коллизионные прокси"
+    },
+    {
+      "key": "cmd.collision.tab.desc",
+      "text": "Автоматические упрощённые оболочки "
+    },
+    {
+      "key": "cmd.collision.toggle",
+      "text": "Прокси вкл/выкл"
+    },
+    {
+      "key": "cmd.collision.toggle.desc",
+      "text": "Включить или выключить упрощённые оболочки "
+    },
+    {
+      "key": "cmd.env.next",
+      "text": "Сменить окружение"
+    },
+    {
+      "key": "cmd.env.next.desc",
+      "text": "Ангар, лаборатория, цех, чистое помещение"
+    },
+    {
+      "key": "cmd.eyes.toggle",
+      "text": "Отслеживание взгляда"
+    },
+    {
+      "key": "cmd.eyes.toggle.desc",
+      "text": "Фиксации, выбор взглядом, фовеальное зрение"
+    },
+    {
+      "key": "cmd.fail.clear",
+      "text": "Сброс аварии"
+    },
+    {
+      "key": "cmd.fail.clear.desc",
+      "text": "Снять аварийное состояние после имитации"
+    },
+    {
+      "key": "cmd.fail.comms",
+      "text": "Потеря связи (имитация)"
+    },
+    {
+      "key": "cmd.fail.comms.desc",
+      "text": "Проверить поведение системы при потере связи"
+    },
+    {
+      "key": "cmd.fail.joint",
+      "text": "Отказ сустава (имитация)"
+    },
+    {
+      "key": "cmd.fail.joint.desc",
+      "text": "Проверить поведение при потере момента"
+    },
+    {
+      "key": "cmd.fail.tab",
+      "text": "Имитация отказов"
+    },
+    {
+      "key": "cmd.fail.tab.desc",
+      "text": "Отказ сустава, потеря связи, перегрузка"
+    },
+    {
+      "key": "cmd.forces.tab",
+      "text": "Силы и моменты"
+    },
+    {
+      "key": "cmd.forces.tab.desc",
+      "text": "Векторы моментов по суставам и сила на инструменте"
+    },
+    {
+      "key": "cmd.hands.toggle",
+      "text": "Отслеживание рук"
+    },
+    {
+      "key": "cmd.hands.toggle.desc",
+      "text": "Жесты: касание, свайп, горсть"
+    },
+    {
+      "key": "cmd.heat.time",
+      "text": "Карта времени достижимости"
+    },
+    {
+      "key": "cmd.heat.time.desc",
+      "text": "Тепловая карта времени в секундах"
+    },
+    {
+      "key": "cmd.lab.run",
+      "text": "Запустить стенд"
+    },
+    {
+      "key": "cmd.lab.run.desc",
+      "text": "Прогнать набор задач и получить таблицу метрик"
+    },
+    {
+      "key": "cmd.lab.tab",
+      "text": "Стенд планировщиков"
+    },
+    {
+      "key": "cmd.lab.tab.desc",
+      "text": "Сравнение RRT*, BiRRT и оптимизации: 100+ задач, "
+    },
+    {
+      "key": "cmd.lab.tree",
+      "text": "Дерево RRT на экране"
+    },
+    {
+      "key": "cmd.lab.tree.desc",
+      "text": "Показывать построение дерева планировщика"
+    },
+    {
+      "key": "cmd.light.next",
+      "text": "Сменить освещение"
+    },
+    {
+      "key": "cmd.light.next.desc",
+      "text": "День, ночь, студия, драматичный свет"
+    },
+    {
+      "key": "cmd.logtools.export",
+      "text": "Выгрузить видимый журнал"
+    },
+    {
+      "key": "cmd.logtools.export.desc",
+      "text": "Сохранить отфильтрованные записи в файл"
+    },
+    {
+      "key": "cmd.logtools.tab",
+      "text": "Журнал: уровни и поиск"
+    },
+    {
+      "key": "cmd.logtools.tab.desc",
+      "text": "Фильтр по уровню, поиск, цвета, выгрузка"
+    },
+    {
+      "key": "cmd.mat.tab",
+      "text": "Материалы"
+    },
+    {
+      "key": "cmd.mat.tab.desc",
+      "text": "Правка цвета, металла и свечения прямо в работе"
+    },
+    {
+      "key": "cmd.mobile.toggle",
+      "text": "Мобильный пульт"
+    },
+    {
+      "key": "cmd.mobile.toggle.desc",
+      "text": "Приём команд с планшета по UDP"
+    },
+    {
+      "key": "cmd.net.tab",
+      "text": "Сеть и мониторинг"
+    },
+    {
+      "key": "cmd.net.tab.desc",
+      "text": "Совместная работа, веб-дашборд, мобильный пульт"
+    },
+    {
+      "key": "cmd.report.make",
+      "text": "Сделать отчёт"
+    },
+    {
+      "key": "cmd.report.make.desc",
+      "text": "Сформировать PDF-отчёт прямо сейчас"
+    },
+    {
+      "key": "cmd.report.pdf",
+      "text": "PDF-отчёт"
+    },
+    {
+      "key": "cmd.report.pdf.desc",
+      "text": "Отчёт с траекторией, метриками, снимками и кинематикой"
+    },
+    {
+      "key": "cmd.scara.recalibrate",
+      "text": "Пересчитать кинематику SCARA"
+    },
+    {
+      "key": "cmd.scara.recalibrate.desc",
+      "text": "Пересчитать пределы хода призмы и заново привязать поток (тяжёлая операция — "
+    },
+    {
+      "key": "cmd.script.tab",
+      "text": "Макросы (скрипты)"
+    },
+    {
+      "key": "cmd.script.tab.desc",
+      "text": "Автоматизация действий робота в песочнице"
+    },
+    {
+      "key": "cmd.titles.tab",
+      "text": "Титры и подписи"
+    },
+    {
+      "key": "cmd.titles.tab.desc",
+      "text": "Титры, подзаголовки, пояснения и файл субтитров"
+    },
+    {
+      "key": "cmd.valid.mannequins",
+      "text": "Учитывать манекены в проверке"
+    },
+    {
+      "key": "cmd.valid.mannequins.desc",
+      "text": "Два манекена рядом с рабочей зоной учитываются вместе с оператором"
+    },
+    {
+      "key": "cmd.valid.run",
+      "text": "ПУСК с проверкой"
+    },
+    {
+      "key": "cmd.valid.run.desc",
+      "text": "Проверить траекторию и запустить движение"
+    },
+    {
+      "key": "cmd.valid.tab",
+      "text": "Проверка перед пуском"
+    },
+    {
+      "key": "cmd.valid.tab.desc",
+      "text": "Замечания по траектории и подтверждение оператора"
+    },
+    {
+      "key": "cmd.vo.tab",
+      "text": "Голос диктора"
+    },
+    {
+      "key": "cmd.vo.tab.desc",
+      "text": "Запись голоса и синхронизация с видеозаписью"
+    },
+    {
+      "key": "cmd.voice.toggle",
+      "text": "Голосовые команды"
+    },
+    {
+      "key": "cmd.voice.toggle.desc",
+      "text": "Слушать микрофон и выполнять команды"
+    },
+    {
+      "key": "cmd.web.toggle",
+      "text": "Веб-дашборд"
+    },
+    {
+      "key": "cmd.web.toggle.desc",
+      "text": "Страница мониторинга состояния робота в браузере"
+    },
+    {
+      "key": "cmd.tool.grid.clear",
+      "text": "Сетка: убрать"
+    },
+    {
+      "key": "cmd.tool.grid.clear.desc",
+      "text": "Снять построенную сетку рабочей зоны"
+    },
+    {
+      "key": "cmd.tool.measure.reset",
+      "text": "Измерение: сбросить"
+    },
+    {
+      "key": "cmd.tool.measure.reset.desc",
+      "text": "Забыть первую точку замера"
+    },
+    {
+      "key": "cmd.demo.quick",
+      "text": "Показать демо"
+    },
+    {
+      "key": "cmd.demo.quick.desc",
+      "text": "Автоматическая демонстрация: точка → 8 траекторий → фантомы → движение робота"
+    },
+    {
+      "key": "cmd.post.auto",
+      "text": "Автосглаживание после планирования"
+    },
+    {
+      "key": "cmd.post.auto.desc",
+      "text": "Вкл: каждая новая точка сразу даёт сглаженные варианты траектории"
+    },
+    {
+      "key": "cmd.post.energy",
+      "text": "Эко-профиль"
+    },
+    {
+      "key": "cmd.post.energy.desc",
+      "text": "Профиль движения с минимальным энергопотреблением (метрика «энергоэффективность»)"
+    },
+    {
+      "key": "cmd.post.smooth",
+      "text": "Сглаживание траектории"
+    },
+    {
+      "key": "cmd.post.smooth.desc",
+      "text": "Открыть вкладку сглаживания: уровень 0–100 %, метод, метрики «до / после»"
+    },
+    {
+      "key": "cmd.post.timeoptimal",
+      "text": "Время-оптимальная"
+    },
+    {
+      "key": "cmd.post.timeoptimal.desc",
+      "text": "Самая быстрая траектория при заданных лимитах скорости, ускорения и jerk"
+    },
+    {
+      "key": "cmd.startmenu.show",
+      "text": "Главное меню"
+    },
+    {
+      "key": "cmd.startmenu.show.desc",
+      "text": "Экран запуска: новый проект, открытие сессии, демонстрация, настройки, выход"
+    },
+    {
+      "key": "cmd.tut.toggle",
+      "text": "Обучение"
+    },
+    {
+      "key": "cmd.tut.toggle.desc",
+      "text": "Пошаговое обучение с подсветкой элементов; прогресс сохраняется"
+    },
+    {
+      "key": "cmd.workbench.toggle",
+      "text": "Верстак постобработки"
+    },
+    {
+      "key": "cmd.workbench.toggle.desc",
+      "text": "Вкладки: сглаживание, время-оптимальная траектория, энергия"
+    },
+    {
+      "key": "cmd.calib.tab",
+      "text": "Калибровочный мастер"
+    },
+    {
+      "key": "cmd.calib.tab.desc",
+      "text": "TCP по 4 точкам, база робота по 3 точкам, камера (заглушка), файл калибровки"
+    },
+    {
+      "key": "cmd.constr.tab",
+      "text": "Вкладка ограничений"
+    },
+    {
+      "key": "cmd.constr.tab.desc",
+      "text": "Тип ограничения, предел наклона, допуск, проверка и приведение траектории"
+    },
+    {
+      "key": "cmd.constr.toggle",
+      "text": "Ограничения планирования"
+    },
+    {
+      "key": "cmd.constr.toggle.desc",
+      "text": "Проверка ограничений: вертикальный инструмент, предел наклона, взгляд на объект"
+    },
+    {
+      "key": "cmd.export.lang",
+      "text": "Язык экспорта (KRL / KAREL / RAPID)"
+    },
+    {
+      "key": "cmd.export.lang.desc",
+      "text": "Переключить язык робота для экспорта траекторий"
+    },
+    {
+      "key": "cmd.export.robot",
+      "text": "Экспорт в язык робота"
+    },
+    {
+      "key": "cmd.export.robot.desc",
+      "text": "Код движения по выбранной траектории: KUKA KRL (.src), FANUC KAREL (.kl), ABB RAPID (.mod)"
+    },
+    {
+      "key": "cmd.import.tab",
+      "text": "Импорт модели робота"
+    },
+    {
+      "key": "cmd.import.tab.desc",
+      "text": "URDF (рабочая кинематика) и STEP (базовая поддержка) + проверка кинематики"
+    },
+    {
+      "key": "cmd.payload.tab",
+      "text": "Калькулятор нагрузки"
+    },
+    {
+      "key": "cmd.payload.tab.desc",
+      "text": "Максимальная нагрузка в текущей позе и график от расстояния до базы"
+    },
+    {
+      "key": "cmd.wp.clear",
+      "text": "Снять ограничения waypoint"
+    },
+    {
+      "key": "cmd.wp.clear.desc",
+      "text": "Вернуть выбранной точке обычное поведение"
+    },
+    {
+      "key": "cmd.wp.detour",
+      "text": "Обход препятствия (waypoint)"
+    },
+    {
+      "key": "cmd.wp.detour.desc",
+      "text": "Обязать маршрут обходить окрестность препятствия у выбранной точки"
+    },
+    {
+      "key": "cmd.wp.orient",
+      "text": "Ориентация waypoint"
+    },
+    {
+      "key": "cmd.wp.orient.desc",
+      "text": "Задать требуемое направление оси инструмента в выбранной точке (как сейчас)"
+    },
+    {
+      "key": "cmd.wp.pause",
+      "text": "Пауза waypoint"
+    },
+    {
+      "key": "cmd.wp.pause.desc",
+      "text": "Остановиться и подождать в выбранной точке"
+    },
+    {
+      "key": "cmd.wp.speed",
+      "text": "Скорость waypoint"
+    },
+    {
+      "key": "cmd.wp.speed.desc",
+      "text": "Включить/выключить ограничение скорости TCP в выбранной точке"
+    },
+    {
+      "key": "cmd.wp.tab",
+      "text": "Ограничения точки"
+    },
+    {
+      "key": "cmd.wp.tab.desc",
+      "text": "Вкладка ограничений промежуточных точек: ориентация, скорость, обход, пауза"
+    },
+    {
+      "key": "cmd.graphics.tab",
+      "text": "Графика: настройки"
+    },
+    {
+      "key": "cmd.graphics.tab.desc",
+      "text": "Раздел «Графика» панели настроек: пресеты, качество, производительность, диагностика"
+    },
+    {
+      "key": "cmd.graphics.detect",
+      "text": "Определить графику по железу"
+    },
+    {
+      "key": "cmd.graphics.detect.desc",
+      "text": "Повторно определить видеокарту, память и процессор и пересчитать пресет"
+    },
+    {
+      "key": "cmd.graphics.benchmark",
+      "text": "Бенчмарк графики"
+    },
+    {
+      "key": "cmd.graphics.benchmark.desc",
+      "text": "Замер кадровой частоты на 5 секунд: средний, минимальный FPS и просадки"
+    },
+    {
+      "key": "cmd.graphics.metrics",
+      "text": "Метрики графики"
+    },
+    {
+      "key": "cmd.graphics.metrics.desc",
+      "text": "Оверлей: FPS, время кадра, вызовы отрисовки, треугольники, видеопамять"
+    },
+    {
+      "key": "cmd.graphics.reset",
+      "text": "Сбросить графику"
+    },
+    {
+      "key": "cmd.graphics.reset.desc",
+      "text": "Вернуть режим «Авто» и настройки графики по умолчанию"
     }
   ]
 }

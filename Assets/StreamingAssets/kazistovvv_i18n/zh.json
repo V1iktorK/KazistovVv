@@ -1647,6 +1647,502 @@
     {
       "key": "mode.toggle",
       "text": "TAB — 切换"
+    },
+    {
+      "key": "cmd.bt.tab",
+      "text": "行为树"
+    },
+    {
+      "key": "cmd.bt.tab.desc",
+      "text": "可视化行为树编辑器"
+    },
+    {
+      "key": "cmd.cameras.tab",
+      "text": "相机与画中画"
+    },
+    {
+      "key": "cmd.cameras.tab.desc",
+      "text": "顶视图、侧视图和第一人称视图分别显示在独立窗口"
+    },
+    {
+      "key": "cmd.cine.toggle",
+      "text": "电影模式"
+    },
+    {
+      "key": "cmd.cine.toggle.desc",
+      "text": "宽屏与平滑的相机运动"
+    },
+    {
+      "key": "cmd.collision.tab",
+      "text": "碰撞代理"
+    },
+    {
+      "key": "cmd.collision.tab.desc",
+      "text": "自动生成的简化外壳"
+    },
+    {
+      "key": "cmd.collision.toggle",
+      "text": "代理开/关"
+    },
+    {
+      "key": "cmd.collision.toggle.desc",
+      "text": "启用或禁用简化外壳"
+    },
+    {
+      "key": "cmd.env.next",
+      "text": "切换环境"
+    },
+    {
+      "key": "cmd.env.next.desc",
+      "text": "机库、实验室、车间、洁净室"
+    },
+    {
+      "key": "cmd.eyes.toggle",
+      "text": "视线追踪"
+    },
+    {
+      "key": "cmd.eyes.toggle.desc",
+      "text": "注视点、视线选择、中央凹视觉"
+    },
+    {
+      "key": "cmd.fail.clear",
+      "text": "清除故障"
+    },
+    {
+      "key": "cmd.fail.clear.desc",
+      "text": "仿真后清除故障状态"
+    },
+    {
+      "key": "cmd.fail.comms",
+      "text": "通信丢失（仿真）"
+    },
+    {
+      "key": "cmd.fail.comms.desc",
+      "text": "检查通信丢失时的系统行为"
+    },
+    {
+      "key": "cmd.fail.joint",
+      "text": "关节故障（仿真）"
+    },
+    {
+      "key": "cmd.fail.joint.desc",
+      "text": "检查失去扭矩时的行为"
+    },
+    {
+      "key": "cmd.fail.tab",
+      "text": "故障仿真"
+    },
+    {
+      "key": "cmd.fail.tab.desc",
+      "text": "关节故障、通信丢失、过载"
+    },
+    {
+      "key": "cmd.forces.tab",
+      "text": "力与力矩"
+    },
+    {
+      "key": "cmd.forces.tab.desc",
+      "text": "各关节力矩向量与工具受力"
+    },
+    {
+      "key": "cmd.hands.toggle",
+      "text": "手部追踪"
+    },
+    {
+      "key": "cmd.hands.toggle.desc",
+      "text": "手势：触摸、滑动、抓取"
+    },
+    {
+      "key": "cmd.heat.time",
+      "text": "可达时间图"
+    },
+    {
+      "key": "cmd.heat.time.desc",
+      "text": "以秒为单位的时间热图"
+    },
+    {
+      "key": "cmd.lab.run",
+      "text": "运行基准"
+    },
+    {
+      "key": "cmd.lab.run.desc",
+      "text": "执行任务集并得到指标表"
+    },
+    {
+      "key": "cmd.lab.tab",
+      "text": "规划器基准"
+    },
+    {
+      "key": "cmd.lab.tab.desc",
+      "text": "RRT*、BiRRT 与优化的比较：100+ 任务"
+    },
+    {
+      "key": "cmd.lab.tree",
+      "text": "屏幕上的 RRT 树"
+    },
+    {
+      "key": "cmd.lab.tree.desc",
+      "text": "显示规划器构建的树"
+    },
+    {
+      "key": "cmd.light.next",
+      "text": "切换照明"
+    },
+    {
+      "key": "cmd.light.next.desc",
+      "text": "白天、夜晚、影棚、戏剧灯光"
+    },
+    {
+      "key": "cmd.logtools.export",
+      "text": "导出可见日志"
+    },
+    {
+      "key": "cmd.logtools.export.desc",
+      "text": "将筛选后的记录保存到文件"
+    },
+    {
+      "key": "cmd.logtools.tab",
+      "text": "日志：级别与搜索"
+    },
+    {
+      "key": "cmd.logtools.tab.desc",
+      "text": "级别筛选、搜索、颜色、导出"
+    },
+    {
+      "key": "cmd.mat.tab",
+      "text": "材质"
+    },
+    {
+      "key": "cmd.mat.tab.desc",
+      "text": "运行时编辑颜色、金属度与自发光"
+    },
+    {
+      "key": "cmd.mobile.toggle",
+      "text": "移动示教器"
+    },
+    {
+      "key": "cmd.mobile.toggle.desc",
+      "text": "通过 UDP 从平板接收命令"
+    },
+    {
+      "key": "cmd.net.tab",
+      "text": "网络与监控"
+    },
+    {
+      "key": "cmd.net.tab.desc",
+      "text": "协作、网页仪表板、移动示教器"
+    },
+    {
+      "key": "cmd.report.make",
+      "text": "生成报告"
+    },
+    {
+      "key": "cmd.report.make.desc",
+      "text": "立即生成 PDF 报告"
+    },
+    {
+      "key": "cmd.report.pdf",
+      "text": "PDF 报告"
+    },
+    {
+      "key": "cmd.report.pdf.desc",
+      "text": "包含轨迹、指标、截图与运动学的报告"
+    },
+    {
+      "key": "cmd.scara.recalibrate",
+      "text": "重新计算 SCARA 运动学"
+    },
+    {
+      "key": "cmd.scara.recalibrate.desc",
+      "text": "重新计算棱柱行程限制并重新绑定数据流（耗时操作）"
+    },
+    {
+      "key": "cmd.script.tab",
+      "text": "宏（脚本）"
+    },
+    {
+      "key": "cmd.script.tab.desc",
+      "text": "在沙箱中自动化机器人动作"
+    },
+    {
+      "key": "cmd.titles.tab",
+      "text": "标题与字幕"
+    },
+    {
+      "key": "cmd.titles.tab.desc",
+      "text": "标题、副标题、说明与字幕文件"
+    },
+    {
+      "key": "cmd.valid.mannequins",
+      "text": "检查时计入人体模型"
+    },
+    {
+      "key": "cmd.valid.mannequins.desc",
+      "text": "工作区旁的两个人体模型与操作员一并计入"
+    },
+    {
+      "key": "cmd.valid.run",
+      "text": "带检查启动"
+    },
+    {
+      "key": "cmd.valid.run.desc",
+      "text": "检查轨迹并开始运动"
+    },
+    {
+      "key": "cmd.valid.tab",
+      "text": "启动前检查"
+    },
+    {
+      "key": "cmd.valid.tab.desc",
+      "text": "轨迹问题与操作员确认"
+    },
+    {
+      "key": "cmd.vo.tab",
+      "text": "解说配音"
+    },
+    {
+      "key": "cmd.vo.tab.desc",
+      "text": "录制语音并与视频同步"
+    },
+    {
+      "key": "cmd.voice.toggle",
+      "text": "语音命令"
+    },
+    {
+      "key": "cmd.voice.toggle.desc",
+      "text": "监听麦克风并执行命令"
+    },
+    {
+      "key": "cmd.web.toggle",
+      "text": "网页仪表板"
+    },
+    {
+      "key": "cmd.web.toggle.desc",
+      "text": "浏览器中的机器人状态监控页面"
+    },
+    {
+      "key": "cmd.tool.grid.clear",
+      "text": "网格：清除"
+    },
+    {
+      "key": "cmd.tool.grid.clear.desc",
+      "text": "移除已构建的工作空间网格"
+    },
+    {
+      "key": "cmd.tool.measure.reset",
+      "text": "测量：重置"
+    },
+    {
+      "key": "cmd.tool.measure.reset.desc",
+      "text": "忘记第一个测量点"
+    },
+    {
+      "key": "cmd.demo.quick",
+      "text": "播放演示"
+    },
+    {
+      "key": "cmd.demo.quick.desc",
+      "text": "自动演示：点 → 8 条轨迹 → 幻影 → 机器人运动"
+    },
+    {
+      "key": "cmd.post.auto",
+      "text": "规划后自动平滑"
+    },
+    {
+      "key": "cmd.post.auto.desc",
+      "text": "开启：每个新点立即给出平滑后的轨迹方案"
+    },
+    {
+      "key": "cmd.post.energy",
+      "text": "节能方案"
+    },
+    {
+      "key": "cmd.post.energy.desc",
+      "text": "能耗最低的运动方案（指标“能效”）"
+    },
+    {
+      "key": "cmd.post.smooth",
+      "text": "轨迹平滑"
+    },
+    {
+      "key": "cmd.post.smooth.desc",
+      "text": "打开平滑标签页：级别 0–100 %、方法、前后指标"
+    },
+    {
+      "key": "cmd.post.timeoptimal",
+      "text": "时间最优"
+    },
+    {
+      "key": "cmd.post.timeoptimal.desc",
+      "text": "在给定速度、加速度与加加速度限制下的最快轨迹"
+    },
+    {
+      "key": "cmd.startmenu.show",
+      "text": "主菜单"
+    },
+    {
+      "key": "cmd.startmenu.show.desc",
+      "text": "启动界面：新建项目、打开会话、演示、设置、退出"
+    },
+    {
+      "key": "cmd.tut.toggle",
+      "text": "教程"
+    },
+    {
+      "key": "cmd.tut.toggle.desc",
+      "text": "带元素高亮的分步教程；进度会被保存"
+    },
+    {
+      "key": "cmd.workbench.toggle",
+      "text": "后处理工作台"
+    },
+    {
+      "key": "cmd.workbench.toggle.desc",
+      "text": "标签页：平滑、时间最优轨迹、能耗"
+    },
+    {
+      "key": "cmd.calib.tab",
+      "text": "校准向导"
+    },
+    {
+      "key": "cmd.calib.tab.desc",
+      "text": "4 点确定 TCP，3 点确定机器人基座，相机（占位），校准文件"
+    },
+    {
+      "key": "cmd.constr.tab",
+      "text": "约束标签页"
+    },
+    {
+      "key": "cmd.constr.tab.desc",
+      "text": "约束类型、倾斜限制、容差、检查与轨迹贴合"
+    },
+    {
+      "key": "cmd.constr.toggle",
+      "text": "规划约束"
+    },
+    {
+      "key": "cmd.constr.toggle.desc",
+      "text": "约束检查：垂直工具、倾斜限制、指向对象"
+    },
+    {
+      "key": "cmd.export.lang",
+      "text": "导出语言（KRL / KAREL / RAPID）"
+    },
+    {
+      "key": "cmd.export.lang.desc",
+      "text": "切换轨迹导出所用的机器人语言"
+    },
+    {
+      "key": "cmd.export.robot",
+      "text": "导出为机器人语言"
+    },
+    {
+      "key": "cmd.export.robot.desc",
+      "text": "所选轨迹的运动代码：KUKA KRL (.src)、FANUC KAREL (.kl)、ABB RAPID (.mod)"
+    },
+    {
+      "key": "cmd.import.tab",
+      "text": "机器人模型导入"
+    },
+    {
+      "key": "cmd.import.tab.desc",
+      "text": "URDF（可用的运动学）与 STEP（基础支持）+ 运动学校验"
+    },
+    {
+      "key": "cmd.payload.tab",
+      "text": "负载计算器"
+    },
+    {
+      "key": "cmd.payload.tab.desc",
+      "text": "当前姿态下的最大负载以及与基座距离的关系曲线"
+    },
+    {
+      "key": "cmd.wp.clear",
+      "text": "清除航点约束"
+    },
+    {
+      "key": "cmd.wp.clear.desc",
+      "text": "将所选点恢复为常规行为"
+    },
+    {
+      "key": "cmd.wp.detour",
+      "text": "绕过障碍（航点）"
+    },
+    {
+      "key": "cmd.wp.detour.desc",
+      "text": "强制路径在所选点避开障碍附近区域"
+    },
+    {
+      "key": "cmd.wp.orient",
+      "text": "航点姿态"
+    },
+    {
+      "key": "cmd.wp.orient.desc",
+      "text": "设置所选点所需的刀具轴方向（按当前）"
+    },
+    {
+      "key": "cmd.wp.pause",
+      "text": "航点暂停"
+    },
+    {
+      "key": "cmd.wp.pause.desc",
+      "text": "在所选点停下并等待"
+    },
+    {
+      "key": "cmd.wp.speed",
+      "text": "航点速度"
+    },
+    {
+      "key": "cmd.wp.speed.desc",
+      "text": "启用/禁用所选点的 TCP 速度限制"
+    },
+    {
+      "key": "cmd.wp.tab",
+      "text": "航点约束"
+    },
+    {
+      "key": "cmd.wp.tab.desc",
+      "text": "航点限制标签页：姿态、速度、绕行、暂停"
+    },
+    {
+      "key": "cmd.graphics.tab",
+      "text": "图形：设置"
+    },
+    {
+      "key": "cmd.graphics.tab.desc",
+      "text": "设置面板的“图形”部分：预设、质量、性能、诊断"
+    },
+    {
+      "key": "cmd.graphics.detect",
+      "text": "按硬件检测图形"
+    },
+    {
+      "key": "cmd.graphics.detect.desc",
+      "text": "重新检测显卡、内存与处理器并重新计算预设"
+    },
+    {
+      "key": "cmd.graphics.benchmark",
+      "text": "图形基准测试"
+    },
+    {
+      "key": "cmd.graphics.benchmark.desc",
+      "text": "5 秒帧率测量：平均、最低 FPS 与掉帧"
+    },
+    {
+      "key": "cmd.graphics.metrics",
+      "text": "图形指标"
+    },
+    {
+      "key": "cmd.graphics.metrics.desc",
+      "text": "叠加显示：FPS、帧时间、绘制调用、三角形、显存"
+    },
+    {
+      "key": "cmd.graphics.reset",
+      "text": "重置图形"
+    },
+    {
+      "key": "cmd.graphics.reset.desc",
+      "text": "恢复到“自动”模式和默认图形设置"
     }
   ]
 }

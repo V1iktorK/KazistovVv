@@ -1647,6 +1647,502 @@
     {
       "key": "mode.toggle",
       "text": "TAB — 切り替え"
+    },
+    {
+      "key": "cmd.bt.tab",
+      "text": "ビヘイビアツリー"
+    },
+    {
+      "key": "cmd.bt.tab.desc",
+      "text": "ビヘイビアツリーのビジュアルエディタ"
+    },
+    {
+      "key": "cmd.cameras.tab",
+      "text": "カメラと PiP"
+    },
+    {
+      "key": "cmd.cameras.tab.desc",
+      "text": "上面・側面・一人称視点を別ウィンドウで表示"
+    },
+    {
+      "key": "cmd.cine.toggle",
+      "text": "シネマティックモード"
+    },
+    {
+      "key": "cmd.cine.toggle.desc",
+      "text": "ワイド画面と滑らかなカメラ移動"
+    },
+    {
+      "key": "cmd.collision.tab",
+      "text": "コリジョンプロキシ"
+    },
+    {
+      "key": "cmd.collision.tab.desc",
+      "text": "自動生成の簡易凸包"
+    },
+    {
+      "key": "cmd.collision.toggle",
+      "text": "プロキシのオン/オフ"
+    },
+    {
+      "key": "cmd.collision.toggle.desc",
+      "text": "簡易凸包の有効・無効"
+    },
+    {
+      "key": "cmd.env.next",
+      "text": "環境を切り替え"
+    },
+    {
+      "key": "cmd.env.next.desc",
+      "text": "格納庫、実験室、工場、クリーンルーム"
+    },
+    {
+      "key": "cmd.eyes.toggle",
+      "text": "視線トラッキング"
+    },
+    {
+      "key": "cmd.eyes.toggle.desc",
+      "text": "注視点、視線による選択、中心窩視"
+    },
+    {
+      "key": "cmd.fail.clear",
+      "text": "故障を解除"
+    },
+    {
+      "key": "cmd.fail.clear.desc",
+      "text": "シミュレーション後の故障状態を解除"
+    },
+    {
+      "key": "cmd.fail.comms",
+      "text": "通信断（シミュレーション）"
+    },
+    {
+      "key": "cmd.fail.comms.desc",
+      "text": "通信断時のシステム動作を確認"
+    },
+    {
+      "key": "cmd.fail.joint",
+      "text": "関節故障（シミュレーション）"
+    },
+    {
+      "key": "cmd.fail.joint.desc",
+      "text": "トルク喪失時の動作を確認"
+    },
+    {
+      "key": "cmd.fail.tab",
+      "text": "故障シミュレーション"
+    },
+    {
+      "key": "cmd.fail.tab.desc",
+      "text": "関節故障、通信断、過負荷"
+    },
+    {
+      "key": "cmd.forces.tab",
+      "text": "力とトルク"
+    },
+    {
+      "key": "cmd.forces.tab.desc",
+      "text": "関節ごとのトルクベクトルとツールにかかる力"
+    },
+    {
+      "key": "cmd.hands.toggle",
+      "text": "ハンドトラッキング"
+    },
+    {
+      "key": "cmd.hands.toggle.desc",
+      "text": "ジェスチャ：タッチ、スワイプ、つかむ"
+    },
+    {
+      "key": "cmd.heat.time",
+      "text": "到達時間マップ"
+    },
+    {
+      "key": "cmd.heat.time.desc",
+      "text": "秒単位の時間ヒートマップ"
+    },
+    {
+      "key": "cmd.lab.run",
+      "text": "ベンチを実行"
+    },
+    {
+      "key": "cmd.lab.run.desc",
+      "text": "タスクセットを実行して指標表を取得"
+    },
+    {
+      "key": "cmd.lab.tab",
+      "text": "プランナベンチ"
+    },
+    {
+      "key": "cmd.lab.tab.desc",
+      "text": "RRT*・BiRRT・最適化の比較：100 以上のタスク"
+    },
+    {
+      "key": "cmd.lab.tree",
+      "text": "画面上の RRT ツリー"
+    },
+    {
+      "key": "cmd.lab.tree.desc",
+      "text": "プランナの木の生成を表示"
+    },
+    {
+      "key": "cmd.light.next",
+      "text": "照明を切り替え"
+    },
+    {
+      "key": "cmd.light.next.desc",
+      "text": "昼、夜、スタジオ、ドラマチック"
+    },
+    {
+      "key": "cmd.logtools.export",
+      "text": "表示中のログを書き出す"
+    },
+    {
+      "key": "cmd.logtools.export.desc",
+      "text": "絞り込んだ記録をファイルに保存"
+    },
+    {
+      "key": "cmd.logtools.tab",
+      "text": "ログ：レベルと検索"
+    },
+    {
+      "key": "cmd.logtools.tab.desc",
+      "text": "レベル絞り込み、検索、色分け、書き出し"
+    },
+    {
+      "key": "cmd.mat.tab",
+      "text": "マテリアル"
+    },
+    {
+      "key": "cmd.mat.tab.desc",
+      "text": "実行中に色・金属度・発光を編集"
+    },
+    {
+      "key": "cmd.mobile.toggle",
+      "text": "モバイルペンダント"
+    },
+    {
+      "key": "cmd.mobile.toggle.desc",
+      "text": "タブレットから UDP でコマンドを受信"
+    },
+    {
+      "key": "cmd.net.tab",
+      "text": "ネットワークと監視"
+    },
+    {
+      "key": "cmd.net.tab.desc",
+      "text": "共同作業、Web ダッシュボード、モバイルペンダント"
+    },
+    {
+      "key": "cmd.report.make",
+      "text": "レポートを作成"
+    },
+    {
+      "key": "cmd.report.make.desc",
+      "text": "PDF レポートを今すぐ生成"
+    },
+    {
+      "key": "cmd.report.pdf",
+      "text": "PDF レポート"
+    },
+    {
+      "key": "cmd.report.pdf.desc",
+      "text": "軌道・指標・スナップショット・運動学を含むレポート"
+    },
+    {
+      "key": "cmd.scara.recalibrate",
+      "text": "SCARA 運動学を再計算"
+    },
+    {
+      "key": "cmd.scara.recalibrate.desc",
+      "text": "プリズムのストローク制限を再計算しフローを再接続（重い処理）"
+    },
+    {
+      "key": "cmd.script.tab",
+      "text": "マクロ（スクリプト）"
+    },
+    {
+      "key": "cmd.script.tab.desc",
+      "text": "サンドボックス内でロボット動作を自動化"
+    },
+    {
+      "key": "cmd.titles.tab",
+      "text": "タイトルと字幕"
+    },
+    {
+      "key": "cmd.titles.tab.desc",
+      "text": "タイトル、サブタイトル、注記、字幕ファイル"
+    },
+    {
+      "key": "cmd.valid.mannequins",
+      "text": "チェックにマネキンを含める"
+    },
+    {
+      "key": "cmd.valid.mannequins.desc",
+      "text": "作業領域のそばの 2 体のマネキンを操作者とともに考慮"
+    },
+    {
+      "key": "cmd.valid.run",
+      "text": "チェック付きで開始"
+    },
+    {
+      "key": "cmd.valid.run.desc",
+      "text": "軌道を検証して動作を開始"
+    },
+    {
+      "key": "cmd.valid.tab",
+      "text": "開始前チェック"
+    },
+    {
+      "key": "cmd.valid.tab.desc",
+      "text": "軌道の指摘と操作者の確認"
+    },
+    {
+      "key": "cmd.vo.tab",
+      "text": "ナレーション音声"
+    },
+    {
+      "key": "cmd.vo.tab.desc",
+      "text": "音声録音と映像への同期"
+    },
+    {
+      "key": "cmd.voice.toggle",
+      "text": "音声コマンド"
+    },
+    {
+      "key": "cmd.voice.toggle.desc",
+      "text": "マイクを聞き取りコマンドを実行"
+    },
+    {
+      "key": "cmd.web.toggle",
+      "text": "Web ダッシュボード"
+    },
+    {
+      "key": "cmd.web.toggle.desc",
+      "text": "ブラウザでのロボット状態監視ページ"
+    },
+    {
+      "key": "cmd.tool.grid.clear",
+      "text": "グリッド：消去"
+    },
+    {
+      "key": "cmd.tool.grid.clear.desc",
+      "text": "作成した作業空間グリッドを削除"
+    },
+    {
+      "key": "cmd.tool.measure.reset",
+      "text": "測定：リセット"
+    },
+    {
+      "key": "cmd.tool.measure.reset.desc",
+      "text": "最初の測定点を破棄"
+    },
+    {
+      "key": "cmd.demo.quick",
+      "text": "デモを表示"
+    },
+    {
+      "key": "cmd.demo.quick.desc",
+      "text": "自動デモ：点 → 8 つの軌道 → ゴースト → ロボット動作"
+    },
+    {
+      "key": "cmd.post.auto",
+      "text": "計画後の自動スムージング"
+    },
+    {
+      "key": "cmd.post.auto.desc",
+      "text": "オン：新しい点ごとに平滑化案を即座に生成"
+    },
+    {
+      "key": "cmd.post.energy",
+      "text": "エコプロファイル"
+    },
+    {
+      "key": "cmd.post.energy.desc",
+      "text": "消費エネルギー最小の動作計画（指標「エネルギー効率」）"
+    },
+    {
+      "key": "cmd.post.smooth",
+      "text": "軌道スムージング"
+    },
+    {
+      "key": "cmd.post.smooth.desc",
+      "text": "タブを開く：レベル 0〜100 %、手法、前後の指標"
+    },
+    {
+      "key": "cmd.post.timeoptimal",
+      "text": "時間最適"
+    },
+    {
+      "key": "cmd.post.timeoptimal.desc",
+      "text": "指定の速度・加速度・ジャーク制限下で最速の軌道"
+    },
+    {
+      "key": "cmd.startmenu.show",
+      "text": "メインメニュー"
+    },
+    {
+      "key": "cmd.startmenu.show.desc",
+      "text": "起動画面：新規プロジェクト、セッションを開く、デモ、設定、終了"
+    },
+    {
+      "key": "cmd.tut.toggle",
+      "text": "チュートリアル"
+    },
+    {
+      "key": "cmd.tut.toggle.desc",
+      "text": "要素を強調する段階的チュートリアル。進捗は保存されます"
+    },
+    {
+      "key": "cmd.workbench.toggle",
+      "text": "後処理ワークベンチ"
+    },
+    {
+      "key": "cmd.workbench.toggle.desc",
+      "text": "タブ：スムージング、時間最適軌道、エネルギー"
+    },
+    {
+      "key": "cmd.calib.tab",
+      "text": "キャリブレーションウィザード"
+    },
+    {
+      "key": "cmd.calib.tab.desc",
+      "text": "4 点で TCP、3 点でロボットベース、カメラ（仮実装）、キャリブレーションファイル"
+    },
+    {
+      "key": "cmd.constr.tab",
+      "text": "制約タブ"
+    },
+    {
+      "key": "cmd.constr.tab.desc",
+      "text": "制約の種類、傾き制限、許容値、軌道の検証と合わせ込み"
+    },
+    {
+      "key": "cmd.constr.toggle",
+      "text": "計画の制約"
+    },
+    {
+      "key": "cmd.constr.toggle.desc",
+      "text": "制約チェック：垂直ツール、傾き制限、対象の注視"
+    },
+    {
+      "key": "cmd.export.lang",
+      "text": "エクスポート言語（KRL / KAREL / RAPID）"
+    },
+    {
+      "key": "cmd.export.lang.desc",
+      "text": "軌道エクスポート用のロボット言語を切り替え"
+    },
+    {
+      "key": "cmd.export.robot",
+      "text": "ロボット言語へエクスポート"
+    },
+    {
+      "key": "cmd.export.robot.desc",
+      "text": "選択した軌道の動作コード：KUKA KRL (.src)、FANUC KAREL (.kl)、ABB RAPID (.mod)"
+    },
+    {
+      "key": "cmd.import.tab",
+      "text": "ロボットモデルの取り込み"
+    },
+    {
+      "key": "cmd.import.tab.desc",
+      "text": "URDF（動作する運動学）と STEP（基本対応）+ 運動学チェック"
+    },
+    {
+      "key": "cmd.payload.tab",
+      "text": "ペイロード計算"
+    },
+    {
+      "key": "cmd.payload.tab.desc",
+      "text": "現在の姿勢での最大負荷とベース距離に対する曲線"
+    },
+    {
+      "key": "cmd.wp.clear",
+      "text": "ウェイポイント制約を解除"
+    },
+    {
+      "key": "cmd.wp.clear.desc",
+      "text": "選択した点を通常の動作に戻す"
+    },
+    {
+      "key": "cmd.wp.detour",
+      "text": "障害物回避（ウェイポイント）"
+    },
+    {
+      "key": "cmd.wp.detour.desc",
+      "text": "選択した点で障害物周辺を迂回させる"
+    },
+    {
+      "key": "cmd.wp.orient",
+      "text": "ウェイポイントの向き"
+    },
+    {
+      "key": "cmd.wp.orient.desc",
+      "text": "選択した点の工具軸方向を指定（現状どおり）"
+    },
+    {
+      "key": "cmd.wp.pause",
+      "text": "ウェイポイントで一時停止"
+    },
+    {
+      "key": "cmd.wp.pause.desc",
+      "text": "選択した点で停止して待機"
+    },
+    {
+      "key": "cmd.wp.speed",
+      "text": "ウェイポイント速度"
+    },
+    {
+      "key": "cmd.wp.speed.desc",
+      "text": "選択した点で TCP 速度制限を有効/無効"
+    },
+    {
+      "key": "cmd.wp.tab",
+      "text": "ウェイポイント制約"
+    },
+    {
+      "key": "cmd.wp.tab.desc",
+      "text": "ウェイポイント制限タブ：向き、速度、迂回、一時停止"
+    },
+    {
+      "key": "cmd.graphics.tab",
+      "text": "グラフィック：設定"
+    },
+    {
+      "key": "cmd.graphics.tab.desc",
+      "text": "設定パネルの「グラフィック」：プリセット、品質、性能、診断"
+    },
+    {
+      "key": "cmd.graphics.detect",
+      "text": "ハードウェアからグラフィックを判定"
+    },
+    {
+      "key": "cmd.graphics.detect.desc",
+      "text": "GPU・メモリ・CPU を再検出しプリセットを再計算"
+    },
+    {
+      "key": "cmd.graphics.benchmark",
+      "text": "グラフィックベンチマーク"
+    },
+    {
+      "key": "cmd.graphics.benchmark.desc",
+      "text": "5 秒間のフレームレート測定：平均・最低 FPS と低下"
+    },
+    {
+      "key": "cmd.graphics.metrics",
+      "text": "グラフィック指標"
+    },
+    {
+      "key": "cmd.graphics.metrics.desc",
+      "text": "オーバーレイ：FPS、フレーム時間、描画呼び出し、三角形、ビデオメモリ"
+    },
+    {
+      "key": "cmd.graphics.reset",
+      "text": "グラフィックをリセット"
+    },
+    {
+      "key": "cmd.graphics.reset.desc",
+      "text": "「自動」モードと既定のグラフィック設定に戻す"
     }
   ]
 }
