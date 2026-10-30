@@ -112,6 +112,26 @@ namespace KazistovVvXr
         public static string Describe(KvXrPlatformMode mode, bool passthroughAvailable,
             bool spatialAnchorsAvailable, bool cameraAvailable)
         {
+            return Describe(mode, passthroughAvailable, spatialAnchorsAvailable, cameraAvailable,
+                DefaultWorldScale);
+        }
+
+        /// <summary>
+        /// Строка-объяснение режима С ФАКТИЧЕСКИМ МАСШТАБОМ (исправлено 30.10.2026, S44).
+        ///
+        /// ЧТО БЫЛО. Строка печатала `DefaultWorldScale` — константу 1.00, — даже если применялся
+        /// ДРУГОЙ масштаб. То есть в журнале всегда стояло «масштаб мира 1.00», а реально мир мог
+        /// быть увеличен или уменьшен.
+        ///
+        /// ЧЕМ ЭТО ПЛОХО. Именно по этой строке наладчик сверяет масштаб перед замером (карточки
+        /// Б4/Б5): в MR стол обязан совпасть с реальным. Журнал, который всегда говорит «1.00»,
+        /// делает замер бессмысленным — он подтверждает то, что написано, а не то, что есть.
+        ///
+        /// Для MR это особенно важно: масштаб там — не оформление, а условие работы.
+        /// </summary>
+        public static string Describe(KvXrPlatformMode mode, bool passthroughAvailable,
+            bool spatialAnchorsAvailable, bool cameraAvailable, float worldScale)
+        {
             string capabilities = "сквозной вид " + (passthroughAvailable ? "есть" : "НЕТ") +
                                   " · якоря " + (spatialAnchorsAvailable ? "есть" : "НЕТ") +
                                   " · камера " + (cameraAvailable ? "есть" : "НЕТ");
@@ -130,7 +150,13 @@ namespace KazistovVvXr
                         : "ВИРТУАЛЬНАЯ РЕАЛЬНОСТЬ — возможностей MR/AR у устройства нет";
                     break;
             }
-            return verdict + " (" + capabilities + ") · масштаб мира " + DefaultWorldScale.ToString("0.00");
+
+            // Число — через InvariantCulture: в русской локали «1,00» в журнале спутается с
+            // разделителем списка при разборе логов скриптами.
+            string scale = (worldScale > 0.0001f ? worldScale : DefaultWorldScale)
+                .ToString("0.000", System.Globalization.CultureInfo.InvariantCulture);
+
+            return verdict + " (" + capabilities + ") · масштаб мира " + scale;
         }
     }
 }
