@@ -4,431 +4,1649 @@
   "english": "Spanish",
   "cjk": false,
   "strings": [
-    { "key": "app.title", "text": "KazistovVv" },
-    { "key": "menu.file", "text": "Archivo" },
-    { "key": "menu.edit", "text": "Edición" },
-    { "key": "menu.view", "text": "Ver" },
-    { "key": "menu.robot", "text": "Robot" },
-    { "key": "menu.service", "text": "Servicio" },
-    { "key": "menu.help", "text": "Ayuda" },
-
-    { "key": "common.stub", "text": "en desarrollo" },
-    { "key": "common.on", "text": "activado" },
-    { "key": "common.off", "text": "desactivado" },
-    { "key": "common.close", "text": "Cerrar" },
-    { "key": "common.add", "text": "Añadir" },
-    { "key": "common.delete", "text": "Eliminar" },
-    { "key": "common.save", "text": "Guardar" },
-    { "key": "common.load", "text": "Cargar" },
-    { "key": "common.cancel", "text": "Cancelar" },
-    { "key": "common.apply", "text": "Aplicar" },
-    { "key": "common.none", "text": "ninguno" },
-    { "key": "common.language", "text": "Idioma" },
-
-    { "key": "panel.tree", "text": "Árbol de modelos" },
-    { "key": "panel.properties", "text": "Propiedades" },
-    { "key": "panel.settings", "text": "Ajustes" },
-    { "key": "panel.features", "text": "Panel de funciones" },
-    { "key": "panel.metrics", "text": "Métricas de trayectoria" },
-    { "key": "panel.limits", "text": "Límites de ejes" },
-    { "key": "panel.health", "text": "Estado del robot" },
-    { "key": "panel.pendant", "text": "Pendant" },
-    { "key": "panel.capture", "text": "Exportar demostración" },
-
-    { "key": "group.robots", "text": "Robots" },
-    { "key": "group.tables", "text": "Mesas" },
-    { "key": "group.points", "text": "Puntos" },
-    { "key": "group.trajectories", "text": "Trayectorias" },
-    { "key": "group.phantoms", "text": "Fantasmas" },
-    { "key": "group.zones", "text": "Zonas prohibidas" },
-    { "key": "group.poses", "text": "Poses" },
-    { "key": "group.records", "text": "Grabaciones de trayectoria" },
-    { "key": "group.waypoints", "text": "Puntos intermedios" },
-    { "key": "group.obstacles", "text": "Obstáculos dinámicos" },
-    { "key": "group.singularities", "text": "Singularidades" },
-
-    { "key": "phase.idle", "text": "en espera" },
-    { "key": "phase.pointSelected", "text": "punto seleccionado" },
-    { "key": "phase.trajectoriesShown", "text": "trayectorias" },
-    { "key": "phase.phantomsMoving", "text": "fantasma elegido" },
-    { "key": "phase.robotMoving", "text": "robot en marcha" },
-    { "key": "phase.pointMoveMode", "text": "mover punto" },
-
-    { "key": "status.robot", "text": "Robot" },
-    { "key": "status.ray", "text": "Rayo" },
-    { "key": "status.theme", "text": "Tema" },
-    { "key": "status.language", "text": "Idioma" },
-    { "key": "status.hint.teleop", "text": "TAB — teleoperación" },
-    { "key": "status.hint.ui", "text": "TAB — interfaz" },
-
-    { "key": "settings.tab.functions", "text": "Funciones" },
-    { "key": "settings.tab.controls", "text": "Controles" },
-    { "key": "settings.tab.interface", "text": "Interfaz" },
-    { "key": "settings.tab.about", "text": "Acerca de" },
-    { "key": "settings.tab.help", "text": "Ayuda" },
-    { "key": "settings.header.theme", "text": "Tema" },
-    { "key": "settings.header.scale", "text": "Escala y densidad" },
-    { "key": "settings.header.panels", "text": "Paneles" },
-    { "key": "settings.header.language", "text": "Idioma de la interfaz" },
-    { "key": "settings.language.note", "text": "El cambio es inmediato y se guarda en PlayerPrefs. «Sistema» usa el idioma del SO y, si no está soportado, el inglés." },
-    { "key": "settings.language.system", "text": "Sistema (como el SO)" },
-
-    { "key": "prop.section.transform", "text": "Posición" },
-    { "key": "prop.section.joints", "text": "Ejes" },
-    { "key": "prop.section.motion", "text": "Movimiento" },
-    { "key": "prop.section.telemetry", "text": "Telemetría" },
-    { "key": "prop.section.point", "text": "Punto" },
-    { "key": "prop.section.trajectory", "text": "Trayectoria" },
-    { "key": "prop.section.table", "text": "Mesa" },
-    { "key": "prop.section.waypoint", "text": "Punto intermedio" },
-    { "key": "prop.section.health", "text": "Estado" },
-    { "key": "prop.section.obstacle", "text": "Obstáculo" },
-    { "key": "prop.section.pendant", "text": "Pendant" },
-    { "key": "prop.section.capture", "text": "Exportación" },
-
-    { "key": "tab.record", "text": "Grabar" },
-    { "key": "tab.poses", "text": "Poses" },
-    { "key": "tab.joints", "text": "Ejes" },
-    { "key": "tab.zones", "text": "Zonas" },
-    { "key": "tab.compare", "text": "Comparar" },
-    { "key": "tab.graphs", "text": "Gráficas" },
-    { "key": "tab.perf", "text": "Rendimiento" },
-    { "key": "tab.log", "text": "Registro" },
-    { "key": "tab.scenarios", "text": "Escenarios" },
-    { "key": "tab.sessions", "text": "Sesiones" },
-
-    { "key": "capture.title", "text": "Exportar demostración" },
-    { "key": "capture.folder", "text": "Carpeta de exportación" },
-    { "key": "capture.screenshot", "text": "Hacer captura" },
-    { "key": "capture.video", "text": "Grabación de vídeo" },
-    { "key": "capture.annotate", "text": "Anotación en la captura (fecha, estado, robot)" },
-
-    { "key": "singularity.title", "text": "Singularidades" },
-    { "key": "singularity.safe", "text": "maniobrabilidad correcta" },
-    { "key": "singularity.close", "text": "cerca de una singularidad" },
-    { "key": "singularity.danger", "text": "SINGULARIDAD" },
-    { "key": "singularity.wrist", "text": "muñeca" },
-    { "key": "singularity.elbow", "text": "codo" },
-    { "key": "singularity.shoulder", "text": "hombro" },
-    { "key": "singularity.extend", "text": "totalmente extendido" },
-    { "key": "singularity.fold", "text": "totalmente plegado" },
-
-    { "key": "waypoint.title", "text": "Puntos intermedios" },
-    { "key": "waypoint.add", "text": "Añadir punto intermedio" },
-    { "key": "waypoint.unreachable", "text": "inalcanzable" },
-    { "key": "waypoint.order", "text": "Orden" },
-
-    { "key": "health.title", "text": "Monitorización de estado" },
-    { "key": "health.temp", "text": "Temperatura" },
-    { "key": "health.current", "text": "Corriente" },
-    { "key": "health.speed", "text": "Velocidad" },
-    { "key": "health.wear", "text": "Desgaste" },
-    { "key": "health.forecast", "text": "Previsión de vida útil" },
-
-    { "key": "obstacle.title", "text": "Obstáculos dinámicos" },
-    { "key": "obstacle.speed", "text": "Velocidad" },
-    { "key": "obstacle.route", "text": "Ruta" },
-    { "key": "obstacle.risky", "text": "trayectoria de riesgo" },
-
-    { "key": "pendant.title", "text": "Pendant virtual" },
-    { "key": "pendant.start", "text": "MARCHA" },
-    { "key": "pendant.stop", "text": "PARO" },
-    { "key": "pendant.home", "text": "INICIO" },
-    { "key": "pendant.record", "text": "GRABAR POSE" },
-    { "key": "pendant.variantA", "text": "Variante A — industrial (KUKA/ABB/FANUC)" },
-    { "key": "pendant.variantB", "text": "Variante B — estilo del proyecto ADDON" },
-
-    { "key": "tree.axis", "text": "Eje" },
-    { "key": "tree.robot", "text": "Robot" },
-    { "key": "menu.empty", "text": "No hay elementos disponibles" },
-    { "key": "prop.section.common", "text": "General" },
-    { "key": "prop.section.hint", "text": "Consejo" },
-    { "key": "prop.section.selection", "text": "Selección" },
-    { "key": "prop.section.content", "text": "Contenido" },
-    { "key": "prop.section.phantom", "text": "Fantasma" },
-    { "key": "prop.section.curvature", "text": "Curvatura y valoración" },
-    { "key": "prop.section.reach", "text": "Alcanzabilidad" },
-    { "key": "cmd.point.select", "text": "Elegir punto (láser rojo)" },
-    { "key": "cmd.point.select.desc", "text": "El clic fija el punto y lanza el cálculo de trayectorias" },
-    { "key": "cmd.path.select", "text": "Elegir trayectoria (láser verde)" },
-    { "key": "cmd.path.select.desc", "text": "El clic selecciona una trayectoria o un fantasma" },
-    { "key": "cmd.robot.playpause", "text": "Marcha / pausa" },
-    { "key": "cmd.robot.playpause.desc", "text": "Pausa y reanuda el movimiento del robot" },
-    { "key": "cmd.robot.stop", "text": "Parada" },
-    { "key": "cmd.robot.stop.desc", "text": "Detiene el movimiento del robot de inmediato" },
-    { "key": "cmd.edit.reset", "text": "Reiniciar escenario" },
-    { "key": "cmd.edit.reset.desc", "text": "Igual que Esc: borra punto, trayectorias y fantasmas" },
-    { "key": "cmd.robot.switch", "text": "Cambiar de robot" },
-    { "key": "cmd.robot.switch.desc", "text": "El otro robot de la celda pasa a estar activo" },
-    { "key": "cmd.view.workspace", "text": "Espacio alcanzable" },
-    { "key": "cmd.view.workspace.desc", "text": "Cúpula de trabajo (aro en SCARA)" },
-    { "key": "cmd.view.limits", "text": "Límites de ejes" },
-    { "key": "cmd.view.limits.desc", "text": "Indicadores de cercanía a los límites" },
-    { "key": "cmd.view.metrics", "text": "Panel de métricas" },
-    { "key": "cmd.view.metrics.desc", "text": "Longitud, tiempo, holgura, curvatura" },
-    { "key": "cmd.tool.flashlight", "text": "Linterna" },
-    { "key": "cmd.tool.flashlight.desc", "text": "Luz desde el operador" },
-    { "key": "cmd.edit.undo", "text": "Deshacer" },
-    { "key": "cmd.edit.undo.desc", "text": "Deshace la última acción" },
-    { "key": "cmd.edit.redo", "text": "Rehacer" },
-    { "key": "cmd.edit.redo.desc", "text": "Repite la acción deshecha" },
-    { "key": "cmd.view.theme", "text": "Tema" },
-    { "key": "cmd.view.theme.desc", "text": "Oscuro → Claro → Sistema" },
-    { "key": "cmd.ui.settings", "text": "Ajustes" },
-    { "key": "cmd.ui.settings.desc", "text": "Panel de ajustes de la interfaz" },
-    { "key": "cmd.help.open", "text": "Ayuda" },
-    { "key": "cmd.help.open.desc", "text": "Pasos del algoritmo y consejos de uso" },
-    { "key": "cmd.record.toggle", "text": "Grabar movimiento" },
-    { "key": "cmd.record.toggle.desc", "text": "Graba ángulos, tiempo y TCP en un archivo" },
-    { "key": "cmd.estop", "text": "PARO DE EMERGENCIA" },
-    { "key": "cmd.estop.desc", "text": "Detiene todo movimiento y vuelve a Idle" },
-    { "key": "cmd.view.heatmap", "text": "Mapa de alcanzabilidad" },
-    { "key": "cmd.view.heatmap.desc", "text": "Mapa del espacio de trabajo según el oráculo" },
-    { "key": "cmd.view.clearance", "text": "Mapa de holguras" },
-    { "key": "cmd.view.clearance.desc", "text": "Colorea la trayectoria según la holgura" },
-    { "key": "cmd.features.open", "text": "Panel de funciones" },
-    { "key": "cmd.features.open.desc", "text": "Pestañas de las funciones nuevas" },
-    { "key": "cmd.shot.screenshot", "text": "Hacer captura" },
-    { "key": "cmd.shot.screenshot.desc", "text": "PNG con anotación en la carpeta «Vídeos»" },
-    { "key": "cmd.video.toggle", "text": "Iniciar / detener grabación" },
-    { "key": "cmd.video.toggle.desc", "text": "Graba la vista del operador en MP4" },
-    { "key": "cmd.view.singularity", "text": "Singularidades" },
-    { "key": "cmd.view.singularity.desc", "text": "Resalta zonas de pérdida de maniobrabilidad" },
-    { "key": "cmd.waypoint.add", "text": "Añadir punto intermedio" },
-    { "key": "cmd.waypoint.add.desc", "text": "Añade un punto intermedio a la ruta" },
-    { "key": "cmd.waypoint.panel", "text": "Lista de puntos intermedios" },
-    { "key": "cmd.waypoint.panel.desc", "text": "Mover, reordenar y borrar puntos intermedios" },
-    { "key": "cmd.health.toggle", "text": "Monitorización de estado" },
-    { "key": "cmd.health.toggle.desc", "text": "Temperatura, corriente, velocidad y desgaste" },
-    { "key": "cmd.obstacle.toggle", "text": "Obstáculos dinámicos" },
-    { "key": "cmd.obstacle.toggle.desc", "text": "Carro móvil tenido en cuenta por el planificador" },
-    { "key": "cmd.pendant.toggle", "text": "Pendant virtual" },
-    { "key": "cmd.pendant.toggle.desc", "text": "Pendant de control del robot (variante A / B)" },
-    { "key": "cmd.lang.cycle", "text": "Idioma de la interfaz" },
-    { "key": "cmd.lang.cycle.desc", "text": "Cambiar idioma: RU / EN / ZH / ES / DE / FR / JA" },
-
-    { "key": "bt.active", "text": "nodo activo" },
-    { "key": "bt.hint", "text": "Arrastre los nodos con el ratón. «Enlazar con el seleccionado» convierte el nodo en hijo del seleccionado previamente. «A script» exporta el árbol como texto de macro." },
-    { "key": "bt.status", "text": "Estado" },
-    { "key": "cmd.compare.mark", "text": "Marcar trayectoria para comparar" },
-    { "key": "cmd.compare.mark.desc", "text": "Marca la trayectoria seleccionada en el árbol como A y luego como B (las etiquetas se ven en el árbol)" },
-    { "key": "cmd.compare.open", "text": "Comparar trayectorias" },
-    { "key": "cmd.compare.open.desc", "text": "Panel de comparación: métricas de dos trayectorias lado a lado y conmutación a una de ellas" },
-    { "key": "cmd.demo.pickplace", "text": "Demo de pick-and-place" },
-    { "key": "cmd.demo.pickplace.desc", "text": "Cubo en la mesa → aproximación → agarre → traslado → liberación (secuencia automática)" },
-    { "key": "cmd.eta.toggle", "text": "Panel ETA" },
-    { "key": "cmd.eta.toggle.desc", "text": "Muestra el tiempo restante y el progreso de la trayectoria actual" },
-    { "key": "cmd.export.tab", "text": "Pestaña de exportación de trayectoria" },
-    { "key": "cmd.export.tab.desc", "text": "Selección del idioma del robot, carpeta de exportación, vista previa del archivo" },
-    { "key": "cmd.file.export", "text": "Exportar: carpeta de datos" },
-    { "key": "cmd.file.export.desc", "text": "Mostrar en la consola la ruta a la carpeta de grabaciones/poses/zonas/sesiones (los archivos se pueden copiar)" },
-    { "key": "cmd.file.import", "text": "Importar escenario" },
-    { "key": "cmd.file.import.desc", "text": "Cargar puntos y trayectorias desde un archivo (reserva)" },
-    { "key": "cmd.gamepad.hud", "text": "Mando virtual" },
-    { "key": "cmd.gamepad.hud.desc", "text": "Mini indicador en pantalla: sticks, gatillos y botones pulsados del mando" },
-    { "key": "cmd.graph.open", "text": "Gráficas de ángulos de articulación" },
-    { "key": "cmd.graph.open.desc", "text": "Gráfico de cada ángulo en el tiempo para la trayectoria seleccionada (se pueden superponer dos)" },
-    { "key": "cmd.gripper.toggle", "text": "Agarre: abrir / cerrar" },
-    { "key": "cmd.gripper.toggle.desc", "text": "Agarre de dos dedos en el extremo del robot (en SCARA funciona igual)" },
-    { "key": "cmd.help.about", "text": "Acerca de" },
-    { "key": "cmd.help.about.desc", "text": "Versión de la interfaz, módulos, entorno" },
-    { "key": "cmd.help.hotkeys", "text": "Atajos de teclado" },
-    { "key": "cmd.help.hotkeys.desc", "text": "Ventana con todos los atajos (teclado, ratón, mando), búsqueda y resaltado de conflictos" },
-    { "key": "cmd.import.scan", "text": "Actualizar lista de modelos" },
-    { "key": "cmd.import.scan.desc", "text": "Volver a leer las carpetas de búsqueda de modelos (URDF / STEP)" },
-    { "key": "cmd.joints.panel", "text": "Panel de articulaciones" },
-    { "key": "cmd.joints.panel.desc", "text": "Un deslizador por articulación con el ángulo actual, el límite y el margen" },
-
-    { "key": "cmd.log.export", "text": "Exportar el registro" },
-    { "key": "cmd.log.export.desc", "text": "Guardar todo el registro en un archivo aparte" },
-    { "key": "cmd.log.open", "text": "Registro de acciones" },
-    { "key": "cmd.log.open.desc", "text": "Registro de eventos desplazable con filtro por tipo (se escribe en un archivo)" },
-    { "key": "cmd.obstacle.discard", "text": "Descartar trayectorias de riesgo" },
-    { "key": "cmd.obstacle.discard.desc", "text": "Activado: las trayectorias que cruzan la ruta del obstáculo se descartan (desactivado: solo se marcan)" },
-    { "key": "cmd.obstacle.evaluate", "text": "Comprobar riesgo de las trayectorias" },
-    { "key": "cmd.obstacle.evaluate.desc", "text": "Contrastar las variantes generadas con la previsión de movimiento del obstáculo" },
-    { "key": "cmd.pendant.attach", "text": "Fijación del pendant" },
-    { "key": "cmd.pendant.attach.desc", "text": "El pendant flota en la escena → en la mano del operador → sobre el robot" },
-    { "key": "cmd.pendant.jogmode", "text": "Modo de movimiento (JOINT / TCP)" },
-    { "key": "cmd.pendant.jogmode.desc", "text": "El joystick mueve la articulación seleccionada o desplaza el TCP en un plano" },
-    { "key": "cmd.pendant.variant", "text": "Variante del pendant (A / B)" },
-    { "key": "cmd.pendant.variant.desc", "text": "Cambiar el diseño: A — industrial, B — estilo del proyecto ADDON" },
-    { "key": "cmd.perf.open", "text": "Rendimiento del planificador" },
-    { "key": "cmd.perf.open.desc", "text": "Tiempo de generación, intentos de planificación, iteraciones, duplicados descartados" },
-    { "key": "cmd.pose.goto", "text": "Ir a la pose" },
-    { "key": "cmd.pose.goto.desc", "text": "Mueve el robot suavemente a la pose seleccionada (panel «Poses»)" },
-    { "key": "cmd.pose.save", "text": "Guardar la pose actual como…" },
-    { "key": "cmd.pose.save.desc", "text": "Guarda los ángulos de articulación del robot activo en un archivo (panel «Poses»: elección rápida de nombre)" },
-    { "key": "cmd.post.apply.energy", "text": "Cambiar al perfil ecológico" },
-    { "key": "cmd.post.apply.energy.desc", "text": "Sustituir el perfil temporal de la variante seleccionada por el energoefficiente" },
-    { "key": "cmd.post.apply.smooth", "text": "Suavizar la trayectoria seleccionada" },
-    { "key": "cmd.post.apply.smooth.desc", "text": "Aplicar el nivel de suavizado elegido a la variante actual" },
-    { "key": "cmd.post.apply.topt", "text": "Cambiar a la óptima en tiempo" },
-    { "key": "cmd.post.apply.topt.desc", "text": "Sustituir el tiempo de la variante seleccionada por el óptimo en tiempo con los límites actuales" },
-    { "key": "cmd.post.auto.selected", "text": "Suavizar solo la variante seleccionada" },
-    { "key": "cmd.post.auto.selected.desc", "text": "Activado: el suavizado automático procesa una variante seleccionada en lugar de las 8 (las trayectorias aparecen antes). Desactivado: comportamiento anterior — todas las variantes" },
-    { "key": "cmd.presentation.toggle", "text": "Modo de presentación" },
-    { "key": "cmd.presentation.toggle.desc", "text": "La cámara rodea el robot sola, texto en pantalla, interfaz oculta; salida con Esc" },
-    { "key": "cmd.record.play", "text": "Reproducir grabación" },
-    { "key": "cmd.record.play.desc", "text": "Reproduce la grabación seleccionada (pulsar de nuevo para pausar; el multiplicador de velocidad está en el panel)" },
-    { "key": "cmd.record.speed", "text": "Velocidad de reproducción" },
-    { "key": "cmd.record.speed.desc", "text": "Cambiar el multiplicador de velocidad de reproducción: 0.25 → 0.5 → 1 → 2 → 4" },
-    { "key": "cmd.scenarios.open", "text": "Escenarios" },
-    { "key": "cmd.scenarios.open.desc", "text": "Escenarios listos: workspace, pick-and-place, límites, 8 trayectorias" },
-    { "key": "cmd.scenarios.run", "text": "Ejecutar escenario…" },
-    { "key": "cmd.scenarios.run.desc", "text": "Ejecuta el escenario seleccionado en el panel (pausa/cancelación también allí)" },
-    { "key": "cmd.session.load", "text": "Cargar sesión" },
-    { "key": "cmd.session.load.desc", "text": "Restaurar la última sesión guardada" },
-    { "key": "cmd.session.panel", "text": "Lista de sesiones" },
-    { "key": "cmd.session.panel.desc", "text": "Sesiones guardadas: cargar, eliminar, ver el contenido" },
-    { "key": "cmd.session.save", "text": "Guardar sesión" },
-    { "key": "cmd.session.save.desc", "text": "Poses de los robots, puntos, zonas y banderas — en un archivo JSON de sesión" },
-    { "key": "cmd.shot.annotate", "text": "Anotación en la captura" },
-    { "key": "cmd.shot.annotate.desc", "text": "Dibuja sobre la captura la fecha, el estado de la máquina de estados y el robot seleccionado" },
-    { "key": "cmd.show.limits", "text": "Mostrar límites" },
-    { "key": "cmd.show.limits.desc", "text": "Anillos de límite en las articulaciones + el panel «ángulo / límite / margen»" },
-    { "key": "cmd.show.pickplace", "text": "Demostrar pick-and-place" },
-    { "key": "cmd.show.pickplace.desc", "text": "Coloca un cubo, lo agarra y lo lleva a otro punto" },
-    { "key": "cmd.show.trajectories", "text": "Demostración de 8 trayectorias" },
-    { "key": "cmd.show.trajectories.desc", "text": "Coloca un punto sobre la mesa, espera la generación, elige la mejor trayectoria y lanza un fantasma" },
-    { "key": "cmd.show.workspace", "text": "Mostrar workspace" },
-    { "key": "cmd.show.workspace.desc", "text": "Activa la zona de alcance y los límites de articulación, muestra el robot desde todos los lados" },
-
-    { "key": "cmd.tool.grid", "text": "Cuadrícula de la zona de trabajo" },
-    { "key": "cmd.tool.grid.desc", "text": "Cuadrícula plana sobre la mesa (reserva)" },
-    { "key": "cmd.tool.measure", "text": "Medición" },
-    { "key": "cmd.tool.measure.desc", "text": "Regla / medición de distancias en la escena (reserva)" },
-    { "key": "cmd.tut.restart", "text": "Reiniciar el tutorial" },
-    { "key": "cmd.tut.restart.desc", "text": "Restablecer el progreso del tutorial y empezar desde el primer paso" },
-    { "key": "cmd.ui.access", "text": "Accesibilidad" },
-    { "key": "cmd.ui.access.desc", "text": "Tamaño de fuente, alto contraste, esquema para daltonismo, navegación con teclado" },
-    { "key": "cmd.ui.palette", "text": "Paleta de comandos" },
-    { "key": "cmd.ui.palette.desc", "text": "Búsqueda en TODOS los comandos de la interfaz: barra de herramientas, menú, ajustes, funciones ocultas" },
-    { "key": "cmd.ui.resetlayout", "text": "Restablecer la distribución de ventanas" },
-    { "key": "cmd.ui.resetlayout.desc", "text": "Devuelve los paneles y grupos de la barra a la distribución predeterminada" },
-    { "key": "cmd.ui.toggle", "text": "Mostrar / ocultar la interfaz" },
-    { "key": "cmd.ui.toggle.desc", "text": "Oculta los paneles y devuelve el control del ratón a la escena (TAB cambia el modo del cursor: cámara ⟷ interfaz; desde el modo cámara lo hace ESC)" },
-    { "key": "cmd.view.panel.properties", "text": "Propiedades" },
-    { "key": "cmd.view.panel.properties.desc", "text": "Panel derecho: propiedades del objeto seleccionado (solo lectura)" },
-    { "key": "cmd.view.panel.settings", "text": "Ajustes y ayuda" },
-    { "key": "cmd.view.panel.settings.desc", "text": "Panel dock inferior: funciones, control, interfaz, acerca de, ayuda" },
-    { "key": "cmd.view.panel.tree", "text": "Árbol de modelos" },
-    { "key": "cmd.view.panel.tree.desc", "text": "Panel izquierdo: jerarquía de la escena (robots, ejes, mesas, puntos, trayectorias)" },
-    { "key": "cmd.waypoint.build", "text": "Reconstruir la ruta" },
-    { "key": "cmd.waypoint.build.desc", "text": "Construye una trayectoria por los puntos intermedios con el planificador estándar (BiRRT)" },
-    { "key": "cmd.waypoint.clear", "text": "Borrar puntos intermedios" },
-    { "key": "cmd.waypoint.clear.desc", "text": "Elimina todos los puntos intermedios y quita la ruta" },
-    { "key": "cmd.waypoint.delete", "text": "Eliminar punto intermedio" },
-    { "key": "cmd.waypoint.delete.desc", "text": "Quita el punto intermedio seleccionado (la trayectoria vuelve a su forma anterior)" },
-    { "key": "cmd.waypoint.earlier", "text": "Punto intermedio antes" },
-    { "key": "cmd.waypoint.earlier.desc", "text": "Sube el punto seleccionado en el orden de recorrido" },
-    { "key": "cmd.waypoint.later", "text": "Punto intermedio después" },
-    { "key": "cmd.waypoint.later.desc", "text": "Baja el punto seleccionado en el orden de recorrido" },
-    { "key": "cmd.waypoint.move", "text": "Mover punto intermedio" },
-    { "key": "cmd.waypoint.move.desc", "text": "Lleva el punto intermedio seleccionado al punto de mira actual" },
-    { "key": "cmd.waypoint.play", "text": "Ejecutar la ruta" },
-    { "key": "cmd.waypoint.play.desc", "text": "Envía el robot por la ruta a través de los puntos intermedios" },
-    { "key": "cmd.zone.box", "text": "Zona prohibida: caja" },
-    { "key": "cmd.zone.box.desc", "text": "Crea una zona prohibida con forma de caja en el punto de mira (volumen rojo translúcido)" },
-    { "key": "cmd.zone.cylinder", "text": "Zona prohibida: cilindro" },
-    { "key": "cmd.zone.cylinder.desc", "text": "Crea una zona prohibida cilíndrica en el punto de mira" },
-    { "key": "cmd.zone.discard", "text": "Descartar trayectorias peligrosas" },
-    { "key": "cmd.zone.discard.desc", "text": "Activado: las trayectorias que cruzan una zona prohibida se descartan (desactivado: solo se marcan)" },
-    { "key": "cmd.zone.panel", "text": "Zonas prohibidas: lista" },
-    { "key": "cmd.zone.panel.desc", "text": "Lista de zonas: tamaño, mover, eliminar, mostrar/ocultar" },
-    { "key": "cmd.zone.sphere", "text": "Zona prohibida: esfera" },
-    { "key": "cmd.zone.sphere.desc", "text": "Crea una zona prohibida esférica en el punto de mira" },
-    { "key": "ctx.copied", "text": "Nombre copiado al portapapeles" },
-    { "key": "ctx.copy", "text": "Copiar nombre" },
-    { "key": "ctx.delete", "text": "Eliminar" },
-    { "key": "ctx.delete.none", "text": "La eliminación se admite para puntos y puntos intermedios" },
-    { "key": "ctx.duplicate", "text": "Duplicar" },
-    { "key": "ctx.duplicate.none", "text": "La duplicación se admite para puntos y puntos intermedios" },
-    { "key": "ctx.focus", "text": "Enfocar la cámara en el objeto" },
-    { "key": "ctx.focused", "text": "Cámara enfocada en" },
-    { "key": "ctx.hidden", "text": "Objetos ocultos" },
-    { "key": "ctx.hide", "text": "Ocultar" },
-    { "key": "ctx.multi", "text": "Nodos seleccionados" },
-    { "key": "ctx.properties", "text": "Propiedades" },
-    { "key": "ctx.rename", "text": "Renombrar" },
-    { "key": "ctx.rename.manual", "text": "Renombrar: doble clic en un nodo (el menú solo está disponible para el seleccionado)" },
-    { "key": "ctx.show", "text": "Mostrar" },
-    { "key": "ctx.shown", "text": "Objetos visibles" },
-
-    { "key": "dock.zone.bottom", "text": "Acoplar al borde inferior" },
-    { "key": "dock.zone.float", "text": "Dejar como ventana flotante" },
-    { "key": "dock.zone.left", "text": "Acoplar al borde izquierdo" },
-    { "key": "dock.zone.right", "text": "Acoplar al borde derecho" },
-    { "key": "empty.point", "text": "Elija un punto con el láser rojo (Z + clic izquierdo)" },
-    { "key": "error.hide", "text": "Ocultar" },
-    { "key": "error.more", "text": "Más información" },
-    { "key": "error.unknown", "text": "Error desconocido" },
-    { "key": "eyes.title", "text": "Mirada y visión foveal" },
-    { "key": "gamepad.absent", "text": "SIN MANDO — el control por mando no está activo" },
-    { "key": "gamepad.connected", "text": "MANDO" },
-    { "key": "gamepad.last", "text": "último" },
-    { "key": "hands.title", "text": "Seguimiento de manos" },
-    { "key": "hotkeys.conflict", "text": "CONFLICTO: esta tecla está asignada a otra acción" },
-    { "key": "hotkeys.empty", "text": "No se ha encontrado nada" },
-    { "key": "hotkeys.rebind", "text": "Reasignar" },
-    { "key": "hotkeys.rebind.stub", "text": "La reasignación de teclas llegará más tarde — los atajos no se cambian" },
-    { "key": "hotkeys.search", "text": "Buscar: nombre de la acción o tecla…" },
-    { "key": "loading.planning", "text": "Planificación de trayectorias" },
-    { "key": "loading.recording", "text": "Grabación / reproducción" },
-    { "key": "logtools.title", "text": "Registro: niveles y búsqueda" },
-    { "key": "palette.disabled", "text": "Comando no disponible" },
-    { "key": "palette.empty", "text": "No se ha encontrado nada" },
-    { "key": "palette.hint", "text": "Escriba un comando… (Enter — ejecutar, Esc — cerrar)" },
-    { "key": "panel.collapse", "text": "Contraer/expandir el panel" },
-    { "key": "panel.hotkeys", "text": "Atajos de teclado" },
-    { "key": "panel.rail", "text": "Contraer la ventana en un panel lateral (clic en la banda la devuelve)" },
-    { "key": "panel.rail.hint", "text": "La ventana está contraída en un panel lateral — un clic en la banda la devuelve" },
-    { "key": "panel.undock", "text": "Desacoplar la ventana (flotante) / acoplarla al borde" },
-    { "key": "properties.empty", "text": "Seleccione un objeto" },
-    { "key": "properties.empty.hint", "text": "Clic en un nodo del árbol de la izquierda (o elija un punto con el láser rojo — Z)" },
-    { "key": "properties.none", "text": "Nada seleccionado" },
-    { "key": "properties.none.hint", "text": "seleccione un nodo del árbol de la izquierda" },
-    { "key": "settings.cb.deuter", "text": "Deuteranopia" },
-    { "key": "settings.cb.note", "text": "El esquema sustituye el rojo/verde por el par «naranja ↔ azul» (paleta Okabe–Ito): se distingue en los tres tipos de daltonismo. El tipo se elige de una sola lista — los juegos de colores por tipo aparecerán más tarde." },
-    { "key": "settings.cb.off", "text": "Colores normales" },
-    { "key": "settings.cb.prot", "text": "Protanopia" },
-    { "key": "settings.cb.trit", "text": "Tritanopia" },
-    { "key": "settings.contrast", "text": "Alto contraste" },
-    { "key": "settings.font", "text": "Tamaño de fuente de la interfaz" },
-    { "key": "settings.font.large", "text": "Grande" },
-    { "key": "settings.font.normal", "text": "Medio" },
-    { "key": "settings.font.small", "text": "Pequeño" },
-    { "key": "settings.gamepadhud", "text": "Mando virtual en pantalla" },
-    { "key": "settings.header.access", "text": "Accesibilidad" },
-    { "key": "settings.header.service", "text": "Acciones rápidas" },
-    { "key": "settings.keyboardnav", "text": "Navegación con teclado (Tab, flechas, Enter)" },
-    { "key": "settings.open.hotkeys", "text": "Ventana de atajos (F12)" },
-    { "key": "settings.open.palette", "text": "Paleta de comandos (Ctrl+P)" },
-    { "key": "settings.reset.layout", "text": "Restablecer la distribución de ventanas" },
-
-    { "key": "status.mode", "text": "Modo" },
-    { "key": "status.mode.body", "text": "Clic en el indicador hace lo mismo que Tab" },
-    { "key": "status.mode.camera", "text": "Cámara" },
-    { "key": "status.mode.now", "text": "ahora" },
-    { "key": "status.mode.tip", "text": "Tab — cambiar de modo (Cámara / Interfaz)" },
-    { "key": "status.mode.ui", "text": "Interfaz" },
-    { "key": "titles.title", "text": "Títulos y subtítulos" },
-    { "key": "toolbar.group", "text": "Grupo" },
-    { "key": "toolbar.group.all", "text": "Todos los comandos" },
-    { "key": "toolbar.group.count", "text": "comandos" },
-    { "key": "toolbar.group.hint", "text": "Clic — lista de comandos del grupo; el grupo puede contraerse en un solo icono" },
-    { "key": "toolbar.workbench", "text": "Banco:" },
-    { "key": "tree.empty", "text": "Sin objetos" },
-    { "key": "tree.empty.hint", "text": "Elija un punto con el láser rojo (Z) — los objetos aparecerán aquí" },
-    { "key": "tree.kind.axis", "text": "eje" },
-    { "key": "tree.kind.group", "text": "grupo" },
-    { "key": "tree.kind.object", "text": "objeto" },
-    { "key": "tree.kind.phantom", "text": "fantasma" },
-    { "key": "tree.kind.point", "text": "punto" },
-    { "key": "tree.kind.robot", "text": "robot" },
-    { "key": "tree.kind.table", "text": "mesa" },
-    { "key": "tree.kind.trajectory", "text": "trayectoria" },
-    { "key": "cmd.properties", "text": "Propiedades" },
-    { "key": "cmd.properties.desc", "text": "Muestra el panel de propiedades del objeto seleccionado" }
+    {
+      "key": "app.title",
+      "text": "KazistovVv"
+    },
+    {
+      "key": "menu.file",
+      "text": "Archivo"
+    },
+    {
+      "key": "menu.edit",
+      "text": "Edición"
+    },
+    {
+      "key": "menu.view",
+      "text": "Ver"
+    },
+    {
+      "key": "menu.robot",
+      "text": "Robot"
+    },
+    {
+      "key": "menu.service",
+      "text": "Servicio"
+    },
+    {
+      "key": "menu.help",
+      "text": "Ayuda"
+    },
+    {
+      "key": "common.stub",
+      "text": "en desarrollo"
+    },
+    {
+      "key": "common.on",
+      "text": "activado"
+    },
+    {
+      "key": "common.off",
+      "text": "desactivado"
+    },
+    {
+      "key": "common.close",
+      "text": "Cerrar"
+    },
+    {
+      "key": "common.add",
+      "text": "Añadir"
+    },
+    {
+      "key": "common.delete",
+      "text": "Eliminar"
+    },
+    {
+      "key": "common.save",
+      "text": "Guardar"
+    },
+    {
+      "key": "common.load",
+      "text": "Cargar"
+    },
+    {
+      "key": "common.cancel",
+      "text": "Cancelar"
+    },
+    {
+      "key": "common.apply",
+      "text": "Aplicar"
+    },
+    {
+      "key": "common.none",
+      "text": "ninguno"
+    },
+    {
+      "key": "common.language",
+      "text": "Idioma"
+    },
+    {
+      "key": "panel.tree",
+      "text": "Árbol de modelos"
+    },
+    {
+      "key": "panel.properties",
+      "text": "Propiedades"
+    },
+    {
+      "key": "panel.settings",
+      "text": "Ajustes"
+    },
+    {
+      "key": "panel.features",
+      "text": "Panel de funciones"
+    },
+    {
+      "key": "panel.metrics",
+      "text": "Métricas de trayectoria"
+    },
+    {
+      "key": "panel.limits",
+      "text": "Límites de ejes"
+    },
+    {
+      "key": "panel.health",
+      "text": "Estado del robot"
+    },
+    {
+      "key": "panel.pendant",
+      "text": "Pendant"
+    },
+    {
+      "key": "panel.capture",
+      "text": "Exportar demostración"
+    },
+    {
+      "key": "group.robots",
+      "text": "Robots"
+    },
+    {
+      "key": "group.tables",
+      "text": "Mesas"
+    },
+    {
+      "key": "group.points",
+      "text": "Puntos"
+    },
+    {
+      "key": "group.trajectories",
+      "text": "Trayectorias"
+    },
+    {
+      "key": "group.phantoms",
+      "text": "Fantasmas"
+    },
+    {
+      "key": "group.zones",
+      "text": "Zonas prohibidas"
+    },
+    {
+      "key": "group.poses",
+      "text": "Poses"
+    },
+    {
+      "key": "group.records",
+      "text": "Grabaciones de trayectoria"
+    },
+    {
+      "key": "group.waypoints",
+      "text": "Puntos intermedios"
+    },
+    {
+      "key": "group.obstacles",
+      "text": "Obstáculos dinámicos"
+    },
+    {
+      "key": "group.singularities",
+      "text": "Singularidades"
+    },
+    {
+      "key": "phase.idle",
+      "text": "en espera"
+    },
+    {
+      "key": "phase.pointSelected",
+      "text": "punto seleccionado"
+    },
+    {
+      "key": "phase.trajectoriesShown",
+      "text": "trayectorias"
+    },
+    {
+      "key": "phase.phantomsMoving",
+      "text": "fantasma elegido"
+    },
+    {
+      "key": "phase.robotMoving",
+      "text": "robot en marcha"
+    },
+    {
+      "key": "phase.pointMoveMode",
+      "text": "mover punto"
+    },
+    {
+      "key": "status.robot",
+      "text": "Robot"
+    },
+    {
+      "key": "status.ray",
+      "text": "Rayo"
+    },
+    {
+      "key": "status.theme",
+      "text": "Tema"
+    },
+    {
+      "key": "status.language",
+      "text": "Idioma"
+    },
+    {
+      "key": "status.hint.teleop",
+      "text": "TAB — teleoperación"
+    },
+    {
+      "key": "status.hint.ui",
+      "text": "TAB — interfaz"
+    },
+    {
+      "key": "settings.tab.functions",
+      "text": "Funciones"
+    },
+    {
+      "key": "settings.tab.controls",
+      "text": "Controles"
+    },
+    {
+      "key": "settings.tab.interface",
+      "text": "Interfaz"
+    },
+    {
+      "key": "settings.tab.about",
+      "text": "Acerca de"
+    },
+    {
+      "key": "settings.tab.help",
+      "text": "Ayuda"
+    },
+    {
+      "key": "settings.header.theme",
+      "text": "Tema"
+    },
+    {
+      "key": "settings.header.scale",
+      "text": "Escala y densidad"
+    },
+    {
+      "key": "settings.header.panels",
+      "text": "Paneles"
+    },
+    {
+      "key": "settings.header.language",
+      "text": "Idioma de la interfaz"
+    },
+    {
+      "key": "settings.language.note",
+      "text": "El cambio es inmediato y se guarda en PlayerPrefs. «Sistema» usa el idioma del SO y, si no está soportado, el inglés."
+    },
+    {
+      "key": "settings.language.system",
+      "text": "Sistema (como el SO)"
+    },
+    {
+      "key": "prop.section.transform",
+      "text": "Posición"
+    },
+    {
+      "key": "prop.section.joints",
+      "text": "Ejes"
+    },
+    {
+      "key": "prop.section.motion",
+      "text": "Movimiento"
+    },
+    {
+      "key": "prop.section.telemetry",
+      "text": "Telemetría"
+    },
+    {
+      "key": "prop.section.point",
+      "text": "Punto"
+    },
+    {
+      "key": "prop.section.trajectory",
+      "text": "Trayectoria"
+    },
+    {
+      "key": "prop.section.table",
+      "text": "Mesa"
+    },
+    {
+      "key": "prop.section.waypoint",
+      "text": "Punto intermedio"
+    },
+    {
+      "key": "prop.section.health",
+      "text": "Estado"
+    },
+    {
+      "key": "prop.section.obstacle",
+      "text": "Obstáculo"
+    },
+    {
+      "key": "prop.section.pendant",
+      "text": "Pendant"
+    },
+    {
+      "key": "prop.section.capture",
+      "text": "Exportación"
+    },
+    {
+      "key": "tab.record",
+      "text": "Grabar"
+    },
+    {
+      "key": "tab.poses",
+      "text": "Poses"
+    },
+    {
+      "key": "tab.joints",
+      "text": "Ejes"
+    },
+    {
+      "key": "tab.zones",
+      "text": "Zonas"
+    },
+    {
+      "key": "tab.compare",
+      "text": "Comparar"
+    },
+    {
+      "key": "tab.graphs",
+      "text": "Gráficas"
+    },
+    {
+      "key": "tab.perf",
+      "text": "Rendimiento"
+    },
+    {
+      "key": "tab.log",
+      "text": "Registro"
+    },
+    {
+      "key": "tab.scenarios",
+      "text": "Escenarios"
+    },
+    {
+      "key": "tab.sessions",
+      "text": "Sesiones"
+    },
+    {
+      "key": "capture.title",
+      "text": "Exportar demostración"
+    },
+    {
+      "key": "capture.folder",
+      "text": "Carpeta de exportación"
+    },
+    {
+      "key": "capture.screenshot",
+      "text": "Hacer captura"
+    },
+    {
+      "key": "capture.video",
+      "text": "Grabación de vídeo"
+    },
+    {
+      "key": "capture.annotate",
+      "text": "Anotación en la captura (fecha, estado, robot)"
+    },
+    {
+      "key": "singularity.title",
+      "text": "Singularidades"
+    },
+    {
+      "key": "singularity.safe",
+      "text": "maniobrabilidad correcta"
+    },
+    {
+      "key": "singularity.close",
+      "text": "cerca de una singularidad"
+    },
+    {
+      "key": "singularity.danger",
+      "text": "SINGULARIDAD"
+    },
+    {
+      "key": "singularity.wrist",
+      "text": "muñeca"
+    },
+    {
+      "key": "singularity.elbow",
+      "text": "codo"
+    },
+    {
+      "key": "singularity.shoulder",
+      "text": "hombro"
+    },
+    {
+      "key": "singularity.extend",
+      "text": "totalmente extendido"
+    },
+    {
+      "key": "singularity.fold",
+      "text": "totalmente plegado"
+    },
+    {
+      "key": "waypoint.title",
+      "text": "Puntos intermedios"
+    },
+    {
+      "key": "waypoint.add",
+      "text": "Añadir punto intermedio"
+    },
+    {
+      "key": "waypoint.unreachable",
+      "text": "inalcanzable"
+    },
+    {
+      "key": "waypoint.order",
+      "text": "Orden"
+    },
+    {
+      "key": "health.title",
+      "text": "Monitorización de estado"
+    },
+    {
+      "key": "health.temp",
+      "text": "Temperatura"
+    },
+    {
+      "key": "health.current",
+      "text": "Corriente"
+    },
+    {
+      "key": "health.speed",
+      "text": "Velocidad"
+    },
+    {
+      "key": "health.wear",
+      "text": "Desgaste"
+    },
+    {
+      "key": "health.forecast",
+      "text": "Previsión de vida útil"
+    },
+    {
+      "key": "obstacle.title",
+      "text": "Obstáculos dinámicos"
+    },
+    {
+      "key": "obstacle.speed",
+      "text": "Velocidad"
+    },
+    {
+      "key": "obstacle.route",
+      "text": "Ruta"
+    },
+    {
+      "key": "obstacle.risky",
+      "text": "trayectoria de riesgo"
+    },
+    {
+      "key": "pendant.title",
+      "text": "Pendant virtual"
+    },
+    {
+      "key": "pendant.start",
+      "text": "MARCHA"
+    },
+    {
+      "key": "pendant.stop",
+      "text": "PARO"
+    },
+    {
+      "key": "pendant.home",
+      "text": "INICIO"
+    },
+    {
+      "key": "pendant.record",
+      "text": "GRABAR POSE"
+    },
+    {
+      "key": "pendant.variantA",
+      "text": "Variante A — industrial (KUKA/ABB/FANUC)"
+    },
+    {
+      "key": "pendant.variantB",
+      "text": "Variante B — estilo del proyecto ADDON"
+    },
+    {
+      "key": "tree.axis",
+      "text": "Eje"
+    },
+    {
+      "key": "tree.robot",
+      "text": "Robot"
+    },
+    {
+      "key": "menu.empty",
+      "text": "No hay elementos disponibles"
+    },
+    {
+      "key": "prop.section.common",
+      "text": "General"
+    },
+    {
+      "key": "prop.section.hint",
+      "text": "Consejo"
+    },
+    {
+      "key": "prop.section.selection",
+      "text": "Selección"
+    },
+    {
+      "key": "prop.section.content",
+      "text": "Contenido"
+    },
+    {
+      "key": "prop.section.phantom",
+      "text": "Fantasma"
+    },
+    {
+      "key": "prop.section.curvature",
+      "text": "Curvatura y valoración"
+    },
+    {
+      "key": "prop.section.reach",
+      "text": "Alcanzabilidad"
+    },
+    {
+      "key": "cmd.point.select",
+      "text": "Elegir punto (láser rojo)"
+    },
+    {
+      "key": "cmd.point.select.desc",
+      "text": "El clic fija el punto y lanza el cálculo de trayectorias"
+    },
+    {
+      "key": "cmd.path.select",
+      "text": "Elegir trayectoria (láser verde)"
+    },
+    {
+      "key": "cmd.path.select.desc",
+      "text": "El clic selecciona una trayectoria o un fantasma"
+    },
+    {
+      "key": "cmd.robot.playpause",
+      "text": "Marcha / pausa"
+    },
+    {
+      "key": "cmd.robot.playpause.desc",
+      "text": "Pausa y reanuda el movimiento del robot"
+    },
+    {
+      "key": "cmd.robot.stop",
+      "text": "Parada"
+    },
+    {
+      "key": "cmd.robot.stop.desc",
+      "text": "Detiene el movimiento del robot de inmediato"
+    },
+    {
+      "key": "cmd.edit.reset",
+      "text": "Reiniciar escenario"
+    },
+    {
+      "key": "cmd.edit.reset.desc",
+      "text": "Igual que Esc: borra punto, trayectorias y fantasmas"
+    },
+    {
+      "key": "cmd.robot.switch",
+      "text": "Cambiar de robot"
+    },
+    {
+      "key": "cmd.robot.switch.desc",
+      "text": "El otro robot de la celda pasa a estar activo"
+    },
+    {
+      "key": "cmd.view.workspace",
+      "text": "Espacio alcanzable"
+    },
+    {
+      "key": "cmd.view.workspace.desc",
+      "text": "Cúpula de trabajo (aro en SCARA)"
+    },
+    {
+      "key": "cmd.view.limits",
+      "text": "Límites de ejes"
+    },
+    {
+      "key": "cmd.view.limits.desc",
+      "text": "Indicadores de cercanía a los límites"
+    },
+    {
+      "key": "cmd.view.metrics",
+      "text": "Panel de métricas"
+    },
+    {
+      "key": "cmd.view.metrics.desc",
+      "text": "Longitud, tiempo, holgura, curvatura"
+    },
+    {
+      "key": "cmd.tool.flashlight",
+      "text": "Linterna"
+    },
+    {
+      "key": "cmd.tool.flashlight.desc",
+      "text": "Luz desde el operador"
+    },
+    {
+      "key": "cmd.edit.undo",
+      "text": "Deshacer"
+    },
+    {
+      "key": "cmd.edit.undo.desc",
+      "text": "Deshace la última acción"
+    },
+    {
+      "key": "cmd.edit.redo",
+      "text": "Rehacer"
+    },
+    {
+      "key": "cmd.edit.redo.desc",
+      "text": "Repite la acción deshecha"
+    },
+    {
+      "key": "cmd.view.theme",
+      "text": "Tema"
+    },
+    {
+      "key": "cmd.view.theme.desc",
+      "text": "Oscuro → Claro → Sistema"
+    },
+    {
+      "key": "cmd.ui.settings",
+      "text": "Ajustes"
+    },
+    {
+      "key": "cmd.ui.settings.desc",
+      "text": "Panel de ajustes de la interfaz"
+    },
+    {
+      "key": "cmd.help.open",
+      "text": "Ayuda"
+    },
+    {
+      "key": "cmd.help.open.desc",
+      "text": "Pasos del algoritmo y consejos de uso"
+    },
+    {
+      "key": "cmd.record.toggle",
+      "text": "Grabar movimiento"
+    },
+    {
+      "key": "cmd.record.toggle.desc",
+      "text": "Graba ángulos, tiempo y TCP en un archivo"
+    },
+    {
+      "key": "cmd.estop",
+      "text": "PARO DE EMERGENCIA"
+    },
+    {
+      "key": "cmd.estop.desc",
+      "text": "Detiene todo movimiento y vuelve a Idle"
+    },
+    {
+      "key": "cmd.view.heatmap",
+      "text": "Mapa de alcanzabilidad"
+    },
+    {
+      "key": "cmd.view.heatmap.desc",
+      "text": "Mapa del espacio de trabajo según el oráculo"
+    },
+    {
+      "key": "cmd.view.clearance",
+      "text": "Mapa de holguras"
+    },
+    {
+      "key": "cmd.view.clearance.desc",
+      "text": "Colorea la trayectoria según la holgura"
+    },
+    {
+      "key": "cmd.features.open",
+      "text": "Panel de funciones"
+    },
+    {
+      "key": "cmd.features.open.desc",
+      "text": "Pestañas de las funciones nuevas"
+    },
+    {
+      "key": "cmd.shot.screenshot",
+      "text": "Hacer captura"
+    },
+    {
+      "key": "cmd.shot.screenshot.desc",
+      "text": "PNG con anotación en la carpeta «Vídeos»"
+    },
+    {
+      "key": "cmd.video.toggle",
+      "text": "Iniciar / detener grabación"
+    },
+    {
+      "key": "cmd.video.toggle.desc",
+      "text": "Graba la vista del operador en MP4"
+    },
+    {
+      "key": "cmd.view.singularity",
+      "text": "Singularidades"
+    },
+    {
+      "key": "cmd.view.singularity.desc",
+      "text": "Resalta zonas de pérdida de maniobrabilidad"
+    },
+    {
+      "key": "cmd.waypoint.add",
+      "text": "Añadir punto intermedio"
+    },
+    {
+      "key": "cmd.waypoint.add.desc",
+      "text": "Añade un punto intermedio a la ruta"
+    },
+    {
+      "key": "cmd.waypoint.panel",
+      "text": "Lista de puntos intermedios"
+    },
+    {
+      "key": "cmd.waypoint.panel.desc",
+      "text": "Mover, reordenar y borrar puntos intermedios"
+    },
+    {
+      "key": "cmd.health.toggle",
+      "text": "Monitorización de estado"
+    },
+    {
+      "key": "cmd.health.toggle.desc",
+      "text": "Temperatura, corriente, velocidad y desgaste"
+    },
+    {
+      "key": "cmd.obstacle.toggle",
+      "text": "Obstáculos dinámicos"
+    },
+    {
+      "key": "cmd.obstacle.toggle.desc",
+      "text": "Carro móvil tenido en cuenta por el planificador"
+    },
+    {
+      "key": "cmd.pendant.toggle",
+      "text": "Pendant virtual"
+    },
+    {
+      "key": "cmd.pendant.toggle.desc",
+      "text": "Pendant de control del robot (variante A / B)"
+    },
+    {
+      "key": "cmd.lang.cycle",
+      "text": "Idioma de la interfaz"
+    },
+    {
+      "key": "cmd.lang.cycle.desc",
+      "text": "Cambiar idioma: RU / EN / ZH / ES / DE / FR / JA"
+    },
+    {
+      "key": "bt.active",
+      "text": "nodo activo"
+    },
+    {
+      "key": "bt.hint",
+      "text": "Arrastre los nodos con el ratón. «Enlazar con el seleccionado» convierte el nodo en hijo del seleccionado previamente. «A script» exporta el árbol como texto de macro."
+    },
+    {
+      "key": "bt.status",
+      "text": "Estado"
+    },
+    {
+      "key": "cmd.compare.mark",
+      "text": "Marcar trayectoria para comparar"
+    },
+    {
+      "key": "cmd.compare.mark.desc",
+      "text": "Marca la trayectoria seleccionada en el árbol como A y luego como B (las etiquetas se ven en el árbol)"
+    },
+    {
+      "key": "cmd.compare.open",
+      "text": "Comparar trayectorias"
+    },
+    {
+      "key": "cmd.compare.open.desc",
+      "text": "Panel de comparación: métricas de dos trayectorias lado a lado y conmutación a una de ellas"
+    },
+    {
+      "key": "cmd.demo.pickplace",
+      "text": "Demo de pick-and-place"
+    },
+    {
+      "key": "cmd.demo.pickplace.desc",
+      "text": "Cubo en la mesa → aproximación → agarre → traslado → liberación (secuencia automática)"
+    },
+    {
+      "key": "cmd.eta.toggle",
+      "text": "Panel ETA"
+    },
+    {
+      "key": "cmd.eta.toggle.desc",
+      "text": "Muestra el tiempo restante y el progreso de la trayectoria actual"
+    },
+    {
+      "key": "cmd.export.tab",
+      "text": "Pestaña de exportación de trayectoria"
+    },
+    {
+      "key": "cmd.export.tab.desc",
+      "text": "Selección del idioma del robot, carpeta de exportación, vista previa del archivo"
+    },
+    {
+      "key": "cmd.file.export",
+      "text": "Exportar: carpeta de datos"
+    },
+    {
+      "key": "cmd.file.export.desc",
+      "text": "Mostrar en la consola la ruta a la carpeta de grabaciones/poses/zonas/sesiones (los archivos se pueden copiar)"
+    },
+    {
+      "key": "cmd.file.import",
+      "text": "Importar escenario"
+    },
+    {
+      "key": "cmd.file.import.desc",
+      "text": "Cargar puntos y trayectorias desde un archivo (reserva)"
+    },
+    {
+      "key": "cmd.gamepad.hud",
+      "text": "Mando virtual"
+    },
+    {
+      "key": "cmd.gamepad.hud.desc",
+      "text": "Mini indicador en pantalla: sticks, gatillos y botones pulsados del mando"
+    },
+    {
+      "key": "cmd.graph.open",
+      "text": "Gráficas de ángulos de articulación"
+    },
+    {
+      "key": "cmd.graph.open.desc",
+      "text": "Gráfico de cada ángulo en el tiempo para la trayectoria seleccionada (se pueden superponer dos)"
+    },
+    {
+      "key": "cmd.gripper.toggle",
+      "text": "Agarre: abrir / cerrar"
+    },
+    {
+      "key": "cmd.gripper.toggle.desc",
+      "text": "Agarre de dos dedos en el extremo del robot (en SCARA funciona igual)"
+    },
+    {
+      "key": "cmd.help.about",
+      "text": "Acerca de"
+    },
+    {
+      "key": "cmd.help.about.desc",
+      "text": "Versión de la interfaz, módulos, entorno"
+    },
+    {
+      "key": "cmd.help.hotkeys",
+      "text": "Atajos de teclado"
+    },
+    {
+      "key": "cmd.help.hotkeys.desc",
+      "text": "Ventana con todos los atajos (teclado, ratón, mando), búsqueda y resaltado de conflictos"
+    },
+    {
+      "key": "cmd.import.scan",
+      "text": "Actualizar lista de modelos"
+    },
+    {
+      "key": "cmd.import.scan.desc",
+      "text": "Volver a leer las carpetas de búsqueda de modelos (URDF / STEP)"
+    },
+    {
+      "key": "cmd.joints.panel",
+      "text": "Panel de articulaciones"
+    },
+    {
+      "key": "cmd.joints.panel.desc",
+      "text": "Un deslizador por articulación con el ángulo actual, el límite y el margen"
+    },
+    {
+      "key": "cmd.log.export",
+      "text": "Exportar el registro"
+    },
+    {
+      "key": "cmd.log.export.desc",
+      "text": "Guardar todo el registro en un archivo aparte"
+    },
+    {
+      "key": "cmd.log.open",
+      "text": "Registro de acciones"
+    },
+    {
+      "key": "cmd.log.open.desc",
+      "text": "Registro de eventos desplazable con filtro por tipo (se escribe en un archivo)"
+    },
+    {
+      "key": "cmd.obstacle.discard",
+      "text": "Descartar trayectorias de riesgo"
+    },
+    {
+      "key": "cmd.obstacle.discard.desc",
+      "text": "Activado: las trayectorias que cruzan la ruta del obstáculo se descartan (desactivado: solo se marcan)"
+    },
+    {
+      "key": "cmd.obstacle.evaluate",
+      "text": "Comprobar riesgo de las trayectorias"
+    },
+    {
+      "key": "cmd.obstacle.evaluate.desc",
+      "text": "Contrastar las variantes generadas con la previsión de movimiento del obstáculo"
+    },
+    {
+      "key": "cmd.pendant.attach",
+      "text": "Fijación del pendant"
+    },
+    {
+      "key": "cmd.pendant.attach.desc",
+      "text": "El pendant flota en la escena → en la mano del operador → sobre el robot"
+    },
+    {
+      "key": "cmd.pendant.jogmode",
+      "text": "Modo de movimiento (JOINT / TCP)"
+    },
+    {
+      "key": "cmd.pendant.jogmode.desc",
+      "text": "El joystick mueve la articulación seleccionada o desplaza el TCP en un plano"
+    },
+    {
+      "key": "cmd.pendant.variant",
+      "text": "Variante del pendant (A / B)"
+    },
+    {
+      "key": "cmd.pendant.variant.desc",
+      "text": "Cambiar el diseño: A — industrial, B — estilo del proyecto ADDON"
+    },
+    {
+      "key": "cmd.perf.open",
+      "text": "Rendimiento del planificador"
+    },
+    {
+      "key": "cmd.perf.open.desc",
+      "text": "Tiempo de generación, intentos de planificación, iteraciones, duplicados descartados"
+    },
+    {
+      "key": "cmd.pose.goto",
+      "text": "Ir a la pose"
+    },
+    {
+      "key": "cmd.pose.goto.desc",
+      "text": "Mueve el robot suavemente a la pose seleccionada (panel «Poses»)"
+    },
+    {
+      "key": "cmd.pose.save",
+      "text": "Guardar la pose actual como…"
+    },
+    {
+      "key": "cmd.pose.save.desc",
+      "text": "Guarda los ángulos de articulación del robot activo en un archivo (panel «Poses»: elección rápida de nombre)"
+    },
+    {
+      "key": "cmd.post.apply.energy",
+      "text": "Cambiar al perfil ecológico"
+    },
+    {
+      "key": "cmd.post.apply.energy.desc",
+      "text": "Sustituir el perfil temporal de la variante seleccionada por el energoefficiente"
+    },
+    {
+      "key": "cmd.post.apply.smooth",
+      "text": "Suavizar la trayectoria seleccionada"
+    },
+    {
+      "key": "cmd.post.apply.smooth.desc",
+      "text": "Aplicar el nivel de suavizado elegido a la variante actual"
+    },
+    {
+      "key": "cmd.post.apply.topt",
+      "text": "Cambiar a la óptima en tiempo"
+    },
+    {
+      "key": "cmd.post.apply.topt.desc",
+      "text": "Sustituir el tiempo de la variante seleccionada por el óptimo en tiempo con los límites actuales"
+    },
+    {
+      "key": "cmd.post.auto.selected",
+      "text": "Suavizar solo la variante seleccionada"
+    },
+    {
+      "key": "cmd.post.auto.selected.desc",
+      "text": "Activado: el suavizado automático procesa una variante seleccionada en lugar de las 8 (las trayectorias aparecen antes). Desactivado: comportamiento anterior — todas las variantes"
+    },
+    {
+      "key": "cmd.presentation.toggle",
+      "text": "Modo de presentación"
+    },
+    {
+      "key": "cmd.presentation.toggle.desc",
+      "text": "La cámara rodea el robot sola, texto en pantalla, interfaz oculta; salida con Esc"
+    },
+    {
+      "key": "cmd.record.play",
+      "text": "Reproducir grabación"
+    },
+    {
+      "key": "cmd.record.play.desc",
+      "text": "Reproduce la grabación seleccionada (pulsar de nuevo para pausar; el multiplicador de velocidad está en el panel)"
+    },
+    {
+      "key": "cmd.record.speed",
+      "text": "Velocidad de reproducción"
+    },
+    {
+      "key": "cmd.record.speed.desc",
+      "text": "Cambiar el multiplicador de velocidad de reproducción: 0.25 → 0.5 → 1 → 2 → 4"
+    },
+    {
+      "key": "cmd.scenarios.open",
+      "text": "Escenarios"
+    },
+    {
+      "key": "cmd.scenarios.open.desc",
+      "text": "Escenarios listos: workspace, pick-and-place, límites, 8 trayectorias"
+    },
+    {
+      "key": "cmd.scenarios.run",
+      "text": "Ejecutar escenario…"
+    },
+    {
+      "key": "cmd.scenarios.run.desc",
+      "text": "Ejecuta el escenario seleccionado en el panel (pausa/cancelación también allí)"
+    },
+    {
+      "key": "cmd.session.load",
+      "text": "Cargar sesión"
+    },
+    {
+      "key": "cmd.session.load.desc",
+      "text": "Restaurar la última sesión guardada"
+    },
+    {
+      "key": "cmd.session.panel",
+      "text": "Lista de sesiones"
+    },
+    {
+      "key": "cmd.session.panel.desc",
+      "text": "Sesiones guardadas: cargar, eliminar, ver el contenido"
+    },
+    {
+      "key": "cmd.session.save",
+      "text": "Guardar sesión"
+    },
+    {
+      "key": "cmd.session.save.desc",
+      "text": "Poses de los robots, puntos, zonas y banderas — en un archivo JSON de sesión"
+    },
+    {
+      "key": "cmd.shot.annotate",
+      "text": "Anotación en la captura"
+    },
+    {
+      "key": "cmd.shot.annotate.desc",
+      "text": "Dibuja sobre la captura la fecha, el estado de la máquina de estados y el robot seleccionado"
+    },
+    {
+      "key": "cmd.show.limits",
+      "text": "Mostrar límites"
+    },
+    {
+      "key": "cmd.show.limits.desc",
+      "text": "Anillos de límite en las articulaciones + el panel «ángulo / límite / margen»"
+    },
+    {
+      "key": "cmd.show.pickplace",
+      "text": "Demostrar pick-and-place"
+    },
+    {
+      "key": "cmd.show.pickplace.desc",
+      "text": "Coloca un cubo, lo agarra y lo lleva a otro punto"
+    },
+    {
+      "key": "cmd.show.trajectories",
+      "text": "Demostración de 8 trayectorias"
+    },
+    {
+      "key": "cmd.show.trajectories.desc",
+      "text": "Coloca un punto sobre la mesa, espera la generación, elige la mejor trayectoria y lanza un fantasma"
+    },
+    {
+      "key": "cmd.show.workspace",
+      "text": "Mostrar workspace"
+    },
+    {
+      "key": "cmd.show.workspace.desc",
+      "text": "Activa la zona de alcance y los límites de articulación, muestra el robot desde todos los lados"
+    },
+    {
+      "key": "cmd.tool.grid",
+      "text": "Cuadrícula de la zona de trabajo"
+    },
+    {
+      "key": "cmd.tool.grid.desc",
+      "text": "Cuadrícula plana sobre la mesa (reserva)"
+    },
+    {
+      "key": "cmd.tool.measure",
+      "text": "Medición"
+    },
+    {
+      "key": "cmd.tool.measure.desc",
+      "text": "Regla / medición de distancias en la escena (reserva)"
+    },
+    {
+      "key": "cmd.tut.restart",
+      "text": "Reiniciar el tutorial"
+    },
+    {
+      "key": "cmd.tut.restart.desc",
+      "text": "Restablecer el progreso del tutorial y empezar desde el primer paso"
+    },
+    {
+      "key": "cmd.ui.access",
+      "text": "Accesibilidad"
+    },
+    {
+      "key": "cmd.ui.access.desc",
+      "text": "Tamaño de fuente, alto contraste, esquema para daltonismo, navegación con teclado"
+    },
+    {
+      "key": "cmd.ui.palette",
+      "text": "Paleta de comandos"
+    },
+    {
+      "key": "cmd.ui.palette.desc",
+      "text": "Búsqueda en TODOS los comandos de la interfaz: barra de herramientas, menú, ajustes, funciones ocultas"
+    },
+    {
+      "key": "cmd.ui.resetlayout",
+      "text": "Restablecer la distribución de ventanas"
+    },
+    {
+      "key": "cmd.ui.resetlayout.desc",
+      "text": "Devuelve los paneles y grupos de la barra a la distribución predeterminada"
+    },
+    {
+      "key": "cmd.ui.toggle",
+      "text": "Mostrar / ocultar la interfaz"
+    },
+    {
+      "key": "cmd.ui.toggle.desc",
+      "text": "Oculta los paneles y devuelve el control del ratón a la escena (TAB cambia el modo del cursor: cámara ⟷ interfaz; desde el modo cámara lo hace ESC)"
+    },
+    {
+      "key": "cmd.view.panel.properties",
+      "text": "Propiedades"
+    },
+    {
+      "key": "cmd.view.panel.properties.desc",
+      "text": "Panel derecho: propiedades del objeto seleccionado (solo lectura)"
+    },
+    {
+      "key": "cmd.view.panel.settings",
+      "text": "Ajustes y ayuda"
+    },
+    {
+      "key": "cmd.view.panel.settings.desc",
+      "text": "Panel dock inferior: funciones, control, interfaz, acerca de, ayuda"
+    },
+    {
+      "key": "cmd.view.panel.tree",
+      "text": "Árbol de modelos"
+    },
+    {
+      "key": "cmd.view.panel.tree.desc",
+      "text": "Panel izquierdo: jerarquía de la escena (robots, ejes, mesas, puntos, trayectorias)"
+    },
+    {
+      "key": "cmd.waypoint.build",
+      "text": "Reconstruir la ruta"
+    },
+    {
+      "key": "cmd.waypoint.build.desc",
+      "text": "Construye una trayectoria por los puntos intermedios con el planificador estándar (BiRRT)"
+    },
+    {
+      "key": "cmd.waypoint.clear",
+      "text": "Borrar puntos intermedios"
+    },
+    {
+      "key": "cmd.waypoint.clear.desc",
+      "text": "Elimina todos los puntos intermedios y quita la ruta"
+    },
+    {
+      "key": "cmd.waypoint.delete",
+      "text": "Eliminar punto intermedio"
+    },
+    {
+      "key": "cmd.waypoint.delete.desc",
+      "text": "Quita el punto intermedio seleccionado (la trayectoria vuelve a su forma anterior)"
+    },
+    {
+      "key": "cmd.waypoint.earlier",
+      "text": "Punto intermedio antes"
+    },
+    {
+      "key": "cmd.waypoint.earlier.desc",
+      "text": "Sube el punto seleccionado en el orden de recorrido"
+    },
+    {
+      "key": "cmd.waypoint.later",
+      "text": "Punto intermedio después"
+    },
+    {
+      "key": "cmd.waypoint.later.desc",
+      "text": "Baja el punto seleccionado en el orden de recorrido"
+    },
+    {
+      "key": "cmd.waypoint.move",
+      "text": "Mover punto intermedio"
+    },
+    {
+      "key": "cmd.waypoint.move.desc",
+      "text": "Lleva el punto intermedio seleccionado al punto de mira actual"
+    },
+    {
+      "key": "cmd.waypoint.play",
+      "text": "Ejecutar la ruta"
+    },
+    {
+      "key": "cmd.waypoint.play.desc",
+      "text": "Envía el robot por la ruta a través de los puntos intermedios"
+    },
+    {
+      "key": "cmd.zone.box",
+      "text": "Zona prohibida: caja"
+    },
+    {
+      "key": "cmd.zone.box.desc",
+      "text": "Crea una zona prohibida con forma de caja en el punto de mira (volumen rojo translúcido)"
+    },
+    {
+      "key": "cmd.zone.cylinder",
+      "text": "Zona prohibida: cilindro"
+    },
+    {
+      "key": "cmd.zone.cylinder.desc",
+      "text": "Crea una zona prohibida cilíndrica en el punto de mira"
+    },
+    {
+      "key": "cmd.zone.discard",
+      "text": "Descartar trayectorias peligrosas"
+    },
+    {
+      "key": "cmd.zone.discard.desc",
+      "text": "Activado: las trayectorias que cruzan una zona prohibida se descartan (desactivado: solo se marcan)"
+    },
+    {
+      "key": "cmd.zone.panel",
+      "text": "Zonas prohibidas: lista"
+    },
+    {
+      "key": "cmd.zone.panel.desc",
+      "text": "Lista de zonas: tamaño, mover, eliminar, mostrar/ocultar"
+    },
+    {
+      "key": "cmd.zone.sphere",
+      "text": "Zona prohibida: esfera"
+    },
+    {
+      "key": "cmd.zone.sphere.desc",
+      "text": "Crea una zona prohibida esférica en el punto de mira"
+    },
+    {
+      "key": "ctx.copied",
+      "text": "Nombre copiado al portapapeles"
+    },
+    {
+      "key": "ctx.copy",
+      "text": "Copiar nombre"
+    },
+    {
+      "key": "ctx.delete",
+      "text": "Eliminar"
+    },
+    {
+      "key": "ctx.delete.none",
+      "text": "La eliminación se admite para puntos y puntos intermedios"
+    },
+    {
+      "key": "ctx.duplicate",
+      "text": "Duplicar"
+    },
+    {
+      "key": "ctx.duplicate.none",
+      "text": "La duplicación se admite para puntos y puntos intermedios"
+    },
+    {
+      "key": "ctx.focus",
+      "text": "Enfocar la cámara en el objeto"
+    },
+    {
+      "key": "ctx.focused",
+      "text": "Cámara enfocada en"
+    },
+    {
+      "key": "ctx.hidden",
+      "text": "Objetos ocultos"
+    },
+    {
+      "key": "ctx.hide",
+      "text": "Ocultar"
+    },
+    {
+      "key": "ctx.multi",
+      "text": "Nodos seleccionados"
+    },
+    {
+      "key": "ctx.properties",
+      "text": "Propiedades"
+    },
+    {
+      "key": "ctx.rename",
+      "text": "Renombrar"
+    },
+    {
+      "key": "ctx.rename.manual",
+      "text": "Renombrar: doble clic en un nodo (el menú solo está disponible para el seleccionado)"
+    },
+    {
+      "key": "ctx.show",
+      "text": "Mostrar"
+    },
+    {
+      "key": "ctx.shown",
+      "text": "Objetos visibles"
+    },
+    {
+      "key": "dock.zone.bottom",
+      "text": "Acoplar al borde inferior"
+    },
+    {
+      "key": "dock.zone.float",
+      "text": "Dejar como ventana flotante"
+    },
+    {
+      "key": "dock.zone.left",
+      "text": "Acoplar al borde izquierdo"
+    },
+    {
+      "key": "dock.zone.right",
+      "text": "Acoplar al borde derecho"
+    },
+    {
+      "key": "empty.point",
+      "text": "Elija un punto con el láser rojo (Z + clic izquierdo)"
+    },
+    {
+      "key": "error.hide",
+      "text": "Ocultar"
+    },
+    {
+      "key": "error.more",
+      "text": "Más información"
+    },
+    {
+      "key": "error.unknown",
+      "text": "Error desconocido"
+    },
+    {
+      "key": "eyes.title",
+      "text": "Mirada y visión foveal"
+    },
+    {
+      "key": "gamepad.absent",
+      "text": "SIN MANDO — el control por mando no está activo"
+    },
+    {
+      "key": "gamepad.connected",
+      "text": "MANDO"
+    },
+    {
+      "key": "gamepad.last",
+      "text": "último"
+    },
+    {
+      "key": "hands.title",
+      "text": "Seguimiento de manos"
+    },
+    {
+      "key": "hotkeys.conflict",
+      "text": "CONFLICTO: esta tecla está asignada a otra acción"
+    },
+    {
+      "key": "hotkeys.empty",
+      "text": "No se ha encontrado nada"
+    },
+    {
+      "key": "hotkeys.rebind",
+      "text": "Reasignar"
+    },
+    {
+      "key": "hotkeys.rebind.stub",
+      "text": "La reasignación de teclas llegará más tarde — los atajos no se cambian"
+    },
+    {
+      "key": "hotkeys.search",
+      "text": "Buscar: nombre de la acción o tecla…"
+    },
+    {
+      "key": "loading.planning",
+      "text": "Planificación de trayectorias"
+    },
+    {
+      "key": "loading.recording",
+      "text": "Grabación / reproducción"
+    },
+    {
+      "key": "logtools.title",
+      "text": "Registro: niveles y búsqueda"
+    },
+    {
+      "key": "palette.disabled",
+      "text": "Comando no disponible"
+    },
+    {
+      "key": "palette.empty",
+      "text": "No se ha encontrado nada"
+    },
+    {
+      "key": "palette.hint",
+      "text": "Escriba un comando… (Enter — ejecutar, Esc — cerrar)"
+    },
+    {
+      "key": "panel.collapse",
+      "text": "Contraer/expandir el panel"
+    },
+    {
+      "key": "panel.hotkeys",
+      "text": "Atajos de teclado"
+    },
+    {
+      "key": "panel.rail",
+      "text": "Contraer la ventana en un panel lateral (clic en la banda la devuelve)"
+    },
+    {
+      "key": "panel.rail.hint",
+      "text": "La ventana está contraída en un panel lateral — un clic en la banda la devuelve"
+    },
+    {
+      "key": "panel.undock",
+      "text": "Desacoplar la ventana (flotante) / acoplarla al borde"
+    },
+    {
+      "key": "properties.empty",
+      "text": "Seleccione un objeto"
+    },
+    {
+      "key": "properties.empty.hint",
+      "text": "Clic en un nodo del árbol de la izquierda (o elija un punto con el láser rojo — Z)"
+    },
+    {
+      "key": "properties.none",
+      "text": "Nada seleccionado"
+    },
+    {
+      "key": "properties.none.hint",
+      "text": "seleccione un nodo del árbol de la izquierda"
+    },
+    {
+      "key": "settings.cb.deuter",
+      "text": "Deuteranopia"
+    },
+    {
+      "key": "settings.cb.note",
+      "text": "El esquema sustituye el rojo/verde por el par «naranja ↔ azul» (paleta Okabe–Ito): se distingue en los tres tipos de daltonismo. El tipo se elige de una sola lista — los juegos de colores por tipo aparecerán más tarde."
+    },
+    {
+      "key": "settings.cb.off",
+      "text": "Colores normales"
+    },
+    {
+      "key": "settings.cb.prot",
+      "text": "Protanopia"
+    },
+    {
+      "key": "settings.cb.trit",
+      "text": "Tritanopia"
+    },
+    {
+      "key": "settings.contrast",
+      "text": "Alto contraste"
+    },
+    {
+      "key": "settings.font",
+      "text": "Tamaño de fuente de la interfaz"
+    },
+    {
+      "key": "settings.font.large",
+      "text": "Grande"
+    },
+    {
+      "key": "settings.font.normal",
+      "text": "Medio"
+    },
+    {
+      "key": "settings.font.small",
+      "text": "Pequeño"
+    },
+    {
+      "key": "settings.gamepadhud",
+      "text": "Mando virtual en pantalla"
+    },
+    {
+      "key": "settings.header.access",
+      "text": "Accesibilidad"
+    },
+    {
+      "key": "settings.header.service",
+      "text": "Acciones rápidas"
+    },
+    {
+      "key": "settings.keyboardnav",
+      "text": "Navegación con teclado (Tab, flechas, Enter)"
+    },
+    {
+      "key": "settings.open.hotkeys",
+      "text": "Ventana de atajos (F12)"
+    },
+    {
+      "key": "settings.open.palette",
+      "text": "Paleta de comandos (Ctrl+P)"
+    },
+    {
+      "key": "settings.reset.layout",
+      "text": "Restablecer la distribución de ventanas"
+    },
+    {
+      "key": "status.mode",
+      "text": "Modo"
+    },
+    {
+      "key": "status.mode.body",
+      "text": "Clic en el indicador hace lo mismo que Tab"
+    },
+    {
+      "key": "status.mode.camera",
+      "text": "Cámara"
+    },
+    {
+      "key": "status.mode.now",
+      "text": "ahora"
+    },
+    {
+      "key": "status.mode.tip",
+      "text": "Tab — cambiar de modo (Cámara / Interfaz)"
+    },
+    {
+      "key": "status.mode.ui",
+      "text": "Interfaz"
+    },
+    {
+      "key": "titles.title",
+      "text": "Títulos y subtítulos"
+    },
+    {
+      "key": "toolbar.group",
+      "text": "Grupo"
+    },
+    {
+      "key": "toolbar.group.all",
+      "text": "Todos los comandos"
+    },
+    {
+      "key": "toolbar.group.count",
+      "text": "comandos"
+    },
+    {
+      "key": "toolbar.group.hint",
+      "text": "Clic — lista de comandos del grupo; el grupo puede contraerse en un solo icono"
+    },
+    {
+      "key": "toolbar.workbench",
+      "text": "Banco:"
+    },
+    {
+      "key": "tree.empty",
+      "text": "Sin objetos"
+    },
+    {
+      "key": "tree.empty.hint",
+      "text": "Elija un punto con el láser rojo (Z) — los objetos aparecerán aquí"
+    },
+    {
+      "key": "tree.kind.axis",
+      "text": "eje"
+    },
+    {
+      "key": "tree.kind.group",
+      "text": "grupo"
+    },
+    {
+      "key": "tree.kind.object",
+      "text": "objeto"
+    },
+    {
+      "key": "tree.kind.phantom",
+      "text": "fantasma"
+    },
+    {
+      "key": "tree.kind.point",
+      "text": "punto"
+    },
+    {
+      "key": "tree.kind.robot",
+      "text": "robot"
+    },
+    {
+      "key": "tree.kind.table",
+      "text": "mesa"
+    },
+    {
+      "key": "tree.kind.trajectory",
+      "text": "trayectoria"
+    },
+    {
+      "key": "cmd.properties",
+      "text": "Propiedades"
+    },
+    {
+      "key": "cmd.properties.desc",
+      "text": "Muestra el panel de propiedades del objeto seleccionado"
+    },
+    {
+      "key": "mode.camera",
+      "text": "CÁMARA"
+    },
+    {
+      "key": "mode.ui",
+      "text": "INTERFAZ"
+    },
+    {
+      "key": "mode.camera.hint",
+      "text": "el ratón gira la cámara · los paneles no se pulsan"
+    },
+    {
+      "key": "mode.ui.hint",
+      "text": "el ratón mueve el cursor · los paneles se pulsan"
+    },
+    {
+      "key": "mode.toggle",
+      "text": "TAB — cambiar"
+    }
   ]
 }

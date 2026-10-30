@@ -4,431 +4,1649 @@
   "english": "English",
   "cjk": false,
   "strings": [
-    { "key": "app.title", "text": "KazistovVv" },
-    { "key": "menu.file", "text": "File" },
-    { "key": "menu.edit", "text": "Edit" },
-    { "key": "menu.view", "text": "View" },
-    { "key": "menu.robot", "text": "Robot" },
-    { "key": "menu.service", "text": "Service" },
-    { "key": "menu.help", "text": "Help" },
-
-    { "key": "common.stub", "text": "in development" },
-    { "key": "common.on", "text": "on" },
-    { "key": "common.off", "text": "off" },
-    { "key": "common.close", "text": "Close" },
-    { "key": "common.add", "text": "Add" },
-    { "key": "common.delete", "text": "Delete" },
-    { "key": "common.save", "text": "Save" },
-    { "key": "common.load", "text": "Load" },
-    { "key": "common.cancel", "text": "Cancel" },
-    { "key": "common.apply", "text": "Apply" },
-    { "key": "common.none", "text": "none" },
-    { "key": "common.language", "text": "Language" },
-
-    { "key": "panel.tree", "text": "Model tree" },
-    { "key": "panel.properties", "text": "Properties" },
-    { "key": "panel.settings", "text": "Settings" },
-    { "key": "panel.features", "text": "Feature panel" },
-    { "key": "panel.metrics", "text": "Trajectory metrics" },
-    { "key": "panel.limits", "text": "Joint limits" },
-    { "key": "panel.health", "text": "Robot health" },
-    { "key": "panel.pendant", "text": "Teach pendant" },
-    { "key": "panel.capture", "text": "Demo export" },
-
-    { "key": "group.robots", "text": "Robots" },
-    { "key": "group.tables", "text": "Tables" },
-    { "key": "group.points", "text": "Points" },
-    { "key": "group.trajectories", "text": "Trajectories" },
-    { "key": "group.phantoms", "text": "Phantoms" },
-    { "key": "group.zones", "text": "Keep-out zones" },
-    { "key": "group.poses", "text": "Poses" },
-    { "key": "group.records", "text": "Trajectory records" },
-    { "key": "group.waypoints", "text": "Waypoints" },
-    { "key": "group.obstacles", "text": "Dynamic obstacles" },
-    { "key": "group.singularities", "text": "Singularities" },
-
-    { "key": "phase.idle", "text": "waiting" },
-    { "key": "phase.pointSelected", "text": "point selected" },
-    { "key": "phase.trajectoriesShown", "text": "trajectories" },
-    { "key": "phase.phantomsMoving", "text": "phantom selected" },
-    { "key": "phase.robotMoving", "text": "robot moving" },
-    { "key": "phase.pointMoveMode", "text": "point move" },
-
-    { "key": "status.robot", "text": "Robot" },
-    { "key": "status.ray", "text": "Ray" },
-    { "key": "status.theme", "text": "Theme" },
-    { "key": "status.language", "text": "Language" },
-    { "key": "status.hint.teleop", "text": "TAB — teleoperation" },
-    { "key": "status.hint.ui", "text": "TAB — interface" },
-
-    { "key": "settings.tab.functions", "text": "Features" },
-    { "key": "settings.tab.controls", "text": "Controls" },
-    { "key": "settings.tab.interface", "text": "Interface" },
-    { "key": "settings.tab.about", "text": "About" },
-    { "key": "settings.tab.help", "text": "Help" },
-    { "key": "settings.header.theme", "text": "Theme" },
-    { "key": "settings.header.scale", "text": "Scale and density" },
-    { "key": "settings.header.panels", "text": "Panels" },
-    { "key": "settings.header.language", "text": "Interface language" },
-    { "key": "settings.language.note", "text": "Switching is instant, the choice is kept in PlayerPrefs. \"System\" follows the OS language and falls back to English." },
-    { "key": "settings.language.system", "text": "System (same as OS)" },
-
-    { "key": "prop.section.transform", "text": "Transform" },
-    { "key": "prop.section.joints", "text": "Joints" },
-    { "key": "prop.section.motion", "text": "Motion" },
-    { "key": "prop.section.telemetry", "text": "Telemetry" },
-    { "key": "prop.section.point", "text": "Point" },
-    { "key": "prop.section.trajectory", "text": "Trajectory" },
-    { "key": "prop.section.table", "text": "Table" },
-    { "key": "prop.section.waypoint", "text": "Waypoint" },
-    { "key": "prop.section.health", "text": "Health" },
-    { "key": "prop.section.obstacle", "text": "Obstacle" },
-    { "key": "prop.section.pendant", "text": "Teach pendant" },
-    { "key": "prop.section.capture", "text": "Export" },
-
-    { "key": "tab.record", "text": "Record" },
-    { "key": "tab.poses", "text": "Poses" },
-    { "key": "tab.joints", "text": "Joints" },
-    { "key": "tab.zones", "text": "Zones" },
-    { "key": "tab.compare", "text": "Compare" },
-    { "key": "tab.graphs", "text": "Graphs" },
-    { "key": "tab.perf", "text": "Benchmark" },
-    { "key": "tab.log", "text": "Action log" },
-    { "key": "tab.scenarios", "text": "Scenarios" },
-    { "key": "tab.sessions", "text": "Sessions" },
-
-    { "key": "capture.title", "text": "Demo export" },
-    { "key": "capture.folder", "text": "Export folder" },
-    { "key": "capture.screenshot", "text": "Take a screenshot" },
-    { "key": "capture.video", "text": "Video recording" },
-    { "key": "capture.annotate", "text": "Annotation on the screenshot (date, state, robot)" },
-
-    { "key": "singularity.title", "text": "Singularities" },
-    { "key": "singularity.safe", "text": "maneuverability is fine" },
-    { "key": "singularity.close", "text": "close to a singularity" },
-    { "key": "singularity.danger", "text": "SINGULARITY" },
-    { "key": "singularity.wrist", "text": "wrist" },
-    { "key": "singularity.elbow", "text": "elbow" },
-    { "key": "singularity.shoulder", "text": "shoulder" },
-    { "key": "singularity.extend", "text": "fully extended" },
-    { "key": "singularity.fold", "text": "fully folded" },
-
-    { "key": "waypoint.title", "text": "Waypoints" },
-    { "key": "waypoint.add", "text": "Add waypoint" },
-    { "key": "waypoint.unreachable", "text": "unreachable" },
-    { "key": "waypoint.order", "text": "Order" },
-
-    { "key": "health.title", "text": "Health monitoring" },
-    { "key": "health.temp", "text": "Temperature" },
-    { "key": "health.current", "text": "Current" },
-    { "key": "health.speed", "text": "Speed" },
-    { "key": "health.wear", "text": "Wear" },
-    { "key": "health.forecast", "text": "Service forecast" },
-
-    { "key": "obstacle.title", "text": "Dynamic obstacles" },
-    { "key": "obstacle.speed", "text": "Speed" },
-    { "key": "obstacle.route", "text": "Route" },
-    { "key": "obstacle.risky", "text": "risky trajectory" },
-
-    { "key": "pendant.title", "text": "Teach pendant" },
-    { "key": "pendant.start", "text": "START" },
-    { "key": "pendant.stop", "text": "STOP" },
-    { "key": "pendant.home", "text": "HOME" },
-    { "key": "pendant.record", "text": "RECORD POSE" },
-    { "key": "pendant.variantA", "text": "Variant A — industrial (KUKA/ABB/FANUC)" },
-    { "key": "pendant.variantB", "text": "Variant B — ADDON project style" },
-
-    { "key": "tree.axis", "text": "Axis" },
-    { "key": "tree.robot", "text": "Robot" },
-    { "key": "menu.empty", "text": "No available items" },
-    { "key": "prop.section.common", "text": "General" },
-    { "key": "prop.section.hint", "text": "Hint" },
-    { "key": "prop.section.selection", "text": "Selection" },
-    { "key": "prop.section.content", "text": "Contents" },
-    { "key": "prop.section.phantom", "text": "Phantom" },
-    { "key": "prop.section.curvature", "text": "Curvature and score" },
-    { "key": "prop.section.reach", "text": "Reachability" },
-    { "key": "cmd.point.select", "text": "Pick a point (red laser)" },
-    { "key": "cmd.point.select.desc", "text": "LMB locks the point and starts trajectory planning" },
-    { "key": "cmd.path.select", "text": "Pick a trajectory (green laser)" },
-    { "key": "cmd.path.select.desc", "text": "LMB selects a trajectory or a phantom" },
-    { "key": "cmd.robot.playpause", "text": "Play / pause" },
-    { "key": "cmd.robot.playpause.desc", "text": "Pause and resume robot motion" },
-    { "key": "cmd.robot.stop", "text": "Stop" },
-    { "key": "cmd.robot.stop.desc", "text": "Stop robot motion immediately" },
-    { "key": "cmd.edit.reset", "text": "Reset scenario" },
-    { "key": "cmd.edit.reset.desc", "text": "Same as Esc: clears point, trajectories, phantoms" },
-    { "key": "cmd.robot.switch", "text": "Switch robot" },
-    { "key": "cmd.robot.switch.desc", "text": "The other robot of the cell becomes active" },
-    { "key": "cmd.view.workspace", "text": "Reachable workspace" },
-    { "key": "cmd.view.workspace.desc", "text": "Workspace dome (a ring for SCARA)" },
-    { "key": "cmd.view.limits", "text": "Joint limits" },
-    { "key": "cmd.view.limits.desc", "text": "Indicators of closeness to the limits" },
-    { "key": "cmd.view.metrics", "text": "Metrics panel" },
-    { "key": "cmd.view.metrics.desc", "text": "Length, time, clearance, curvature" },
-    { "key": "cmd.tool.flashlight", "text": "Flashlight" },
-    { "key": "cmd.tool.flashlight.desc", "text": "Light from the operator" },
-    { "key": "cmd.edit.undo", "text": "Undo" },
-    { "key": "cmd.edit.undo.desc", "text": "Undo the last action" },
-    { "key": "cmd.edit.redo", "text": "Redo" },
-    { "key": "cmd.edit.redo.desc", "text": "Repeat the undone action" },
-    { "key": "cmd.view.theme", "text": "Theme" },
-    { "key": "cmd.view.theme.desc", "text": "Dark → Light → System" },
-    { "key": "cmd.ui.settings", "text": "Settings" },
-    { "key": "cmd.ui.settings.desc", "text": "Interface settings panel" },
-    { "key": "cmd.help.open", "text": "Help" },
-    { "key": "cmd.help.open.desc", "text": "Algorithm steps and interface hints" },
-    { "key": "cmd.record.toggle", "text": "Record motion" },
-    { "key": "cmd.record.toggle.desc", "text": "Record joint angles, time and TCP into a file" },
-    { "key": "cmd.estop", "text": "EMERGENCY STOP" },
-    { "key": "cmd.estop.desc", "text": "Stop all motion instantly and return to Idle" },
-    { "key": "cmd.view.heatmap", "text": "Reachability heat map" },
-    { "key": "cmd.view.heatmap.desc", "text": "Workspace map built from the oracle verdict" },
-    { "key": "cmd.view.clearance", "text": "Clearance heat map" },
-    { "key": "cmd.view.clearance.desc", "text": "Trajectory coloured by clearance value" },
-    { "key": "cmd.features.open", "text": "Feature panel" },
-    { "key": "cmd.features.open.desc", "text": "Tabs of the new features (record, poses, zones …)" },
-    { "key": "cmd.shot.screenshot", "text": "Take a screenshot" },
-    { "key": "cmd.shot.screenshot.desc", "text": "PNG with annotation into the system Videos folder" },
-    { "key": "cmd.video.toggle", "text": "Start / stop recording" },
-    { "key": "cmd.video.toggle.desc", "text": "Record the operator view into MP4 (Videos folder)" },
-    { "key": "cmd.view.singularity", "text": "Singularities" },
-    { "key": "cmd.view.singularity.desc", "text": "Highlights loss-of-maneuverability zones at joints" },
-    { "key": "cmd.waypoint.add", "text": "Add waypoint" },
-    { "key": "cmd.waypoint.add.desc", "text": "Add an intermediate point to the route" },
-    { "key": "cmd.waypoint.panel", "text": "Waypoint list" },
-    { "key": "cmd.waypoint.panel.desc", "text": "Move, reorder and delete intermediate points" },
-    { "key": "cmd.health.toggle", "text": "Health monitoring" },
-    { "key": "cmd.health.toggle.desc", "text": "Joint temperature, current, speed and wear" },
-    { "key": "cmd.obstacle.toggle", "text": "Dynamic obstacles" },
-    { "key": "cmd.obstacle.toggle.desc", "text": "A moving cart taken into account by the planner" },
-    { "key": "cmd.pendant.toggle", "text": "Teach pendant" },
-    { "key": "cmd.pendant.toggle.desc", "text": "Robot control pendant (variant A / B)" },
-    { "key": "cmd.lang.cycle", "text": "Interface language" },
-    { "key": "cmd.lang.cycle.desc", "text": "Switch language: RU / EN / ZH / ES / DE / FR / JA" },
-
-    { "key": "bt.active", "text": "active node" },
-    { "key": "bt.hint", "text": "Drag nodes with the mouse. \"Link to selected\" makes the node a child of the previously selected one. \"To script\" exports the tree as macro text." },
-    { "key": "bt.status", "text": "Status" },
-    { "key": "cmd.compare.mark", "text": "Mark trajectory for comparison" },
-    { "key": "cmd.compare.mark.desc", "text": "Mark the trajectory selected in the tree as A, then as B (labels are shown in the tree)" },
-    { "key": "cmd.compare.open", "text": "Compare trajectories" },
-    { "key": "cmd.compare.open.desc", "text": "Comparison panel: metrics of two trajectories side by side and switching to either one" },
-    { "key": "cmd.demo.pickplace", "text": "Pick-and-place demo" },
-    { "key": "cmd.demo.pickplace.desc", "text": "Cube on the table → approach → grip → transfer → release (automatic sequence)" },
-    { "key": "cmd.eta.toggle", "text": "ETA panel" },
-    { "key": "cmd.eta.toggle.desc", "text": "Shows the remaining time and progress of the current trajectory" },
-    { "key": "cmd.export.tab", "text": "Trajectory export tab" },
-    { "key": "cmd.export.tab.desc", "text": "Robot language selection, export folder, file preview" },
-    { "key": "cmd.file.export", "text": "Export: data folder" },
-    { "key": "cmd.file.export.desc", "text": "Print the path to the records/poses/zones/sessions folder to the console (files can be copied)" },
-    { "key": "cmd.file.import", "text": "Import scenario" },
-    { "key": "cmd.file.import.desc", "text": "Load points and trajectories from a file (placeholder)" },
-    { "key": "cmd.gamepad.hud", "text": "Virtual gamepad" },
-    { "key": "cmd.gamepad.hud.desc", "text": "On-screen mini indicator: sticks, triggers and pressed gamepad buttons" },
-    { "key": "cmd.graph.open", "text": "Joint angle graphs" },
-    { "key": "cmd.graph.open.desc", "text": "Plot of each angle over time for the selected trajectory (two can be overlaid)" },
-    { "key": "cmd.gripper.toggle", "text": "Gripper: open / close" },
-    { "key": "cmd.gripper.toggle.desc", "text": "Two-finger gripper at the robot's end (works the same for SCARA)" },
-    { "key": "cmd.help.about", "text": "About" },
-    { "key": "cmd.help.about.desc", "text": "Interface version, modules, environment" },
-    { "key": "cmd.help.hotkeys", "text": "Hotkeys" },
-    { "key": "cmd.help.hotkeys.desc", "text": "Window with all bindings (keyboard, mouse, gamepad), search and conflict highlighting" },
-    { "key": "cmd.import.scan", "text": "Refresh model list" },
-    { "key": "cmd.import.scan.desc", "text": "Rescan the model search folders (URDF / STEP)" },
-    { "key": "cmd.joints.panel", "text": "Joints panel" },
-    { "key": "cmd.joints.panel.desc", "text": "A slider per joint with the current angle, limit and margin" },
-
-    { "key": "cmd.log.export", "text": "Export the log" },
-    { "key": "cmd.log.export.desc", "text": "Save the entire log to a separate file" },
-    { "key": "cmd.log.open", "text": "Action log" },
-    { "key": "cmd.log.open.desc", "text": "Scrollable event log with filtering by type (written to a file)" },
-    { "key": "cmd.obstacle.discard", "text": "Discard risky trajectories" },
-    { "key": "cmd.obstacle.discard.desc", "text": "On: trajectories crossing the obstacle's path are discarded (off: only flagged)" },
-    { "key": "cmd.obstacle.evaluate", "text": "Check trajectories for risk" },
-    { "key": "cmd.obstacle.evaluate.desc", "text": "Check the generated variants against the predicted obstacle motion" },
-    { "key": "cmd.pendant.attach", "text": "Pendant placement" },
-    { "key": "cmd.pendant.attach.desc", "text": "The pendant floats in the scene → in the operator's hand → above the robot" },
-    { "key": "cmd.pendant.jogmode", "text": "Jog mode (JOINT / TCP)" },
-    { "key": "cmd.pendant.jogmode.desc", "text": "The joystick rocks the selected joint or shifts the TCP in a plane" },
-    { "key": "cmd.pendant.variant", "text": "Pendant variant (A / B)" },
-    { "key": "cmd.pendant.variant.desc", "text": "Switch the style: A — industrial, B — ADDON project style" },
-    { "key": "cmd.perf.open", "text": "Planner benchmark" },
-    { "key": "cmd.perf.open.desc", "text": "Generation time, planning attempts, iterations, discarded duplicates" },
-    { "key": "cmd.pose.goto", "text": "Go to pose" },
-    { "key": "cmd.pose.goto.desc", "text": "Smoothly move the robot to the selected pose (Poses panel)" },
-    { "key": "cmd.pose.save", "text": "Save current pose as…" },
-    { "key": "cmd.pose.save.desc", "text": "Snapshot the joint angles of the active robot to a file (Poses panel — quick name picker)" },
-    { "key": "cmd.post.apply.energy", "text": "Switch to the eco profile" },
-    { "key": "cmd.post.apply.energy.desc", "text": "Replace the time profile of the selected variant with the energy-efficient one" },
-    { "key": "cmd.post.apply.smooth", "text": "Smooth the selected trajectory" },
-    { "key": "cmd.post.apply.smooth.desc", "text": "Apply the selected smoothing level to the current variant" },
-    { "key": "cmd.post.apply.topt", "text": "Switch to the time-optimal one" },
-    { "key": "cmd.post.apply.topt.desc", "text": "Replace the time of the selected variant with the time-optimal one at the current limits" },
-    { "key": "cmd.post.auto.selected", "text": "Smooth the selected variant only" },
-    { "key": "cmd.post.auto.selected.desc", "text": "On: auto-smoothing processes one selected variant instead of all 8 (trajectories appear faster). Off: previous behavior — all variants" },
-    { "key": "cmd.presentation.toggle", "text": "Presentation mode" },
-    { "key": "cmd.presentation.toggle.desc", "text": "The camera orbits the robot by itself, text on screen, UI hidden; exit with Esc" },
-    { "key": "cmd.record.play", "text": "Play recording" },
-    { "key": "cmd.record.play.desc", "text": "Play the selected recording (press again to pause; speed multiplier is in the panel)" },
-    { "key": "cmd.record.speed", "text": "Playback speed" },
-    { "key": "cmd.record.speed.desc", "text": "Cycle the playback speed multiplier: 0.25 → 0.5 → 1 → 2 → 4" },
-    { "key": "cmd.scenarios.open", "text": "Scenarios" },
-    { "key": "cmd.scenarios.open.desc", "text": "Ready-made scenarios: workspace, pick-and-place, limits, 8 trajectories" },
-    { "key": "cmd.scenarios.run", "text": "Run scenario…" },
-    { "key": "cmd.scenarios.run.desc", "text": "Run the scenario selected in the panel (pause/cancel there too)" },
-    { "key": "cmd.session.load", "text": "Load session" },
-    { "key": "cmd.session.load.desc", "text": "Restore the last saved session" },
-    { "key": "cmd.session.panel", "text": "Session list" },
-    { "key": "cmd.session.panel.desc", "text": "Saved sessions: load, delete, inspect contents" },
-    { "key": "cmd.session.save", "text": "Save session" },
-    { "key": "cmd.session.save.desc", "text": "Robot poses, points, zones and flags into a session JSON file" },
-    { "key": "cmd.shot.annotate", "text": "Screenshot annotation" },
-    { "key": "cmd.shot.annotate.desc", "text": "Draw the date, State Machine state and the selected robot over the shot" },
-    { "key": "cmd.show.limits", "text": "Show limits" },
-    { "key": "cmd.show.limits.desc", "text": "Limit rings on the joints + the \"angle / limit / margin\" panel" },
-    { "key": "cmd.show.pickplace", "text": "Demonstrate pick-and-place" },
-    { "key": "cmd.show.pickplace.desc", "text": "Places a cube, grips it and moves it to another point" },
-    { "key": "cmd.show.trajectories", "text": "8-trajectory demo" },
-    { "key": "cmd.show.trajectories.desc", "text": "Places a point above the table, waits for generation, picks the best trajectory and runs a phantom" },
-    { "key": "cmd.show.workspace", "text": "Show workspace" },
-    { "key": "cmd.show.workspace.desc", "text": "Enables the reachable workspace and joint limits, shows the robot from all sides" },
-
-    { "key": "cmd.tool.grid", "text": "Workspace grid" },
-    { "key": "cmd.tool.grid.desc", "text": "A flat grid on the tabletop (placeholder)" },
-    { "key": "cmd.tool.measure", "text": "Measure" },
-    { "key": "cmd.tool.measure.desc", "text": "Ruler / distance measuring in the scene (placeholder)" },
-    { "key": "cmd.tut.restart", "text": "Restart the tutorial" },
-    { "key": "cmd.tut.restart.desc", "text": "Reset the tutorial progress and start from the first step" },
-    { "key": "cmd.ui.access", "text": "Accessibility" },
-    { "key": "cmd.ui.access.desc", "text": "Font size, high contrast, color-blind scheme, keyboard navigation" },
-    { "key": "cmd.ui.palette", "text": "Command palette" },
-    { "key": "cmd.ui.palette.desc", "text": "Search across ALL interface commands: toolbar, menu, settings, hidden features" },
-    { "key": "cmd.ui.resetlayout", "text": "Reset window layout" },
-    { "key": "cmd.ui.resetlayout.desc", "text": "Return the panels and toolbar groups to their default layout" },
-    { "key": "cmd.ui.toggle", "text": "Show / hide the interface" },
-    { "key": "cmd.ui.toggle.desc", "text": "Hide the panels and return mouse control to the scene (TAB switches the cursor mode: camera ⟷ interface; ESC does the same from camera mode)" },
-    { "key": "cmd.view.panel.properties", "text": "Properties" },
-    { "key": "cmd.view.panel.properties.desc", "text": "Right panel: properties of the selected object (read-only)" },
-    { "key": "cmd.view.panel.settings", "text": "Settings and help" },
-    { "key": "cmd.view.panel.settings.desc", "text": "Bottom dock panel: features, controls, interface, about, help" },
-    { "key": "cmd.view.panel.tree", "text": "Model tree" },
-    { "key": "cmd.view.panel.tree.desc", "text": "Left panel: scene hierarchy (robots, axes, tables, points, trajectories)" },
-    { "key": "cmd.waypoint.build", "text": "Rebuild the route" },
-    { "key": "cmd.waypoint.build.desc", "text": "Build a trajectory through the intermediate points with the standard planner (BiRRT)" },
-    { "key": "cmd.waypoint.clear", "text": "Clear waypoints" },
-    { "key": "cmd.waypoint.clear.desc", "text": "Delete all intermediate points and clear the route" },
-    { "key": "cmd.waypoint.delete", "text": "Delete waypoint" },
-    { "key": "cmd.waypoint.delete.desc", "text": "Remove the selected intermediate point (the trajectory returns to its previous shape)" },
-    { "key": "cmd.waypoint.earlier", "text": "Move waypoint earlier" },
-    { "key": "cmd.waypoint.earlier.desc", "text": "Raise the selected point in the traversal order" },
-    { "key": "cmd.waypoint.later", "text": "Move waypoint later" },
-    { "key": "cmd.waypoint.later.desc", "text": "Lower the selected point in the traversal order" },
-    { "key": "cmd.waypoint.move", "text": "Move waypoint" },
-    { "key": "cmd.waypoint.move.desc", "text": "Move the selected intermediate point to the current crosshair point" },
-    { "key": "cmd.waypoint.play", "text": "Run the route" },
-    { "key": "cmd.waypoint.play.desc", "text": "Send the robot along the route through the intermediate points" },
-    { "key": "cmd.zone.box", "text": "Keep-out zone: box" },
-    { "key": "cmd.zone.box.desc", "text": "Create a box keep-out zone at the crosshair point (translucent red volume)" },
-    { "key": "cmd.zone.cylinder", "text": "Keep-out zone: cylinder" },
-    { "key": "cmd.zone.cylinder.desc", "text": "Create a cylindrical keep-out zone at the crosshair point" },
-    { "key": "cmd.zone.discard", "text": "Discard hazardous trajectories" },
-    { "key": "cmd.zone.discard.desc", "text": "On: trajectories crossing a keep-out zone are discarded (off: only flagged)" },
-    { "key": "cmd.zone.panel", "text": "Keep-out zones: list" },
-    { "key": "cmd.zone.panel.desc", "text": "Zone list: resize, move, delete, show/hide" },
-    { "key": "cmd.zone.sphere", "text": "Keep-out zone: sphere" },
-    { "key": "cmd.zone.sphere.desc", "text": "Create a spherical keep-out zone at the crosshair point" },
-    { "key": "ctx.copied", "text": "Name copied to clipboard" },
-    { "key": "ctx.copy", "text": "Copy name" },
-    { "key": "ctx.delete", "text": "Delete" },
-    { "key": "ctx.delete.none", "text": "Deletion is supported for points and intermediate points" },
-    { "key": "ctx.duplicate", "text": "Duplicate" },
-    { "key": "ctx.duplicate.none", "text": "Duplication is supported for points and intermediate points" },
-    { "key": "ctx.focus", "text": "Focus camera on the object" },
-    { "key": "ctx.focused", "text": "Camera focused on" },
-    { "key": "ctx.hidden", "text": "Objects hidden" },
-    { "key": "ctx.hide", "text": "Hide" },
-    { "key": "ctx.multi", "text": "Nodes selected" },
-    { "key": "ctx.properties", "text": "Properties" },
-    { "key": "ctx.rename", "text": "Rename" },
-    { "key": "ctx.rename.manual", "text": "Renaming: double-click a node (the menu is available for the selected one only)" },
-    { "key": "ctx.show", "text": "Show" },
-    { "key": "ctx.shown", "text": "Objects shown" },
-
-    { "key": "dock.zone.bottom", "text": "Dock to the bottom edge" },
-    { "key": "dock.zone.float", "text": "Keep as a floating window" },
-    { "key": "dock.zone.left", "text": "Dock to the left edge" },
-    { "key": "dock.zone.right", "text": "Dock to the right edge" },
-    { "key": "empty.point", "text": "Pick a point with the red laser (Z + LMB)" },
-    { "key": "error.hide", "text": "Hide" },
-    { "key": "error.more", "text": "Details" },
-    { "key": "error.unknown", "text": "Unknown error" },
-    { "key": "eyes.title", "text": "Gaze and foveal vision" },
-    { "key": "gamepad.absent", "text": "NO GAMEPAD — gamepad control is inactive" },
-    { "key": "gamepad.connected", "text": "GAMEPAD" },
-    { "key": "gamepad.last", "text": "last" },
-    { "key": "hands.title", "text": "Hand tracking" },
-    { "key": "hotkeys.conflict", "text": "CONFLICT: this key is taken by another action" },
-    { "key": "hotkeys.empty", "text": "Nothing found" },
-    { "key": "hotkeys.rebind", "text": "Rebind" },
-    { "key": "hotkeys.rebind.stub", "text": "Key rebinding will come later — bindings cannot be changed yet" },
-    { "key": "hotkeys.search", "text": "Search: action name or key…" },
-    { "key": "loading.planning", "text": "Trajectory planning" },
-    { "key": "loading.recording", "text": "Recording / playback" },
-    { "key": "logtools.title", "text": "Log: levels and search" },
-    { "key": "palette.disabled", "text": "Command unavailable" },
-    { "key": "palette.empty", "text": "Nothing found" },
-    { "key": "palette.hint", "text": "Type a command… (Enter — run, Esc — close)" },
-    { "key": "panel.collapse", "text": "Collapse/expand the panel" },
-    { "key": "panel.hotkeys", "text": "Hotkeys" },
-    { "key": "panel.rail", "text": "Collapse the window into a side rail (click the rail to restore)" },
-    { "key": "panel.rail.hint", "text": "The window is collapsed into a side rail — click the rail to restore it" },
-    { "key": "panel.undock", "text": "Undock the window (floating) / dock it to an edge" },
-    { "key": "properties.empty", "text": "Select an object" },
-    { "key": "properties.empty.hint", "text": "Click a node in the tree on the left (or pick a point with the red laser — Z)" },
-    { "key": "properties.none", "text": "Nothing selected" },
-    { "key": "properties.none.hint", "text": "select a node in the tree on the left" },
-    { "key": "settings.cb.deuter", "text": "Deuteranopia" },
-    { "key": "settings.cb.note", "text": "The scheme replaces red/green with the \"orange ↔ blue\" pair (Okabe–Ito palette): it stays distinguishable for all three types of color blindness. The type is chosen from a single list — separate color sets per type will come later." },
-    { "key": "settings.cb.off", "text": "Standard colors" },
-    { "key": "settings.cb.prot", "text": "Protanopia" },
-    { "key": "settings.cb.trit", "text": "Tritanopia" },
-    { "key": "settings.contrast", "text": "High contrast" },
-    { "key": "settings.font", "text": "Interface font size" },
-    { "key": "settings.font.large", "text": "Large" },
-    { "key": "settings.font.normal", "text": "Medium" },
-    { "key": "settings.font.small", "text": "Small" },
-    { "key": "settings.gamepadhud", "text": "On-screen virtual gamepad" },
-    { "key": "settings.header.access", "text": "Accessibility" },
-    { "key": "settings.header.service", "text": "Quick actions" },
-    { "key": "settings.keyboardnav", "text": "Keyboard navigation (Tab, arrows, Enter)" },
-    { "key": "settings.open.hotkeys", "text": "Hotkeys window (F12)" },
-    { "key": "settings.open.palette", "text": "Command palette (Ctrl+P)" },
-    { "key": "settings.reset.layout", "text": "Reset window layout" },
-
-    { "key": "status.mode", "text": "Mode" },
-    { "key": "status.mode.body", "text": "Clicking the indicator does the same as Tab" },
-    { "key": "status.mode.camera", "text": "Camera" },
-    { "key": "status.mode.now", "text": "now" },
-    { "key": "status.mode.tip", "text": "Tab — switch the mode (Camera / UI)" },
-    { "key": "status.mode.ui", "text": "UI" },
-    { "key": "titles.title", "text": "Titles and captions" },
-    { "key": "toolbar.group", "text": "Group" },
-    { "key": "toolbar.group.all", "text": "All commands" },
-    { "key": "toolbar.group.count", "text": "commands" },
-    { "key": "toolbar.group.hint", "text": "Click — the list of the group's commands; the group can be collapsed into a single icon" },
-    { "key": "toolbar.workbench", "text": "Workbench:" },
-    { "key": "tree.empty", "text": "No objects" },
-    { "key": "tree.empty.hint", "text": "Pick a point with the red laser (Z) — objects will appear here" },
-    { "key": "tree.kind.axis", "text": "axis" },
-    { "key": "tree.kind.group", "text": "group" },
-    { "key": "tree.kind.object", "text": "object" },
-    { "key": "tree.kind.phantom", "text": "phantom" },
-    { "key": "tree.kind.point", "text": "point" },
-    { "key": "tree.kind.robot", "text": "robot" },
-    { "key": "tree.kind.table", "text": "table" },
-    { "key": "tree.kind.trajectory", "text": "trajectory" },
-    { "key": "cmd.properties", "text": "Properties" },
-    { "key": "cmd.properties.desc", "text": "Show the properties panel of the selected object" }
+    {
+      "key": "app.title",
+      "text": "KazistovVv"
+    },
+    {
+      "key": "menu.file",
+      "text": "File"
+    },
+    {
+      "key": "menu.edit",
+      "text": "Edit"
+    },
+    {
+      "key": "menu.view",
+      "text": "View"
+    },
+    {
+      "key": "menu.robot",
+      "text": "Robot"
+    },
+    {
+      "key": "menu.service",
+      "text": "Service"
+    },
+    {
+      "key": "menu.help",
+      "text": "Help"
+    },
+    {
+      "key": "common.stub",
+      "text": "in development"
+    },
+    {
+      "key": "common.on",
+      "text": "on"
+    },
+    {
+      "key": "common.off",
+      "text": "off"
+    },
+    {
+      "key": "common.close",
+      "text": "Close"
+    },
+    {
+      "key": "common.add",
+      "text": "Add"
+    },
+    {
+      "key": "common.delete",
+      "text": "Delete"
+    },
+    {
+      "key": "common.save",
+      "text": "Save"
+    },
+    {
+      "key": "common.load",
+      "text": "Load"
+    },
+    {
+      "key": "common.cancel",
+      "text": "Cancel"
+    },
+    {
+      "key": "common.apply",
+      "text": "Apply"
+    },
+    {
+      "key": "common.none",
+      "text": "none"
+    },
+    {
+      "key": "common.language",
+      "text": "Language"
+    },
+    {
+      "key": "panel.tree",
+      "text": "Model tree"
+    },
+    {
+      "key": "panel.properties",
+      "text": "Properties"
+    },
+    {
+      "key": "panel.settings",
+      "text": "Settings"
+    },
+    {
+      "key": "panel.features",
+      "text": "Feature panel"
+    },
+    {
+      "key": "panel.metrics",
+      "text": "Trajectory metrics"
+    },
+    {
+      "key": "panel.limits",
+      "text": "Joint limits"
+    },
+    {
+      "key": "panel.health",
+      "text": "Robot health"
+    },
+    {
+      "key": "panel.pendant",
+      "text": "Teach pendant"
+    },
+    {
+      "key": "panel.capture",
+      "text": "Demo export"
+    },
+    {
+      "key": "group.robots",
+      "text": "Robots"
+    },
+    {
+      "key": "group.tables",
+      "text": "Tables"
+    },
+    {
+      "key": "group.points",
+      "text": "Points"
+    },
+    {
+      "key": "group.trajectories",
+      "text": "Trajectories"
+    },
+    {
+      "key": "group.phantoms",
+      "text": "Phantoms"
+    },
+    {
+      "key": "group.zones",
+      "text": "Keep-out zones"
+    },
+    {
+      "key": "group.poses",
+      "text": "Poses"
+    },
+    {
+      "key": "group.records",
+      "text": "Trajectory records"
+    },
+    {
+      "key": "group.waypoints",
+      "text": "Waypoints"
+    },
+    {
+      "key": "group.obstacles",
+      "text": "Dynamic obstacles"
+    },
+    {
+      "key": "group.singularities",
+      "text": "Singularities"
+    },
+    {
+      "key": "phase.idle",
+      "text": "waiting"
+    },
+    {
+      "key": "phase.pointSelected",
+      "text": "point selected"
+    },
+    {
+      "key": "phase.trajectoriesShown",
+      "text": "trajectories"
+    },
+    {
+      "key": "phase.phantomsMoving",
+      "text": "phantom selected"
+    },
+    {
+      "key": "phase.robotMoving",
+      "text": "robot moving"
+    },
+    {
+      "key": "phase.pointMoveMode",
+      "text": "point move"
+    },
+    {
+      "key": "status.robot",
+      "text": "Robot"
+    },
+    {
+      "key": "status.ray",
+      "text": "Ray"
+    },
+    {
+      "key": "status.theme",
+      "text": "Theme"
+    },
+    {
+      "key": "status.language",
+      "text": "Language"
+    },
+    {
+      "key": "status.hint.teleop",
+      "text": "TAB — teleoperation"
+    },
+    {
+      "key": "status.hint.ui",
+      "text": "TAB — interface"
+    },
+    {
+      "key": "settings.tab.functions",
+      "text": "Features"
+    },
+    {
+      "key": "settings.tab.controls",
+      "text": "Controls"
+    },
+    {
+      "key": "settings.tab.interface",
+      "text": "Interface"
+    },
+    {
+      "key": "settings.tab.about",
+      "text": "About"
+    },
+    {
+      "key": "settings.tab.help",
+      "text": "Help"
+    },
+    {
+      "key": "settings.header.theme",
+      "text": "Theme"
+    },
+    {
+      "key": "settings.header.scale",
+      "text": "Scale and density"
+    },
+    {
+      "key": "settings.header.panels",
+      "text": "Panels"
+    },
+    {
+      "key": "settings.header.language",
+      "text": "Interface language"
+    },
+    {
+      "key": "settings.language.note",
+      "text": "Switching is instant, the choice is kept in PlayerPrefs. \"System\" follows the OS language and falls back to English."
+    },
+    {
+      "key": "settings.language.system",
+      "text": "System (same as OS)"
+    },
+    {
+      "key": "prop.section.transform",
+      "text": "Transform"
+    },
+    {
+      "key": "prop.section.joints",
+      "text": "Joints"
+    },
+    {
+      "key": "prop.section.motion",
+      "text": "Motion"
+    },
+    {
+      "key": "prop.section.telemetry",
+      "text": "Telemetry"
+    },
+    {
+      "key": "prop.section.point",
+      "text": "Point"
+    },
+    {
+      "key": "prop.section.trajectory",
+      "text": "Trajectory"
+    },
+    {
+      "key": "prop.section.table",
+      "text": "Table"
+    },
+    {
+      "key": "prop.section.waypoint",
+      "text": "Waypoint"
+    },
+    {
+      "key": "prop.section.health",
+      "text": "Health"
+    },
+    {
+      "key": "prop.section.obstacle",
+      "text": "Obstacle"
+    },
+    {
+      "key": "prop.section.pendant",
+      "text": "Teach pendant"
+    },
+    {
+      "key": "prop.section.capture",
+      "text": "Export"
+    },
+    {
+      "key": "tab.record",
+      "text": "Record"
+    },
+    {
+      "key": "tab.poses",
+      "text": "Poses"
+    },
+    {
+      "key": "tab.joints",
+      "text": "Joints"
+    },
+    {
+      "key": "tab.zones",
+      "text": "Zones"
+    },
+    {
+      "key": "tab.compare",
+      "text": "Compare"
+    },
+    {
+      "key": "tab.graphs",
+      "text": "Graphs"
+    },
+    {
+      "key": "tab.perf",
+      "text": "Benchmark"
+    },
+    {
+      "key": "tab.log",
+      "text": "Action log"
+    },
+    {
+      "key": "tab.scenarios",
+      "text": "Scenarios"
+    },
+    {
+      "key": "tab.sessions",
+      "text": "Sessions"
+    },
+    {
+      "key": "capture.title",
+      "text": "Demo export"
+    },
+    {
+      "key": "capture.folder",
+      "text": "Export folder"
+    },
+    {
+      "key": "capture.screenshot",
+      "text": "Take a screenshot"
+    },
+    {
+      "key": "capture.video",
+      "text": "Video recording"
+    },
+    {
+      "key": "capture.annotate",
+      "text": "Annotation on the screenshot (date, state, robot)"
+    },
+    {
+      "key": "singularity.title",
+      "text": "Singularities"
+    },
+    {
+      "key": "singularity.safe",
+      "text": "maneuverability is fine"
+    },
+    {
+      "key": "singularity.close",
+      "text": "close to a singularity"
+    },
+    {
+      "key": "singularity.danger",
+      "text": "SINGULARITY"
+    },
+    {
+      "key": "singularity.wrist",
+      "text": "wrist"
+    },
+    {
+      "key": "singularity.elbow",
+      "text": "elbow"
+    },
+    {
+      "key": "singularity.shoulder",
+      "text": "shoulder"
+    },
+    {
+      "key": "singularity.extend",
+      "text": "fully extended"
+    },
+    {
+      "key": "singularity.fold",
+      "text": "fully folded"
+    },
+    {
+      "key": "waypoint.title",
+      "text": "Waypoints"
+    },
+    {
+      "key": "waypoint.add",
+      "text": "Add waypoint"
+    },
+    {
+      "key": "waypoint.unreachable",
+      "text": "unreachable"
+    },
+    {
+      "key": "waypoint.order",
+      "text": "Order"
+    },
+    {
+      "key": "health.title",
+      "text": "Health monitoring"
+    },
+    {
+      "key": "health.temp",
+      "text": "Temperature"
+    },
+    {
+      "key": "health.current",
+      "text": "Current"
+    },
+    {
+      "key": "health.speed",
+      "text": "Speed"
+    },
+    {
+      "key": "health.wear",
+      "text": "Wear"
+    },
+    {
+      "key": "health.forecast",
+      "text": "Service forecast"
+    },
+    {
+      "key": "obstacle.title",
+      "text": "Dynamic obstacles"
+    },
+    {
+      "key": "obstacle.speed",
+      "text": "Speed"
+    },
+    {
+      "key": "obstacle.route",
+      "text": "Route"
+    },
+    {
+      "key": "obstacle.risky",
+      "text": "risky trajectory"
+    },
+    {
+      "key": "pendant.title",
+      "text": "Teach pendant"
+    },
+    {
+      "key": "pendant.start",
+      "text": "START"
+    },
+    {
+      "key": "pendant.stop",
+      "text": "STOP"
+    },
+    {
+      "key": "pendant.home",
+      "text": "HOME"
+    },
+    {
+      "key": "pendant.record",
+      "text": "RECORD POSE"
+    },
+    {
+      "key": "pendant.variantA",
+      "text": "Variant A — industrial (KUKA/ABB/FANUC)"
+    },
+    {
+      "key": "pendant.variantB",
+      "text": "Variant B — ADDON project style"
+    },
+    {
+      "key": "tree.axis",
+      "text": "Axis"
+    },
+    {
+      "key": "tree.robot",
+      "text": "Robot"
+    },
+    {
+      "key": "menu.empty",
+      "text": "No available items"
+    },
+    {
+      "key": "prop.section.common",
+      "text": "General"
+    },
+    {
+      "key": "prop.section.hint",
+      "text": "Hint"
+    },
+    {
+      "key": "prop.section.selection",
+      "text": "Selection"
+    },
+    {
+      "key": "prop.section.content",
+      "text": "Contents"
+    },
+    {
+      "key": "prop.section.phantom",
+      "text": "Phantom"
+    },
+    {
+      "key": "prop.section.curvature",
+      "text": "Curvature and score"
+    },
+    {
+      "key": "prop.section.reach",
+      "text": "Reachability"
+    },
+    {
+      "key": "cmd.point.select",
+      "text": "Pick a point (red laser)"
+    },
+    {
+      "key": "cmd.point.select.desc",
+      "text": "LMB locks the point and starts trajectory planning"
+    },
+    {
+      "key": "cmd.path.select",
+      "text": "Pick a trajectory (green laser)"
+    },
+    {
+      "key": "cmd.path.select.desc",
+      "text": "LMB selects a trajectory or a phantom"
+    },
+    {
+      "key": "cmd.robot.playpause",
+      "text": "Play / pause"
+    },
+    {
+      "key": "cmd.robot.playpause.desc",
+      "text": "Pause and resume robot motion"
+    },
+    {
+      "key": "cmd.robot.stop",
+      "text": "Stop"
+    },
+    {
+      "key": "cmd.robot.stop.desc",
+      "text": "Stop robot motion immediately"
+    },
+    {
+      "key": "cmd.edit.reset",
+      "text": "Reset scenario"
+    },
+    {
+      "key": "cmd.edit.reset.desc",
+      "text": "Same as Esc: clears point, trajectories, phantoms"
+    },
+    {
+      "key": "cmd.robot.switch",
+      "text": "Switch robot"
+    },
+    {
+      "key": "cmd.robot.switch.desc",
+      "text": "The other robot of the cell becomes active"
+    },
+    {
+      "key": "cmd.view.workspace",
+      "text": "Reachable workspace"
+    },
+    {
+      "key": "cmd.view.workspace.desc",
+      "text": "Workspace dome (a ring for SCARA)"
+    },
+    {
+      "key": "cmd.view.limits",
+      "text": "Joint limits"
+    },
+    {
+      "key": "cmd.view.limits.desc",
+      "text": "Indicators of closeness to the limits"
+    },
+    {
+      "key": "cmd.view.metrics",
+      "text": "Metrics panel"
+    },
+    {
+      "key": "cmd.view.metrics.desc",
+      "text": "Length, time, clearance, curvature"
+    },
+    {
+      "key": "cmd.tool.flashlight",
+      "text": "Flashlight"
+    },
+    {
+      "key": "cmd.tool.flashlight.desc",
+      "text": "Light from the operator"
+    },
+    {
+      "key": "cmd.edit.undo",
+      "text": "Undo"
+    },
+    {
+      "key": "cmd.edit.undo.desc",
+      "text": "Undo the last action"
+    },
+    {
+      "key": "cmd.edit.redo",
+      "text": "Redo"
+    },
+    {
+      "key": "cmd.edit.redo.desc",
+      "text": "Repeat the undone action"
+    },
+    {
+      "key": "cmd.view.theme",
+      "text": "Theme"
+    },
+    {
+      "key": "cmd.view.theme.desc",
+      "text": "Dark → Light → System"
+    },
+    {
+      "key": "cmd.ui.settings",
+      "text": "Settings"
+    },
+    {
+      "key": "cmd.ui.settings.desc",
+      "text": "Interface settings panel"
+    },
+    {
+      "key": "cmd.help.open",
+      "text": "Help"
+    },
+    {
+      "key": "cmd.help.open.desc",
+      "text": "Algorithm steps and interface hints"
+    },
+    {
+      "key": "cmd.record.toggle",
+      "text": "Record motion"
+    },
+    {
+      "key": "cmd.record.toggle.desc",
+      "text": "Record joint angles, time and TCP into a file"
+    },
+    {
+      "key": "cmd.estop",
+      "text": "EMERGENCY STOP"
+    },
+    {
+      "key": "cmd.estop.desc",
+      "text": "Stop all motion instantly and return to Idle"
+    },
+    {
+      "key": "cmd.view.heatmap",
+      "text": "Reachability heat map"
+    },
+    {
+      "key": "cmd.view.heatmap.desc",
+      "text": "Workspace map built from the oracle verdict"
+    },
+    {
+      "key": "cmd.view.clearance",
+      "text": "Clearance heat map"
+    },
+    {
+      "key": "cmd.view.clearance.desc",
+      "text": "Trajectory coloured by clearance value"
+    },
+    {
+      "key": "cmd.features.open",
+      "text": "Feature panel"
+    },
+    {
+      "key": "cmd.features.open.desc",
+      "text": "Tabs of the new features (record, poses, zones …)"
+    },
+    {
+      "key": "cmd.shot.screenshot",
+      "text": "Take a screenshot"
+    },
+    {
+      "key": "cmd.shot.screenshot.desc",
+      "text": "PNG with annotation into the system Videos folder"
+    },
+    {
+      "key": "cmd.video.toggle",
+      "text": "Start / stop recording"
+    },
+    {
+      "key": "cmd.video.toggle.desc",
+      "text": "Record the operator view into MP4 (Videos folder)"
+    },
+    {
+      "key": "cmd.view.singularity",
+      "text": "Singularities"
+    },
+    {
+      "key": "cmd.view.singularity.desc",
+      "text": "Highlights loss-of-maneuverability zones at joints"
+    },
+    {
+      "key": "cmd.waypoint.add",
+      "text": "Add waypoint"
+    },
+    {
+      "key": "cmd.waypoint.add.desc",
+      "text": "Add an intermediate point to the route"
+    },
+    {
+      "key": "cmd.waypoint.panel",
+      "text": "Waypoint list"
+    },
+    {
+      "key": "cmd.waypoint.panel.desc",
+      "text": "Move, reorder and delete intermediate points"
+    },
+    {
+      "key": "cmd.health.toggle",
+      "text": "Health monitoring"
+    },
+    {
+      "key": "cmd.health.toggle.desc",
+      "text": "Joint temperature, current, speed and wear"
+    },
+    {
+      "key": "cmd.obstacle.toggle",
+      "text": "Dynamic obstacles"
+    },
+    {
+      "key": "cmd.obstacle.toggle.desc",
+      "text": "A moving cart taken into account by the planner"
+    },
+    {
+      "key": "cmd.pendant.toggle",
+      "text": "Teach pendant"
+    },
+    {
+      "key": "cmd.pendant.toggle.desc",
+      "text": "Robot control pendant (variant A / B)"
+    },
+    {
+      "key": "cmd.lang.cycle",
+      "text": "Interface language"
+    },
+    {
+      "key": "cmd.lang.cycle.desc",
+      "text": "Switch language: RU / EN / ZH / ES / DE / FR / JA"
+    },
+    {
+      "key": "bt.active",
+      "text": "active node"
+    },
+    {
+      "key": "bt.hint",
+      "text": "Drag nodes with the mouse. \"Link to selected\" makes the node a child of the previously selected one. \"To script\" exports the tree as macro text."
+    },
+    {
+      "key": "bt.status",
+      "text": "Status"
+    },
+    {
+      "key": "cmd.compare.mark",
+      "text": "Mark trajectory for comparison"
+    },
+    {
+      "key": "cmd.compare.mark.desc",
+      "text": "Mark the trajectory selected in the tree as A, then as B (labels are shown in the tree)"
+    },
+    {
+      "key": "cmd.compare.open",
+      "text": "Compare trajectories"
+    },
+    {
+      "key": "cmd.compare.open.desc",
+      "text": "Comparison panel: metrics of two trajectories side by side and switching to either one"
+    },
+    {
+      "key": "cmd.demo.pickplace",
+      "text": "Pick-and-place demo"
+    },
+    {
+      "key": "cmd.demo.pickplace.desc",
+      "text": "Cube on the table → approach → grip → transfer → release (automatic sequence)"
+    },
+    {
+      "key": "cmd.eta.toggle",
+      "text": "ETA panel"
+    },
+    {
+      "key": "cmd.eta.toggle.desc",
+      "text": "Shows the remaining time and progress of the current trajectory"
+    },
+    {
+      "key": "cmd.export.tab",
+      "text": "Trajectory export tab"
+    },
+    {
+      "key": "cmd.export.tab.desc",
+      "text": "Robot language selection, export folder, file preview"
+    },
+    {
+      "key": "cmd.file.export",
+      "text": "Export: data folder"
+    },
+    {
+      "key": "cmd.file.export.desc",
+      "text": "Print the path to the records/poses/zones/sessions folder to the console (files can be copied)"
+    },
+    {
+      "key": "cmd.file.import",
+      "text": "Import scenario"
+    },
+    {
+      "key": "cmd.file.import.desc",
+      "text": "Load points and trajectories from a file (placeholder)"
+    },
+    {
+      "key": "cmd.gamepad.hud",
+      "text": "Virtual gamepad"
+    },
+    {
+      "key": "cmd.gamepad.hud.desc",
+      "text": "On-screen mini indicator: sticks, triggers and pressed gamepad buttons"
+    },
+    {
+      "key": "cmd.graph.open",
+      "text": "Joint angle graphs"
+    },
+    {
+      "key": "cmd.graph.open.desc",
+      "text": "Plot of each angle over time for the selected trajectory (two can be overlaid)"
+    },
+    {
+      "key": "cmd.gripper.toggle",
+      "text": "Gripper: open / close"
+    },
+    {
+      "key": "cmd.gripper.toggle.desc",
+      "text": "Two-finger gripper at the robot's end (works the same for SCARA)"
+    },
+    {
+      "key": "cmd.help.about",
+      "text": "About"
+    },
+    {
+      "key": "cmd.help.about.desc",
+      "text": "Interface version, modules, environment"
+    },
+    {
+      "key": "cmd.help.hotkeys",
+      "text": "Hotkeys"
+    },
+    {
+      "key": "cmd.help.hotkeys.desc",
+      "text": "Window with all bindings (keyboard, mouse, gamepad), search and conflict highlighting"
+    },
+    {
+      "key": "cmd.import.scan",
+      "text": "Refresh model list"
+    },
+    {
+      "key": "cmd.import.scan.desc",
+      "text": "Rescan the model search folders (URDF / STEP)"
+    },
+    {
+      "key": "cmd.joints.panel",
+      "text": "Joints panel"
+    },
+    {
+      "key": "cmd.joints.panel.desc",
+      "text": "A slider per joint with the current angle, limit and margin"
+    },
+    {
+      "key": "cmd.log.export",
+      "text": "Export the log"
+    },
+    {
+      "key": "cmd.log.export.desc",
+      "text": "Save the entire log to a separate file"
+    },
+    {
+      "key": "cmd.log.open",
+      "text": "Action log"
+    },
+    {
+      "key": "cmd.log.open.desc",
+      "text": "Scrollable event log with filtering by type (written to a file)"
+    },
+    {
+      "key": "cmd.obstacle.discard",
+      "text": "Discard risky trajectories"
+    },
+    {
+      "key": "cmd.obstacle.discard.desc",
+      "text": "On: trajectories crossing the obstacle's path are discarded (off: only flagged)"
+    },
+    {
+      "key": "cmd.obstacle.evaluate",
+      "text": "Check trajectories for risk"
+    },
+    {
+      "key": "cmd.obstacle.evaluate.desc",
+      "text": "Check the generated variants against the predicted obstacle motion"
+    },
+    {
+      "key": "cmd.pendant.attach",
+      "text": "Pendant placement"
+    },
+    {
+      "key": "cmd.pendant.attach.desc",
+      "text": "The pendant floats in the scene → in the operator's hand → above the robot"
+    },
+    {
+      "key": "cmd.pendant.jogmode",
+      "text": "Jog mode (JOINT / TCP)"
+    },
+    {
+      "key": "cmd.pendant.jogmode.desc",
+      "text": "The joystick rocks the selected joint or shifts the TCP in a plane"
+    },
+    {
+      "key": "cmd.pendant.variant",
+      "text": "Pendant variant (A / B)"
+    },
+    {
+      "key": "cmd.pendant.variant.desc",
+      "text": "Switch the style: A — industrial, B — ADDON project style"
+    },
+    {
+      "key": "cmd.perf.open",
+      "text": "Planner benchmark"
+    },
+    {
+      "key": "cmd.perf.open.desc",
+      "text": "Generation time, planning attempts, iterations, discarded duplicates"
+    },
+    {
+      "key": "cmd.pose.goto",
+      "text": "Go to pose"
+    },
+    {
+      "key": "cmd.pose.goto.desc",
+      "text": "Smoothly move the robot to the selected pose (Poses panel)"
+    },
+    {
+      "key": "cmd.pose.save",
+      "text": "Save current pose as…"
+    },
+    {
+      "key": "cmd.pose.save.desc",
+      "text": "Snapshot the joint angles of the active robot to a file (Poses panel — quick name picker)"
+    },
+    {
+      "key": "cmd.post.apply.energy",
+      "text": "Switch to the eco profile"
+    },
+    {
+      "key": "cmd.post.apply.energy.desc",
+      "text": "Replace the time profile of the selected variant with the energy-efficient one"
+    },
+    {
+      "key": "cmd.post.apply.smooth",
+      "text": "Smooth the selected trajectory"
+    },
+    {
+      "key": "cmd.post.apply.smooth.desc",
+      "text": "Apply the selected smoothing level to the current variant"
+    },
+    {
+      "key": "cmd.post.apply.topt",
+      "text": "Switch to the time-optimal one"
+    },
+    {
+      "key": "cmd.post.apply.topt.desc",
+      "text": "Replace the time of the selected variant with the time-optimal one at the current limits"
+    },
+    {
+      "key": "cmd.post.auto.selected",
+      "text": "Smooth the selected variant only"
+    },
+    {
+      "key": "cmd.post.auto.selected.desc",
+      "text": "On: auto-smoothing processes one selected variant instead of all 8 (trajectories appear faster). Off: previous behavior — all variants"
+    },
+    {
+      "key": "cmd.presentation.toggle",
+      "text": "Presentation mode"
+    },
+    {
+      "key": "cmd.presentation.toggle.desc",
+      "text": "The camera orbits the robot by itself, text on screen, UI hidden; exit with Esc"
+    },
+    {
+      "key": "cmd.record.play",
+      "text": "Play recording"
+    },
+    {
+      "key": "cmd.record.play.desc",
+      "text": "Play the selected recording (press again to pause; speed multiplier is in the panel)"
+    },
+    {
+      "key": "cmd.record.speed",
+      "text": "Playback speed"
+    },
+    {
+      "key": "cmd.record.speed.desc",
+      "text": "Cycle the playback speed multiplier: 0.25 → 0.5 → 1 → 2 → 4"
+    },
+    {
+      "key": "cmd.scenarios.open",
+      "text": "Scenarios"
+    },
+    {
+      "key": "cmd.scenarios.open.desc",
+      "text": "Ready-made scenarios: workspace, pick-and-place, limits, 8 trajectories"
+    },
+    {
+      "key": "cmd.scenarios.run",
+      "text": "Run scenario…"
+    },
+    {
+      "key": "cmd.scenarios.run.desc",
+      "text": "Run the scenario selected in the panel (pause/cancel there too)"
+    },
+    {
+      "key": "cmd.session.load",
+      "text": "Load session"
+    },
+    {
+      "key": "cmd.session.load.desc",
+      "text": "Restore the last saved session"
+    },
+    {
+      "key": "cmd.session.panel",
+      "text": "Session list"
+    },
+    {
+      "key": "cmd.session.panel.desc",
+      "text": "Saved sessions: load, delete, inspect contents"
+    },
+    {
+      "key": "cmd.session.save",
+      "text": "Save session"
+    },
+    {
+      "key": "cmd.session.save.desc",
+      "text": "Robot poses, points, zones and flags into a session JSON file"
+    },
+    {
+      "key": "cmd.shot.annotate",
+      "text": "Screenshot annotation"
+    },
+    {
+      "key": "cmd.shot.annotate.desc",
+      "text": "Draw the date, State Machine state and the selected robot over the shot"
+    },
+    {
+      "key": "cmd.show.limits",
+      "text": "Show limits"
+    },
+    {
+      "key": "cmd.show.limits.desc",
+      "text": "Limit rings on the joints + the \"angle / limit / margin\" panel"
+    },
+    {
+      "key": "cmd.show.pickplace",
+      "text": "Demonstrate pick-and-place"
+    },
+    {
+      "key": "cmd.show.pickplace.desc",
+      "text": "Places a cube, grips it and moves it to another point"
+    },
+    {
+      "key": "cmd.show.trajectories",
+      "text": "8-trajectory demo"
+    },
+    {
+      "key": "cmd.show.trajectories.desc",
+      "text": "Places a point above the table, waits for generation, picks the best trajectory and runs a phantom"
+    },
+    {
+      "key": "cmd.show.workspace",
+      "text": "Show workspace"
+    },
+    {
+      "key": "cmd.show.workspace.desc",
+      "text": "Enables the reachable workspace and joint limits, shows the robot from all sides"
+    },
+    {
+      "key": "cmd.tool.grid",
+      "text": "Workspace grid"
+    },
+    {
+      "key": "cmd.tool.grid.desc",
+      "text": "A flat grid on the tabletop (placeholder)"
+    },
+    {
+      "key": "cmd.tool.measure",
+      "text": "Measure"
+    },
+    {
+      "key": "cmd.tool.measure.desc",
+      "text": "Ruler / distance measuring in the scene (placeholder)"
+    },
+    {
+      "key": "cmd.tut.restart",
+      "text": "Restart the tutorial"
+    },
+    {
+      "key": "cmd.tut.restart.desc",
+      "text": "Reset the tutorial progress and start from the first step"
+    },
+    {
+      "key": "cmd.ui.access",
+      "text": "Accessibility"
+    },
+    {
+      "key": "cmd.ui.access.desc",
+      "text": "Font size, high contrast, color-blind scheme, keyboard navigation"
+    },
+    {
+      "key": "cmd.ui.palette",
+      "text": "Command palette"
+    },
+    {
+      "key": "cmd.ui.palette.desc",
+      "text": "Search across ALL interface commands: toolbar, menu, settings, hidden features"
+    },
+    {
+      "key": "cmd.ui.resetlayout",
+      "text": "Reset window layout"
+    },
+    {
+      "key": "cmd.ui.resetlayout.desc",
+      "text": "Return the panels and toolbar groups to their default layout"
+    },
+    {
+      "key": "cmd.ui.toggle",
+      "text": "Show / hide the interface"
+    },
+    {
+      "key": "cmd.ui.toggle.desc",
+      "text": "Hide the panels and return mouse control to the scene (TAB switches the cursor mode: camera ⟷ interface; ESC does the same from camera mode)"
+    },
+    {
+      "key": "cmd.view.panel.properties",
+      "text": "Properties"
+    },
+    {
+      "key": "cmd.view.panel.properties.desc",
+      "text": "Right panel: properties of the selected object (read-only)"
+    },
+    {
+      "key": "cmd.view.panel.settings",
+      "text": "Settings and help"
+    },
+    {
+      "key": "cmd.view.panel.settings.desc",
+      "text": "Bottom dock panel: features, controls, interface, about, help"
+    },
+    {
+      "key": "cmd.view.panel.tree",
+      "text": "Model tree"
+    },
+    {
+      "key": "cmd.view.panel.tree.desc",
+      "text": "Left panel: scene hierarchy (robots, axes, tables, points, trajectories)"
+    },
+    {
+      "key": "cmd.waypoint.build",
+      "text": "Rebuild the route"
+    },
+    {
+      "key": "cmd.waypoint.build.desc",
+      "text": "Build a trajectory through the intermediate points with the standard planner (BiRRT)"
+    },
+    {
+      "key": "cmd.waypoint.clear",
+      "text": "Clear waypoints"
+    },
+    {
+      "key": "cmd.waypoint.clear.desc",
+      "text": "Delete all intermediate points and clear the route"
+    },
+    {
+      "key": "cmd.waypoint.delete",
+      "text": "Delete waypoint"
+    },
+    {
+      "key": "cmd.waypoint.delete.desc",
+      "text": "Remove the selected intermediate point (the trajectory returns to its previous shape)"
+    },
+    {
+      "key": "cmd.waypoint.earlier",
+      "text": "Move waypoint earlier"
+    },
+    {
+      "key": "cmd.waypoint.earlier.desc",
+      "text": "Raise the selected point in the traversal order"
+    },
+    {
+      "key": "cmd.waypoint.later",
+      "text": "Move waypoint later"
+    },
+    {
+      "key": "cmd.waypoint.later.desc",
+      "text": "Lower the selected point in the traversal order"
+    },
+    {
+      "key": "cmd.waypoint.move",
+      "text": "Move waypoint"
+    },
+    {
+      "key": "cmd.waypoint.move.desc",
+      "text": "Move the selected intermediate point to the current crosshair point"
+    },
+    {
+      "key": "cmd.waypoint.play",
+      "text": "Run the route"
+    },
+    {
+      "key": "cmd.waypoint.play.desc",
+      "text": "Send the robot along the route through the intermediate points"
+    },
+    {
+      "key": "cmd.zone.box",
+      "text": "Keep-out zone: box"
+    },
+    {
+      "key": "cmd.zone.box.desc",
+      "text": "Create a box keep-out zone at the crosshair point (translucent red volume)"
+    },
+    {
+      "key": "cmd.zone.cylinder",
+      "text": "Keep-out zone: cylinder"
+    },
+    {
+      "key": "cmd.zone.cylinder.desc",
+      "text": "Create a cylindrical keep-out zone at the crosshair point"
+    },
+    {
+      "key": "cmd.zone.discard",
+      "text": "Discard hazardous trajectories"
+    },
+    {
+      "key": "cmd.zone.discard.desc",
+      "text": "On: trajectories crossing a keep-out zone are discarded (off: only flagged)"
+    },
+    {
+      "key": "cmd.zone.panel",
+      "text": "Keep-out zones: list"
+    },
+    {
+      "key": "cmd.zone.panel.desc",
+      "text": "Zone list: resize, move, delete, show/hide"
+    },
+    {
+      "key": "cmd.zone.sphere",
+      "text": "Keep-out zone: sphere"
+    },
+    {
+      "key": "cmd.zone.sphere.desc",
+      "text": "Create a spherical keep-out zone at the crosshair point"
+    },
+    {
+      "key": "ctx.copied",
+      "text": "Name copied to clipboard"
+    },
+    {
+      "key": "ctx.copy",
+      "text": "Copy name"
+    },
+    {
+      "key": "ctx.delete",
+      "text": "Delete"
+    },
+    {
+      "key": "ctx.delete.none",
+      "text": "Deletion is supported for points and intermediate points"
+    },
+    {
+      "key": "ctx.duplicate",
+      "text": "Duplicate"
+    },
+    {
+      "key": "ctx.duplicate.none",
+      "text": "Duplication is supported for points and intermediate points"
+    },
+    {
+      "key": "ctx.focus",
+      "text": "Focus camera on the object"
+    },
+    {
+      "key": "ctx.focused",
+      "text": "Camera focused on"
+    },
+    {
+      "key": "ctx.hidden",
+      "text": "Objects hidden"
+    },
+    {
+      "key": "ctx.hide",
+      "text": "Hide"
+    },
+    {
+      "key": "ctx.multi",
+      "text": "Nodes selected"
+    },
+    {
+      "key": "ctx.properties",
+      "text": "Properties"
+    },
+    {
+      "key": "ctx.rename",
+      "text": "Rename"
+    },
+    {
+      "key": "ctx.rename.manual",
+      "text": "Renaming: double-click a node (the menu is available for the selected one only)"
+    },
+    {
+      "key": "ctx.show",
+      "text": "Show"
+    },
+    {
+      "key": "ctx.shown",
+      "text": "Objects shown"
+    },
+    {
+      "key": "dock.zone.bottom",
+      "text": "Dock to the bottom edge"
+    },
+    {
+      "key": "dock.zone.float",
+      "text": "Keep as a floating window"
+    },
+    {
+      "key": "dock.zone.left",
+      "text": "Dock to the left edge"
+    },
+    {
+      "key": "dock.zone.right",
+      "text": "Dock to the right edge"
+    },
+    {
+      "key": "empty.point",
+      "text": "Pick a point with the red laser (Z + LMB)"
+    },
+    {
+      "key": "error.hide",
+      "text": "Hide"
+    },
+    {
+      "key": "error.more",
+      "text": "Details"
+    },
+    {
+      "key": "error.unknown",
+      "text": "Unknown error"
+    },
+    {
+      "key": "eyes.title",
+      "text": "Gaze and foveal vision"
+    },
+    {
+      "key": "gamepad.absent",
+      "text": "NO GAMEPAD — gamepad control is inactive"
+    },
+    {
+      "key": "gamepad.connected",
+      "text": "GAMEPAD"
+    },
+    {
+      "key": "gamepad.last",
+      "text": "last"
+    },
+    {
+      "key": "hands.title",
+      "text": "Hand tracking"
+    },
+    {
+      "key": "hotkeys.conflict",
+      "text": "CONFLICT: this key is taken by another action"
+    },
+    {
+      "key": "hotkeys.empty",
+      "text": "Nothing found"
+    },
+    {
+      "key": "hotkeys.rebind",
+      "text": "Rebind"
+    },
+    {
+      "key": "hotkeys.rebind.stub",
+      "text": "Key rebinding will come later — bindings cannot be changed yet"
+    },
+    {
+      "key": "hotkeys.search",
+      "text": "Search: action name or key…"
+    },
+    {
+      "key": "loading.planning",
+      "text": "Trajectory planning"
+    },
+    {
+      "key": "loading.recording",
+      "text": "Recording / playback"
+    },
+    {
+      "key": "logtools.title",
+      "text": "Log: levels and search"
+    },
+    {
+      "key": "palette.disabled",
+      "text": "Command unavailable"
+    },
+    {
+      "key": "palette.empty",
+      "text": "Nothing found"
+    },
+    {
+      "key": "palette.hint",
+      "text": "Type a command… (Enter — run, Esc — close)"
+    },
+    {
+      "key": "panel.collapse",
+      "text": "Collapse/expand the panel"
+    },
+    {
+      "key": "panel.hotkeys",
+      "text": "Hotkeys"
+    },
+    {
+      "key": "panel.rail",
+      "text": "Collapse the window into a side rail (click the rail to restore)"
+    },
+    {
+      "key": "panel.rail.hint",
+      "text": "The window is collapsed into a side rail — click the rail to restore it"
+    },
+    {
+      "key": "panel.undock",
+      "text": "Undock the window (floating) / dock it to an edge"
+    },
+    {
+      "key": "properties.empty",
+      "text": "Select an object"
+    },
+    {
+      "key": "properties.empty.hint",
+      "text": "Click a node in the tree on the left (or pick a point with the red laser — Z)"
+    },
+    {
+      "key": "properties.none",
+      "text": "Nothing selected"
+    },
+    {
+      "key": "properties.none.hint",
+      "text": "select a node in the tree on the left"
+    },
+    {
+      "key": "settings.cb.deuter",
+      "text": "Deuteranopia"
+    },
+    {
+      "key": "settings.cb.note",
+      "text": "The scheme replaces red/green with the \"orange ↔ blue\" pair (Okabe–Ito palette): it stays distinguishable for all three types of color blindness. The type is chosen from a single list — separate color sets per type will come later."
+    },
+    {
+      "key": "settings.cb.off",
+      "text": "Standard colors"
+    },
+    {
+      "key": "settings.cb.prot",
+      "text": "Protanopia"
+    },
+    {
+      "key": "settings.cb.trit",
+      "text": "Tritanopia"
+    },
+    {
+      "key": "settings.contrast",
+      "text": "High contrast"
+    },
+    {
+      "key": "settings.font",
+      "text": "Interface font size"
+    },
+    {
+      "key": "settings.font.large",
+      "text": "Large"
+    },
+    {
+      "key": "settings.font.normal",
+      "text": "Medium"
+    },
+    {
+      "key": "settings.font.small",
+      "text": "Small"
+    },
+    {
+      "key": "settings.gamepadhud",
+      "text": "On-screen virtual gamepad"
+    },
+    {
+      "key": "settings.header.access",
+      "text": "Accessibility"
+    },
+    {
+      "key": "settings.header.service",
+      "text": "Quick actions"
+    },
+    {
+      "key": "settings.keyboardnav",
+      "text": "Keyboard navigation (Tab, arrows, Enter)"
+    },
+    {
+      "key": "settings.open.hotkeys",
+      "text": "Hotkeys window (F12)"
+    },
+    {
+      "key": "settings.open.palette",
+      "text": "Command palette (Ctrl+P)"
+    },
+    {
+      "key": "settings.reset.layout",
+      "text": "Reset window layout"
+    },
+    {
+      "key": "status.mode",
+      "text": "Mode"
+    },
+    {
+      "key": "status.mode.body",
+      "text": "Clicking the indicator does the same as Tab"
+    },
+    {
+      "key": "status.mode.camera",
+      "text": "Camera"
+    },
+    {
+      "key": "status.mode.now",
+      "text": "now"
+    },
+    {
+      "key": "status.mode.tip",
+      "text": "Tab — switch the mode (Camera / UI)"
+    },
+    {
+      "key": "status.mode.ui",
+      "text": "UI"
+    },
+    {
+      "key": "titles.title",
+      "text": "Titles and captions"
+    },
+    {
+      "key": "toolbar.group",
+      "text": "Group"
+    },
+    {
+      "key": "toolbar.group.all",
+      "text": "All commands"
+    },
+    {
+      "key": "toolbar.group.count",
+      "text": "commands"
+    },
+    {
+      "key": "toolbar.group.hint",
+      "text": "Click — the list of the group's commands; the group can be collapsed into a single icon"
+    },
+    {
+      "key": "toolbar.workbench",
+      "text": "Workbench:"
+    },
+    {
+      "key": "tree.empty",
+      "text": "No objects"
+    },
+    {
+      "key": "tree.empty.hint",
+      "text": "Pick a point with the red laser (Z) — objects will appear here"
+    },
+    {
+      "key": "tree.kind.axis",
+      "text": "axis"
+    },
+    {
+      "key": "tree.kind.group",
+      "text": "group"
+    },
+    {
+      "key": "tree.kind.object",
+      "text": "object"
+    },
+    {
+      "key": "tree.kind.phantom",
+      "text": "phantom"
+    },
+    {
+      "key": "tree.kind.point",
+      "text": "point"
+    },
+    {
+      "key": "tree.kind.robot",
+      "text": "robot"
+    },
+    {
+      "key": "tree.kind.table",
+      "text": "table"
+    },
+    {
+      "key": "tree.kind.trajectory",
+      "text": "trajectory"
+    },
+    {
+      "key": "cmd.properties",
+      "text": "Properties"
+    },
+    {
+      "key": "cmd.properties.desc",
+      "text": "Show the properties panel of the selected object"
+    },
+    {
+      "key": "mode.camera",
+      "text": "CAMERA"
+    },
+    {
+      "key": "mode.ui",
+      "text": "INTERFACE"
+    },
+    {
+      "key": "mode.camera.hint",
+      "text": "mouse turns the camera · panels are not clickable"
+    },
+    {
+      "key": "mode.ui.hint",
+      "text": "mouse moves the cursor · panels are clickable"
+    },
+    {
+      "key": "mode.toggle",
+      "text": "TAB — switch"
+    }
   ]
 }
