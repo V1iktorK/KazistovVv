@@ -233,6 +233,55 @@ namespace KazistovVvFeatures
             }
             if (IsRecording) StopRecording(true);
 
+            // ПРОВЕРКА БЕЗОПАСНОСТИ ПЕРЕД ВОСПРОИЗВЕДЕНИЕМ (30.10.2026, аудит S43).
+            //
+            // ЧТО БЫЛО. Воспроизведение записи — единственный маршрут движения, который ОБХОДИЛ
+            // `SafetyGate` (шаг 4) и `MotionExecutor` (шаг 5): позы шли напрямую в
+            // `flow.Validator.Apply(q)`. Ограничения суставов и зазор проверялись ПОСТФАКТУМ, раз
+            // в `clearanceInterval`, а предполётной проверки не было вовсе.
+            //
+            // ЧЕМ ЭТО ПЛОХО. Запись сделана раньше, и с тех пор могли поменять робота, рабочую
+            // зону или стол. Воспроизведение «вслепую» везёт робота туда, куда сейчас уже нельзя.
+            //
+            // ЧТО СДЕЛАНО. Перед стартом проверяются КАЖДЫЙ сэмпл записи на лимиты суставов и
+            // зазор до мира (если есть). Отказ — честный, с числом: оператор видит, на каком
+            // сэмпле и сколько миллиметров. Это не полная замена проверкам в темпе (они остались
+            // в `Tick`), а гарантия «мы не начнём движение, которое заведомо незаконно».
+            if (checkLimits || (checkClearance && world != null))
+            {
+                for (int i = 0; i < rec.SampleCount; i++)
+                {
+                    // Сэмпл записи хранит позу как float[] — приводим к double[] ОДИН раз здесь:
+                    // дальше `WithinLimits` и `ClearanceAt` принимают double[] (как и весь
+                    // планировщик), и приведение в двух местах разошлось бы.
+                    float[] raw = rec.samples[i].q;
+                    if (raw == null) continue;
+                    var q = new double[raw.Length];
+                    for (int k = 0; k < raw.Length; k++) q[k] = raw[k];
+
+                    if (checkLimits && !flow.Validator.WithinLimits(q))
+                    {
+                        Fail("воспроизведение отменено: сэмпл " + (i + 1) + " из " + rec.SampleCount +
+                             " вне лимитов суставов (запись сделана при других настройках робота)");
+                        return false;
+                    }
+
+                    if (checkClearance && world != null)
+                    {
+                        Vector3 tcpPoint;
+                        Vector3[] nodes;
+                        float clearance = flow.Validator.ClearanceAt(q, world, out tcpPoint, out nodes);
+                        if (clearance < minClearance)
+                        {
+                            Fail("воспроизведение отменено: сэмпл " + (i + 1) + " из " + rec.SampleCount +
+                                 " проходит в " + (clearance * 1000f).ToString("0") + " мм от сцены (нужно " +
+                                 (minClearance * 1000f).ToString("0") + " мм) — стол или зона изменились");
+                            return false;
+                        }
+                    }
+                }
+            }
+
             playing = rec;
             if (speedMultiplier > 0f) SpeedMultiplier = speedMultiplier;
             playhead = 0.0;
