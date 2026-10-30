@@ -70,10 +70,20 @@ namespace KazistovVvXr
             // шлема: оператор мог выключить сквозной вид в настройках) и печатается одной строкой.
             // Если возможностей MR нет — приложение честно становится VR и говорит это, а не
             // показывает серый экран.
+            KvXrCapabilities.Answer passthrough = KvXrCapabilities.Passthrough();
+            KvXrCapabilities.Answer anchors = KvXrCapabilities.SpatialAnchors();
+            KvXrCapabilities.Answer camera = KvXrCapabilities.Camera();
+
             KvXrPlatformModeSelector.Apply(
-                passthroughAvailable: DetectPassthroughAvailable(),
-                spatialAnchorsAvailable: DetectSpatialAnchorsAvailable(),
-                cameraAvailable: DetectCameraAvailable());
+                passthroughAvailable: KvXrCapabilities.IsYes(passthrough),
+                spatialAnchorsAvailable: KvXrCapabilities.IsYes(anchors),
+                cameraAvailable: KvXrCapabilities.IsYes(camera));
+
+            // СТРОКА О ВОЗМОЖНОСТЯХ — ОТДЕЛЬНО ОТ СТРОКИ О РЕЖИМЕ (30.10.2026).
+            //
+            // Разница важна наладчику: «режим VR» может значить и «устройство не умеет», и
+            // «мы не смогли спросить». Без этой строки обе ситуации выглядели бы одинаково.
+            Debug.Log("[KvXr] " + KvXrCapabilities.Describe(passthrough, anchors, camera));
 
             // §37: ЧТО ЖИВЁТ ТОЛЬКО В РАНТАЙМЕ. Модели контроллеров и исполнитель жестов создаются
             // ЗДЕСЬ, а не лежат в сцене: файл XrMain.unity не правится вовсе, поэтому принятое в
@@ -85,42 +95,6 @@ namespace KazistovVvXr
             Debug.Log("[KvXr] " + KvXrInputSource.Describe());
             Debug.Log("[KvXr] " + KvXrSettings.BuildRigConfig().Describe());
             Debug.Log("[KvXr] " + KvXrSettings.DescribePointer());
-        }
-
-        /// <summary>
-        /// ЕСТЬ ЛИ СКВОЗНОЙ ВИД (основа MR).
-        ///
-        /// ЧЕСТНАЯ ПРОВЕРКА, А НЕ НАДЕЖДА. Сквозной вид отдаёт особенность OpenXR
-        /// (`XR_FB_passthrough` / PICO-аналог). В этой сборке пакет PICO SDK не подключается
-        /// ([R3] в силе), поэтому прямой пробы нет — и выдумывать «да» нельзя: приложение
-        /// переключилось бы в MR, не имея картинки с камеры. Пока пробы нет, ответ «нет»,
-        /// и строка журнала прямо говорит, почему режим VR.
-        ///
-        /// КОГДА ПРОБА ПОЯВИТСЯ: метод — единственное место, которое надо поменять (суббота, MR).
-        /// </summary>
-        private static bool DetectPassthroughAvailable()
-        {
-            return false;
-        }
-
-        /// <summary>
-        /// ЕСТЬ ЛИ ПРОСТРАНСТВЕННЫЕ ЯКОРЯ. Условие AR: без опоры на реальный мир объекты висят
-        /// в случайной точке. Пока — «нет» по той же причине, что и со сквозным видом.
-        /// </summary>
-        private static bool DetectSpatialAnchorsAvailable()
-        {
-            return false;
-        }
-
-        /// <summary>
-        /// ЕСТЬ ЛИ КАМЕРА МИРА. Карточка Б3: разрешение объявлено в манифесте сборки
-        /// (`KvPicoManifestMetaData.RequiredPermissions`), но сама проба доступности — за
-        /// платформенным слоем. До появления пробы отвечаем «нет»: описание возможностей
-        /// должно быть правдой, а не пожеланием.
-        /// </summary>
-        private static bool DetectCameraAvailable()
-        {
-            return false;
         }
 
         /// <summary>
