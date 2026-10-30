@@ -95,7 +95,11 @@ public static class KvUiShotDiag
         Camera cam = Camera.main;
         if (cam == null)
         {
-            cam = Object.FindObjectOfType<Camera>();
+            // 30.10.2026: `FindObjectOfType` и `FindObjectsByType(…, FindObjectsSortMode)` помечены
+            // устаревшими в Unity 6 — это давало 10 предупреждений CS0618 на каждую сборку (два
+            // прохода компиляции). Замена эквивалентна: прежний `FindObjectsSortMode.None`
+            // сортировку и не выполнял.
+            cam = Object.FindAnyObjectByType<Camera>();
         }
         if (cam == null)
         {
@@ -114,7 +118,7 @@ public static class KvUiShotDiag
         }
         if (canvas == null)
         {
-            Canvas[] all = Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None);
+            Canvas[] all = Object.FindObjectsByType<Canvas>(FindObjectsInactive.Exclude);
             foreach (Canvas c in all)
             {
                 Debug.Log("[KvUiShot] найден Canvas: " + c.gameObject.name +
@@ -125,7 +129,7 @@ public static class KvUiShotDiag
         if (canvas == null)
         {
             Debug.LogError("[KvUiShot] KazistovVvCanvas не найден (Canvas всего: " +
-                Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None).Length +
+                Object.FindObjectsByType<Canvas>(FindObjectsInactive.Exclude).Length +
                 ", менеджер: " + (KazistovVvUIManager.Instance != null) + ")");
             return;
         }

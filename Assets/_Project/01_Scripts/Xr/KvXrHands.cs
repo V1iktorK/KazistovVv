@@ -296,6 +296,28 @@ namespace KazistovVvXr
             if (!TryJoint(xrHand, XRHandJointID.LittleProximal, out littleProximal)) return false;
             if (!TryJoint(xrHand, XRHandJointID.LittleTip, out littleTip)) return false;
 
+            // 30.10.2026 (найдено проверкой кода): `XRHandJoint.TryGetPose` отдаёт позы в
+            // ПРОСТРАНСТВЕ ОТСЛЕЖИВАНИЯ, а не в мировом — это прямо написано в документации
+            // пакета (`XRHandJoint.cs`: «transform a pose into world space using the transform
+            // from the XROrigin»). Прежний комментарий «позы суставов приходят в мировых» был
+            // неверен: после телепорта рисунок кисти и луч из указательного пальца жили в старом
+            // начале координат. Перевод один и здесь: рисование, `KvXrHandRay`,
+            // `KvXrHandPanelPlacement` и дистанция «кисть ↔ контроллер» в `KvXrMode` берут
+            // координаты уже мировыми — иначе пары несогласованных пространств не избежать.
+            wrist.position = ToWorld(wrist.position);
+            wrist.rotation = ToWorld(wrist.rotation);
+            palm.position = ToWorld(palm.position);
+            palm.rotation = ToWorld(palm.rotation);
+            thumbTip.position = ToWorld(thumbTip.position);
+            indexProximal.position = ToWorld(indexProximal.position);
+            indexTip.position = ToWorld(indexTip.position);
+            middleProximal.position = ToWorld(middleProximal.position);
+            middleTip.position = ToWorld(middleTip.position);
+            ringProximal.position = ToWorld(ringProximal.position);
+            ringTip.position = ToWorld(ringTip.position);
+            littleProximal.position = ToWorld(littleProximal.position);
+            littleTip.position = ToWorld(littleTip.position);
+
             frame = new KvHandFrame
             {
                 valid = true,
@@ -413,8 +435,29 @@ namespace KazistovVvXr
             }
         }
 
-        private static bool TryJoint(XRHand hand, XRHandJointID id, out Pose pose)
+        /// <summary>
+        /// ПОЗА СУСТАВА ИЗ ПРОСТРАНСТВА ОТСЛЕЖИВАНИЯ В МИР (30.10.2026).
+        ///
+        /// ЧЕРЕЗ РИГ, А НЕ СВОИМ ПЕРЕСЧЁТОМ. Начало отслеживания (`KvXrRig`) знает
+        /// `KvXrInputSource.TrackingOrigin`. Своего трансформа здесь быть не должно: второй
+        /// пересчёт рано или поздно разойдётся с первым — ровно то, что случилось в E-06/E-07.
+        /// Пока риг не поставлен (например, кисти без рига) — преобразование не выполняется,
+        /// и поведение остаётся прежним.
+        /// </summary>
+        private static Vector3 ToWorld(Vector3 point)
         {
+            Transform origin = KvXrInputSource.TrackingOrigin;
+            return origin == null ? point : origin.TransformPoint(point);
+        }
+
+        /// <summary>То же для поворота сустава.</summary>
+        private static Quaternion ToWorld(Quaternion rotation)
+        {
+            Transform origin = KvXrInputSource.TrackingOrigin;
+            return origin == null ? rotation : origin.rotation * rotation;
+        }
+
+        private static bool TryJoint(XRHand hand, XRHandJointID id, out Pose pose)        {
             pose = default(Pose);
             try
             {

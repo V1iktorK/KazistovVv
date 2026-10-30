@@ -47,12 +47,26 @@ namespace KazistovVvXr
         }
 
         /// <summary>
+        /// 30.10.2026: окно было ВЗЯТО этим кадром (фронт захвата).
+        ///
+        /// ЗАЧЕМ. Захват окна указательным пальцем и нажатие иконки читают ОДИН и тот же курок.
+        /// Без этого признака одно нажатие успевало и взять окно, и нажать кнопку под лучом —
+        /// класс дефекта «одно нажатие — два действия» (E-08/Б43), только новая пара. Вызывающий
+        /// обязан пропустить нажатие ровно в том кадре, где перенос начался.
+        /// </summary>
+        public bool GrabbedThisTick { get { return grabbedThisTick; } }
+
+        private bool grabbedThisTick;
+
+        /// <summary>
         /// ОДИН ШАГ. `panel` — панель под лучом (может быть пустой). Возвращает `true`, если перенос
         /// идёт: тогда вызывающий обязан поставить метку и конец луча в <see cref="CurrentPoint"/>.
         /// </summary>
         public bool Tick(KvXrGroupPanel panel, Vector3 origin, Vector3 direction,
                          bool gripHeld, bool triggerHeld)
         {
+            grabbedThisTick = false;
+
             if (Window == null)
             {
                 if (panel == null || panel.followHand) return false;      // панель у руки не переносим
@@ -67,6 +81,7 @@ namespace KazistovVvXr
                 holdPoint = origin + direction.normalized * distanceMeters;
                 grabOffset = panel.transform.position - holdPoint;
                 startWindowPosition = panel.transform.position;
+                grabbedThisTick = true;                                   // ← фронт захвата (см. выше)
 
                 Debug.Log("[KvXr] ОКНО: взято для переноса · " +
                           (byGrip ? "средним пальцем (любая точка)" : "указательным (верх окна)") +

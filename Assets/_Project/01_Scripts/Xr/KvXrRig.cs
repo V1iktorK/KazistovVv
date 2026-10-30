@@ -52,6 +52,7 @@ namespace KazistovVvXr
             // 29.10.2026: начало отслеживания = этот риг. Без этого позы трекинга
             // не трансформируются в мировые — лучи бьют мимо, руки не едут с камерой.
             KvXrInputSource.TrackingOrigin = transform;
+            installedTrackingOrigin = true;          // 30.10.2026: чтобы OnDestroy снял именно свою ссылку
 
             Application.targetFrameRate = targetFrameRate;
             QualitySettings.vSyncCount = 0;
@@ -132,6 +133,28 @@ namespace KazistovVvXr
         }
 
         private float lastRecoverTime = -100f;
+
+        /// <summary>
+        /// 30.10.2026: рига больше нет — начало отслеживания обязано быть снято.
+        ///
+        /// ПОЧЕМУ. `KvXrInputSource.TrackingOrigin` — статическое поле, и через него проходят
+        /// ВСЕ позы трекинга (руки, контроллеры, лучи). Если риг пересоздан или выгружен, а поле
+        /// осталось, трансформация идёт через уничтоженный объект — это `MissingReferenceException`
+        /// каждый кадр, а не «позы не едут». Снимаем ссылку только если она наша: другой риг
+        /// мог уже поставить свою.
+        ///
+        /// ПОЧЕМУ ФЛАГ, А НЕ СРАВНЕНИЕ. У уничтожаемого объекта Unity подменяет результат
+        /// сравнения (`obj == null` — истина), поэтому сравнение с `transform` в `OnDestroy`
+        /// может не сработать: прогон 30.10.2026 показал, что ссылка оставалась. Флаг ставится
+        /// в `Awake` — там риг точно тот самый.
+        /// </summary>
+        private bool installedTrackingOrigin;
+
+        void OnDestroy()
+        {
+            KvXrInputSource.ClearOriginIf(installedTrackingOrigin, transform);
+            installedTrackingOrigin = false;
+        }
 
         void OnApplicationPause(bool paused)
         {

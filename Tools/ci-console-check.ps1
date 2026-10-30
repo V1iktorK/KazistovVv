@@ -146,6 +146,10 @@ function Get-LogStats {
         exceptions          = Measure-LogPattern -Path $Path -Pattern @('Exception:', 'Unhandled exception')
         missingScripts      = Measure-LogPattern -Path $Path -Pattern @('Missing \(Mono Script\)')
     }
+    # 30.10.2026: `warning UAC1001` раньше не считался вовсе — сводка говорила «предупреждений
+    # в Assets нет», хотя три штуки лежат в Assets (KvGraphicsService, KvXrMrRoom). Считаем
+    # отдельной строкой, чтобы число было видно в отчёте.
+    $stats.warningsUac = Measure-LogPattern -Path $Path -Pattern @('warning UAC')
     $stats.logBytes = if (Test-Path -LiteralPath $Path) { (Get-Item -LiteralPath $Path).Length } else { 0 }
 
     # Что именно нашлось — чтобы в отчёте были ФАКТЫ, а не счётчики. Кадры стека
@@ -168,6 +172,29 @@ function Get-LogStats {
     if ($stats.errors -gt 0) {
         $stats.errorLines = @(Select-String -Path $Path -Pattern 'error CS', 'Shader error' -ErrorAction SilentlyContinue |
             Select-Object -First 10 | ForEach-Object { $_.Line.Trim() })
+    }
+
+    # 30.10.2026: ИСКЛЮЧЕНИЯ РАЗДЕЛЯЮТСЯ НА ДЕФЕКТ И ШУМ.
+    #
+    # ПОЧЕМУ ЭТО ВАЖНО. До этой правки поле `exceptions` считалось, печаталось и попадало
+    # в JSON — и НИКОГДА не участвовало в вердикте. История `Logs\ci-console-history.jsonl`
+    # показывает шесть «зелёных» прогонов с непустыми исключениями (16.09 — 4, 17.09 — 2,
+    # 03.10 — 1 и 2, 05.10 — 2). То есть «гейт пройден» не означал «консоль чистая».
+    #
+    # ШУМ. `Pipe is broken` и HTTP-2 abort приходят от транспорта редактора, а не от кода
+    # проекта; если валить гейт на них, он станет красным навсегда и его перестанут читать.
+    # Поэтому шум считается отдельно и печатается, но не валит гейт.
+    $noise = 'Pipe is broken|request stream was aborted|ConnectionAbortedException|abort_threads|Failed aborting id'
+    $stats.exceptionLines = @()
+    $stats.exceptionsApp = 0
+    $stats.exceptionsNoise = 0
+    if ($stats.exceptions -gt 0) {
+        $exc = @(Select-String -Path $Path -Pattern 'Exception:', 'Unhandled exception' -ErrorAction SilentlyContinue |
+            ForEach-Object { $_.Line.Trim() })
+        $stats.exceptionsNoise = @($exc | Where-Object { $_ -match $noise }).Count
+        $appExc = @($exc | Where-Object { $_ -notmatch $noise })
+        $stats.exceptionsApp = $appExc.Count
+        $stats.exceptionLines = @($appExc | Select-Object -First 10)
     }
     return $stats
 }
@@ -270,13 +297,15 @@ Write-Host '────────── СВОДКА ────────
 Write-Host ("Errors: {0}, Warnings: {1}" -f $stats.errors, $stats.warningsCs)
 Write-Host ("  error CS / Shader error        : {0}" -f $stats.errors)
 Write-Host ("  warning CS                     : {0}" -f $stats.warningsCs)
+Write-Host ("  warning UAC (анализатор)       : {0}" -f $stats.warningsUac)
 Write-Host ("  MenuItem (в т.ч. added twice)   : {0}  (added twice: {1})" -f $stats.menuItems, $stats.menuItemsAddedTwice)
 Write-Host ("  Input Manager (в т.ч. deprecat) : {0}" -f $stats.inputManager)
-Write-Host ("  Exception / Unhandled exception : {0}" -f $stats.exceptions)
+Write-Host ("  Exception / Unhandled exception : {0}  (дефект: {1}, шум: {2})" -f $stats.exceptions, $stats.exceptionsApp, $stats.exceptionsNoise)
 Write-Host ("  Missing (Mono Script)           : {0}" -f $stats.missingScripts)
 Write-Host ("  размер лога                     : {0:N0} байт" -f $stats.logBytes)
 foreach ($line in $stats.menuItemLines) { Write-Host ("    [MenuItem] {0}" -f $line) }
 foreach ($line in $stats.inputManagerLines) { Write-Host ("    [Input]    {0}" -f $line) }
+foreach ($line in $stats.exceptionLines) { Write-Host ("    [Exc]      {0}" -f $line) -ForegroundColor Red }
 foreach ($line in $stats.errorLines) { Write-Host ("    [Error]    {0}" -f $line) -ForegroundColor Red }
 if ($settingsChanged.Count -gt 0) {
     Write-Warning ("Батч-прогон изменил ProjectSettings: {0}" -f ($settingsChanged -join ', '))
@@ -299,7 +328,7 @@ $summary = [ordered]@{
     timeout          = $killedByTimeout
     stats            = $stats
     projectSettingsChanged = $settingsChanged
-    ok               = ($stats.errors -eq 0 -and -not $killedByTimeout -and
+    ok               = ($stats.errors -eq 0 -and $stats.exceptionsApp -eq 0 -and -not $killedByTimeout -and
                         ($AnalyzeOnly -or ($batchExitOk -and
                          ($null -eq $logReturnCode -or $logReturnCode -eq 0) -and
                          ($null -eq $processExitCode -or $processExitCode -eq 0))))
@@ -313,6 +342,13 @@ Write-Host "Сводка : $jsonPath"
 # ── гейт ────────────────────────────────────────────────────────────────────
 if ($stats.errors -gt 0) {
     Write-Host ("ГЕЙТ ПРОВАЛЕН: ошибок компиляции/шейдеров — {0}." -f $stats.errors) -ForegroundColor Red
+    exit 1
+}
+# 30.10.2026: исключение приложения — провал гейта. Раньше это поле не проверялось, и гейт
+# был зелёным при реальных исключениях (см. историю прогонов: 16.09, 17.09, 03.10 ×2, 05.10).
+if ($stats.exceptionsApp -gt 0) {
+    Write-Host ("ГЕЙТ ПРОВАЛЕН: исключений приложения — {0} (шум транспорта: {1})." -f $stats.exceptionsApp, $stats.exceptionsNoise) -ForegroundColor Red
+    foreach ($line in $stats.exceptionLines) { Write-Host ("    [Exc] " + $line) -ForegroundColor Red }
     exit 1
 }
 if ($killedByTimeout) { Write-Host 'ГЕЙТ ПРОВАЛЕН: таймаут прогона Unity.' -ForegroundColor Red; exit 1 }
@@ -331,5 +367,5 @@ if (-not $AnalyzeOnly) {
     }
 }
 
-Write-Host 'ГЕЙТ ПРОЙДЕН: ошибок компиляции нет.' -ForegroundColor Green
+Write-Host 'ГЕЙТ ПРОЙДЕН: ошибок компиляции нет, исключений приложения нет.' -ForegroundColor Green
 exit 0

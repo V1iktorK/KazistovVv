@@ -62,6 +62,29 @@ namespace KazistovVvXr
             rotation = TrackingOrigin.rotation * rotation;
         }
 
+        /// <summary>
+        /// СНЯТЬ НАЧАЛО ОТСЛЕЖИВАНИЯ, ЕСЛИ ОНО СВОЁ (30.10.2026).
+        ///
+        /// ЗАЧЕМ ОТДЕЛЬНЫМ МЕТОДОМ. Ссылка на уничтоженный трансформ — это
+        /// `MissingReferenceException` в каждом кадре: через `TrackingOrigin` проходят все позы
+        /// трекинга. Риг обязан снять её при уничтожении, но СНИМАТЬ ЧУЖУЮ нельзя — второй риг
+        /// мог уже поставить свою.
+        ///
+        /// ПОЧЕМУ ЛОГИКА ЗДЕСЬ, А НЕ В `OnDestroy`. В EditMode `AddComponent` не вызывает `Awake`,
+        /// поэтому проверить `OnDestroy` настоящим уничтожением объекта нельзя — тест проверял бы
+        /// сам себя. Развязка вынесена сюда и проверяется без движка.
+        /// </summary>
+        /// <param name="installed">Риг действительно ставил начало отслеживания (флаг из `Awake`).</param>
+        /// <param name="origin">Трансформ рига.</param>
+        /// <returns>true, если ссылка была снята.</returns>
+        public static bool ClearOriginIf(bool installed, Transform origin)
+        {
+            if (!installed || origin == null) return false;
+            if (TrackingOrigin != origin) return false;
+            TrackingOrigin = null;
+            return true;
+        }
+
         /// <summary>Правый контроллер. null — не найден.</summary>
         public static XRController Right { get { EnsureScanned(); return right; } }
 
@@ -208,6 +231,14 @@ namespace KazistovVvXr
                 if (!state.isTracked) return false;          // ← отказ по признаку, а не по нулю
                 position = state.position;
                 rotation = state.rotation;
+
+                // 30.10.2026 (найдено проверкой кода): модель контроллера ставится в МИР
+                // (`KvXrControllerVisuals.Place` → `SetPositionAndRotation`), а `devicePose`
+                // приходит в ПРОСТРАНСТВЕ ОТСЛЕЖИВАНИЯ. Без перевода через риг после телепорта
+                // или поворота рига модель оставалась «в прошлом» — тот же симптом, что E-07,
+                // но для моделей контроллеров. Правило FIXES.md: сырые tracking-координаты
+                // в мир не пускать.
+                ToWorld(ref position, ref rotation);
                 return true;
             }
 

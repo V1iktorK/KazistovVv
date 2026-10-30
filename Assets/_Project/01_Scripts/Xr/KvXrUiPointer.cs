@@ -373,6 +373,13 @@ namespace KazistovVvXr
             // нажатием средним пальцем при прицеле на ЛЮБУЮ точку окна».
             windowDrag.Tick(target, origin, direction, KvXrInputSource.RayGrip >= KvXrWindowDrag.ButtonThreshold, KvXrInputSource.RayTrigger >= KvXrWindowDrag.ButtonThreshold);
 
+            // ОДНО НАЖАТИЕ — ОДНО ДЕЙСТВИЕ (30.10.2026). Захват окна указательным пальцем и нажатие
+            // иконки читают ОДИН курок. Если окно взято именно этим кадром, нажатие в этом кадре
+            // пропускается: иначе по верхней полосе окна с вкладками одно нажатие успевало и
+            // начать перенос, и нажать кнопку. Правило FIXES.md (E-08): два действия на одну
+            // кнопку не вешать.
+            bool windowGrabbedNow = windowDrag.GrabbedThisTick;
+
             aimingAtUi = index >= 0;
 
             // ШАРИК — ТОЛЬКО ВНЕ ИНТЕРФЕЙСА (указание владельца 24.10.2026: «шарики только при выходе
@@ -424,7 +431,7 @@ namespace KazistovVvXr
 
             // НАЖИМАЕМ ТОЛЬКО ПО РЕАЛЬНОМУ ПОПАДАНИЮ: «прощённая» иконка нужна для удержания,
             // но нажимать по ней, когда луч уже ушёл, нельзя — это было бы ложное нажатие.
-            if (realHit)
+            if (realHit && !windowGrabbedNow)
             {
                 if (byGaze) HandleGazePress(index);
                 else HandleTriggerPress(index);
