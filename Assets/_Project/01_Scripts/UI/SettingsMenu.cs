@@ -4,6 +4,11 @@ using UnityEngine.SceneManagement; // если понадобится
 using System.IO;              // для File, Path
 using System;                 // для Convert, но не обязательно
 // SettingsMenu.cs
+/// <summary>
+/// УСТАРЕЛО (S44, 30.10.2026). Мёртвый код: ни где не создаётся и не вызывается (проверено S44 30.10.2026). Настройки — KvSettingsView.
+/// Оставлено помеченным, а не удалено: правило проекта — сначала метка с причиной, удаление отдельным решением.
+/// </summary>
+[System.Obsolete("Мёртвый код: ни где не создаётся и не вызывается (проверено S44 30.10.2026). Настройки — KvSettingsView.")]
 public class SettingsMenu : MonoBehaviour
 {
     [SerializeField] private SettingsData settings;

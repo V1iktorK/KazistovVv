@@ -2,6 +2,16 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 
+/// <summary>
+
+/// УСТАРЕЛО (S44, 30.10.2026). Мёртвый код: ни где не создаётся и не вызывается (проверено S44 30.10.2026). Роль исполнения траекторий выполняет MotionExecutor через TrajectoryFlowController.
+
+/// Оставлено помеченным, а не удалено: правило проекта — сначала метка с причиной, удаление отдельным решением.
+
+/// </summary>
+
+[System.Obsolete("Мёртвый код: ни где не создаётся и не вызывается (проверено S44 30.10.2026). Роль исполнения траекторий выполняет MotionExecutor через TrajectoryFlowController.")]
+
 public class TrajectoryPlayer : MonoBehaviour
 {
     public RobotController robot;

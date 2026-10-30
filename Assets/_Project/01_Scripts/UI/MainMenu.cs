@@ -4,6 +4,11 @@ using UnityEngine.SceneManagement;
 /// <summary>
 /// Главное меню: запуск симуляции, настройки и выход.
 /// </summary>
+/// <summary>
+/// УСТАРЕЛО (S44, 30.10.2026). Мёртвый код: ни где не создаётся и не вызывается (проверено S44 30.10.2026). Главное меню — KazistovVvUIManager.
+/// Оставлено помеченным, а не удалено: правило проекта — сначала метка с причиной, удаление отдельным решением.
+/// </summary>
+[System.Obsolete("Мёртвый код: ни где не создаётся и не вызывается (проверено S44 30.10.2026). Главное меню — KazistovVvUIManager.")]
 public class MainMenu : MonoBehaviour
 {
     [SerializeField] private GameObject mainPanel;

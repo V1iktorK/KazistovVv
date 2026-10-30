@@ -1,5 +1,15 @@
 using UnityEngine;
 
+/// <summary>
+
+/// УСТАРЕЛО (S44, 30.10.2026). Мёртвый код: ни где не создаётся и не вызывается (проверено S44 30.10.2026). Размещение делает CenterWindow + KvXrMrRoom.
+
+/// Оставлено помеченным, а не удалено: правило проекта — сначала метка с причиной, удаление отдельным решением.
+
+/// </summary>
+
+[System.Obsolete("Мёртвый код: ни где не создаётся и не вызывается (проверено S44 30.10.2026). Размещение делает CenterWindow + KvXrMrRoom.")]
+
 public class PlacementController : MonoBehaviour
 {
     [Header("References")]

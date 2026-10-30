@@ -3,6 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 
 [System.Serializable]
+/// <summary>
+/// УСТАРЕЛО (S44, 30.10.2026). Мёртвый код: используется только сам собой (TrajectoryPlayer). Запись делает KvRecordingService.
+/// Оставлено помеченным, а не удалено: правило проекта — сначала метка с причиной, удаление отдельным решением.
+/// </summary>
+[System.Obsolete("Мёртвый код: используется только сам собой (TrajectoryPlayer). Запись делает KvRecordingService.")]
 public class TrajectoryPoint
 {
     public float time;
