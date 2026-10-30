@@ -244,7 +244,20 @@ namespace KazistovVvXr
                 if (marker.gameObject.activeSelf != showMarker) marker.gameObject.SetActive(showMarker);
                 if (!showMarker) return;
                 marker.position = end;
-                Camera camera = headCamera != null ? headCamera : Camera.main;
+
+                // КАМЕРА БЕРЁТСЯ ИЗ КЭША, А НЕ ЧЕРЕЗ `Camera.main` КАЖДЫЙ КАДР (исправлено
+                // 30.10.2026, S44).
+                //
+                // ЧТО БЫЛО. `Camera.main` — это НЕ свойство, а ПОИСК по тегу `MainCamera` среди
+                // всех камер сцены. Вызов стоял внутри `Update`, то есть выполнялся на каждом
+                // кадре: в шлеме это 90 раз в секунду. В этом проекте камер несколько (вид сверху,
+                // сбоку, от первого лица), поэтому поиск небесплатен, и его цена попадает прямо в
+                // бюджет кадра.
+                //
+                // ЧТО СТАЛО. Камера ищется один раз, а результат ЗАПОМИНАЕТСЯ в то же поле, что
+                // заполняет `Start`. После первого кадра поиска нет вовсе.
+                if (headCamera == null) headCamera = Camera.main;
+                Camera camera = headCamera;
                 if (camera != null)
                 {
                     Vector3 toEye = camera.transform.position - end;
