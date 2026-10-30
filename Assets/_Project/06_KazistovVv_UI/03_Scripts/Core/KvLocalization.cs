@@ -385,11 +385,33 @@ namespace KazistovVvUI
             if (!NeedsCjk) return BuiltinFont();
             if (cjkFont != null) return cjkFont;
 
+            // 1. ШРИФТ ИЗ ПРОЕКТА — ПЕРВЫМ (добавлено 30.10.2026, S44, закрытие долга 5.27).
+            //
+            // ПОЧЕМУ ИМЕННО ОН ПЕРВЫЙ. Системный шрифт работает на компьютере разработчика и НЕ
+            // работает на устройстве: у PICO и большинства Android-шлемов набор шрифтов другой, и
+            // всё, что ниже, там не найдётся. Оператор видел бы квадраты — и это навсегда, потому
+            // что «система не дала шрифт». Шрифт в проекте едет ВНУТРИ сборки и работает везде.
+            //
+            // ЧЕГО ЗДЕСЬ НЕТ. Самого файла шрифта: это бинарник ~16 МБ, и его добавление — решение
+            // владельца (лицензия + размер репозитория). Пока файла нет, поиск просто не находит
+            // ничего и переходит к системному — то есть поведение НЕ УХУДШИЛОСЬ, а как только файл
+            // положить в `Resources`, оно улучшится без единой правки кода.
+            Font bundled = BundledCjkFont();
+            if (bundled != null)
+            {
+                cjkFont = bundled;
+                cjkFontName = bundled.name + " (из проекта)";
+                if (logFontSelection)
+                    Debug.Log("[KvLoc] шрифт CJK взят из проекта: " + cjkFontName + " (язык " + current + ")");
+                return cjkFont;
+            }
+
             cjkFont = UnityEngine.Font.CreateDynamicFontFromOSFont(CjkFontCandidates, Mathf.Max(12, size));
             if (cjkFont != null)
             {
                 cjkFontName = cjkFont.name;
-                Debug.Log("[KvLoc] шрифт CJK: " + cjkFontName + " (язык " + current + ")");
+                if (logFontSelection)
+                    Debug.Log("[KvLoc] шрифт CJK: " + cjkFontName + " (язык " + current + ")");
                 return cjkFont;
             }
 
@@ -403,7 +425,8 @@ namespace KazistovVvUI
                     if (cjkFont != null)
                     {
                         cjkFontName = n;
-                        Debug.Log("[KvLoc] шрифт CJK подобран из системы: " + n);
+                        if (logFontSelection)
+                            Debug.Log("[KvLoc] шрифт CJK подобран из системы: " + n);
                         return cjkFont;
                     }
                 }
@@ -423,6 +446,60 @@ namespace KazistovVvUI
         }
 
         private static bool cjkFontFallbackReported;
+
+        /// <summary>
+        /// ИМЕНА ШРИФТОВ В ПРОЕКТЕ, КОТОРЫЕ ПОДХОДЯТ ДЛЯ CJK (создано 30.10.2026, S44).
+        ///
+        /// ПОРЯДОК — ПО ПОКРЫТИЮ. Один шрифт на китайский и японский сразу лучше двух: меньше
+        /// размер сборки и одинаковый вид иероглифов. Полное покрытие CJK даёт Noto Sans CJK и
+        /// Source Han Sans; они и первые в списке.
+        ///
+        /// ВАЖНО ПРО ЛИЦЕНЗИЮ (для владельца): Noto и Source Han — SIL Open Font License, их можно
+        /// класть в сборку. Системные шрифты Microsoft (msyh, simsun) — НЕЛЬЗЯ: их лицензия не
+        /// разрешает распространение в составе приложения. Поэтому в списке только свободные.
+        /// </summary>
+        public static readonly string[] BundledCjkFontNames =
+        {
+            "NotoSansCJKsc-Regular", "NotoSansCJKjp-Regular", "NotoSansCJK-Regular",
+            "NotoSansSC-Regular", "NotoSansJP-Regular",
+            "SourceHanSans-Regular", "SourceHanSansSC-Regular",
+            "NotoSansMonoCJKsc-Regular",
+        };
+
+        /// <summary>
+        /// НАЙТИ CJK-ШРИФТ В ПРОЕКТЕ. Ищется в `Resources`, потому что только оттуда Unity
+        /// гарантированно кладёт ресурс в сборку (в отличие от простого файла в `Assets`).
+        ///
+        /// ВОЗВРАЩАЕТ `null`, ЕСЛИ ФАЙЛА НЕТ — и это НОРМАЛЬНО: пока владелец не положил шрифт,
+        /// работает системный поиск. Отсутствие файла не ошибка и не повод шуметь в журнале.
+        ///
+        /// ЧТОБЫ ЗАКРЫТЬ ДОЛГ 5.27: положить свободный шрифт (Noto Sans CJK) в
+        /// `Assets/Resources/KvCjkFont/` — код подхватит его сам, без правок.
+        /// </summary>
+        public static Font BundledCjkFont()
+        {
+            if (bundledCjkChecked) return bundledCjkFont;
+            bundledCjkChecked = true;
+
+            foreach (string resourceName in BundledCjkFontNames)
+            {
+                // Путь ресурса — без расширения и без `Resources/`: `KvCjkFont/<имя>`.
+                Font font = Resources.Load<Font>("KvCjkFont/" + resourceName);
+                if (font == null) continue;
+                bundledCjkFont = font;
+                break;
+            }
+            return bundledCjkFont;
+        }
+
+        private static Font bundledCjkFont;
+        private static bool bundledCjkChecked;
+
+        /// <summary>
+        /// ПЕЧАТАТЬ ЛИ ВЫБОР ШРИФМА В ЖУРНАЛ. По умолчанию ДА, но выключаемо — чтобы в тестах и в
+        /// пакетном прогоне журнал не засорялся одной и той же строкой при каждом вызове.
+        /// </summary>
+        public static bool logFontSelection = true;
 
         /// <summary>
         /// БЫЛ ЛИ ОТКАЗ ОТ CJK-ШРИФТА (для экрана «Состояние» и тестов).
