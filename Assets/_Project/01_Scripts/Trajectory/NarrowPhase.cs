@@ -73,9 +73,34 @@ namespace TrajectoryCore
             return A.Support(dir) - B.Support(-dir);
         }
 
+        /// <summary>
+        /// ПРИМИТИВ БЕЗ ГЕОМЕТРИИ — НЕ ПЕРЕСЕКАЕТ НИЧЕГО (исправлено 30.10.2026, S44).
+        ///
+        /// ЧТО БЫЛО. Оболочка без вершин (`Prim.Hull(new Vector3[0])`, а также `default`,
+        /// который приходит из незаполненного поля) не имеет опорной функции: `Support` возвращает
+        /// `a` = (0,0,0). Разность Минковского вырождается в точку в начале координат, GJK видит
+        /// «начало координат внутри» и отвечает ПЕРЕСЕЧЕНИЕ.
+        ///
+        /// ЧЕМ ЭТО ПЛОХО. Оболочка без вершин — это ошибка ДАННЫХ (не загрузилась модель, пустой
+        /// массив в инспекторе), а не тело. Отвечая «пересекается», код останавливал бы планирование
+        /// с ложным столкновением на каждом шаге — и оператор искал бы причину в роботе.
+        /// Обнаружено тестом `KvNarrowPhaseTests.DegeneratePrimitives_DoNotThrow`.
+        /// </summary>
+        private static bool IsEmpty(in Prim p)
+        {
+            if (p.kind == PrimKind.Hull) return p.hull == null || p.hull.Length == 0;
+            // Сфера и капсула нулевого радиуса — тоже «ничего»: точка в пространстве не образует
+            // объёма, и считать её пересекающейся с миром неверно.
+            if (p.kind == PrimKind.Sphere || p.kind == PrimKind.Capsule) return p.r <= 0f;
+            return false;
+        }
+
         /// <summary>Пересекаются ли тела (GJK).</summary>
         public static bool Intersect(in Prim A, in Prim B)
         {
+            // Пустой примитив не пересекается ни с чем — см. `IsEmpty`.
+            if (IsEmpty(A) || IsEmpty(B)) return false;
+
             var simplex = new System.Collections.Generic.List<Vector3>(4);
             Vector3 dir = A.kind == PrimKind.Box ? -B.a : -A.a;
             if (dir.sqrMagnitude < Eps) dir = Vector3.right;
