@@ -2282,6 +2282,13 @@ public int FanCommandCount {
 /// Во всех остальных случаях панель ставится заново — это и есть «запасное положение у
 /// пояса»: опустил глаза — она там.
 /// </summary>
+        /// <summary>Есть ли в векторе NaN или бесконечность (отсев нечисловых данных, E-21).</summary>
+        private static bool IsNotFinite(Vector3 v)
+        {
+            return float.IsNaN(v.x) || float.IsNaN(v.y) || float.IsNaN(v.z) ||
+                   float.IsInfinity(v.x) || float.IsInfinity(v.y) || float.IsInfinity(v.z);
+        }
+
 private bool ShouldHoldStill()
 {
             if (!placed) return false;
@@ -2298,6 +2305,12 @@ if (Time.unscaledTime < holdUntil) return true;
 Vector3 headPosition;
             Quaternion headRotation;
 if (!KvXrInputSource.TryHeadPose(out headPosition, out headRotation)) return true;
+            // ОТСЕВ НЕЧИСЕЛ (добавлено 30.10.2026, S44 — урок E-21).
+            // Поза головы приходит от рантайма: при потере отслеживания там появляется NaN.
+            // Тогда `toPanel.sqrMagnitude < 0.0001f` даёт false (проверка проходит),
+            // `Vector3.Angle` даёт NaN, и `NaN <= предел` — тоже false: панель решила бы,
+            // что оператор УШЁЛ. При нечисловых данных правильнее считать, что он на месте.
+            if (IsNotFinite(headPosition)) return true;
 Vector3 toPanel = transform.position - headPosition;
 if (toPanel.sqrMagnitude < 0.0001f) return true;
 float angle = Vector3.Angle(headRotation * Vector3.forward, toPanel);

@@ -62,10 +62,26 @@ namespace KazistovVvXr
         /// ОДИН ШАГ. `panel` — панель под лучом (может быть пустой). Возвращает `true`, если перенос
         /// идёт: тогда вызывающий обязан поставить метку и конец луча в <see cref="CurrentPoint"/>.
         /// </summary>
+        /// <summary>Есть ли в векторе NaN или бесконечность (отсев нечисловых данных, урок E-21).</summary>
+        private static bool IsFinite(Vector3 v)
+        {
+            return !float.IsNaN(v.x) && !float.IsNaN(v.y) && !float.IsNaN(v.z) &&
+                   !float.IsInfinity(v.x) && !float.IsInfinity(v.y) && !float.IsInfinity(v.z);
+        }
         public bool Tick(KvXrGroupPanel panel, Vector3 origin, Vector3 direction,
                          bool gripHeld, bool triggerHeld)
         {
             grabbedThisTick = false;
+
+            // ОТСЕВ НЕЧИСЕЛ (добавлено 30.10.2026, S44 — урок E-21).
+            //
+            // `origin` и `direction` приходят ОТ РУКИ ОПЕРАТОРА, то есть из внешнего рантайма.
+            // При потере отслеживания там появляется NaN, и дальше проверка
+            // `direction.sqrMagnitude < 0.0001f` для NaN даёт `false` — направление проходит как
+            // нормальное. Дальше `direction.normalized` даёт NaN, `holdPoint` и `grabOffset`
+            // становятся NaN, и ОКНО УЕЗЖАЕТ В БЕСКОНЕЧНОСТЬ: оператор видит, как панель исчезает,
+            // и вернуть её можно только перезапуском.
+            if (!IsFinite(origin) || !IsFinite(direction)) return false;
 
             if (Window == null)
             {

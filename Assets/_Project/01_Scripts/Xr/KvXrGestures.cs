@@ -286,7 +286,13 @@ namespace KazistovVvXr
         /// </summary>
         public static bool IsPalmUpPosture(KvHandFrame frame)
         {
+            // ОТСЕВ НЕЧИСЕЛ (добавлено 30.10.2026, S44 — урок E-21). Точки кисти приходят от
+            // рантайма руки; при потере отслеживания там появляется NaN. Тогда
+            // `direction.sqrMagnitude < 1e-6f` даёт `false` (проверка проходит),
+            // `direction.normalized` даёт NaN, и `NaN >= PalmUpMinVertical` — тоже `false`.
+            // То есть жест «раскрытая ладонь» МОЛЧА не срабатывал бы, и оператор не понял бы почему.
             Vector3 direction = frame.indexTip - frame.wrist;
+            if (IsNotFinite(direction)) return false;
             if (direction.sqrMagnitude < 1e-6f) return false;
             return direction.normalized.y >= PalmUpMinVertical;
         }
