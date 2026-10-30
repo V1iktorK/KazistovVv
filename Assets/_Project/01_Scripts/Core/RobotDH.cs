@@ -75,11 +75,30 @@ namespace KazistovVvKinematics
         /// <param name="target">Целевая мировая точка.</param>
         /// <param name="iterations">Число итераций.</param>
         /// <param name="tolerance">Допуск, м.</param>
+        /// <summary>Есть ли в векторе NaN или бесконечность (отсев нечисловых данных, урок E-21).</summary>
+        private static bool IsNotFinite(Vector3 v)
+        {
+            return float.IsNaN(v.x) || float.IsNaN(v.y) || float.IsNaN(v.z) ||
+                   float.IsInfinity(v.x) || float.IsInfinity(v.y) || float.IsInfinity(v.z);
+        }
         public static bool SolveCCD(Transform[] joints, Vector3[] axes,
             Transform endEffector, Vector3 target,
             int iterations = 24, float tolerance = 0.01f)
         {
             if (joints == null || joints.Length == 0 || endEffector == null) return false;
+
+            // ОТСЕВ НЕЧИСЕЛ (добавлено 30.10.2026, S44 — урок E-21).
+            //
+            // ЧЕМ ЭТО ОПАСНО ЗДЕСЬ. Условие выхода `(pos - target).magnitude <= tolerance` для NaN
+            // даёт `false` — то есть НИКОГДА не выполняется. Решатель отрабатывает все 24 итерации
+            // вхолостую, поворачивая суставы по мусорным углам, и возвращает `false` «не сошлось».
+            //
+            // ПОЧЕМУ ЭТО ХУЖЕ ПРОСТО ОТКАЗА: за время этих итераций суставы УЖЕ ПОВЁРНУТЫ по
+            // нечисловым осям. Робот окажется в позе, которой никто не просил, а сообщение скажет
+            // лишь «решатель не сошёлся» — и искать причину будут в планировщике.
+            //
+            // Теперь при нечисловой цели решатель выходит СРАЗУ, не трогая суставы.
+            if (IsNotFinite(target)) return false;
 
             for (int it = 0; it < iterations; it++)
             {
