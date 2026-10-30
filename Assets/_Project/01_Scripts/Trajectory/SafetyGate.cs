@@ -172,7 +172,18 @@ namespace TrajectoryCore
             return true;
         }
 
-        /// <summary>Проверка на шаге исполнения: не вышли ли за пределы/не застряли ли.</summary>
+        /// <summary>
+        /// ПРОВЕРКА НА ШАГЕ ИСПОЛНЕНИЯ: не вышли ли за пределы и не застряли ли.
+        ///
+        /// ЧТО ИСПРАВЛЕНО 30.10.2026 (S44):
+        ///  1) `validator.WithinLimits(q)` падал `NullReferenceException` без валидатора — уже
+        ///     ПОСЛЕ проверки живости данных, то есть терял собранные улики и оставлял ложную
+        ///     причину от предыдущего вызова;
+        ///  2) ЗАСТРЕВАНИЕ НЕ ЛОВИЛОСЬ: условие `playheadTime <= last - 1e-6` срабатывало только
+        ///     на движение НАЗАД. Если время просто СТОЯЛО НА МЕСТЕ (застрявший плеер — ровно то,
+        ///     от чего этот предохранитель и нужен), проверка молчала, и робот «висел» без причины
+        ///     в журнале.
+        /// </summary>
         public bool ApproveStep(double[] q, float clearance, double playheadTime, PoseValidator validator,
             out SafetyReason reason)
         {
@@ -180,11 +191,21 @@ namespace TrajectoryCore
             if (!Enabled) return true;
 
             if (!WatchdogAlive()) { reason = SafetyReason.Watchdog; LastReason = reason; return false; }
-            if (playheadTime <= lastPlayheadTime - 1e-6 && lastPlayheadTime > 0)
+
+            // ВРЕМЯ ДОЛЖНО ИДТИ ВПЕРЁД. Не «не назад», а именно вперёд: стоящее время — такое же
+            // застревание, как и обратное, и для оператора это одно и то же («робот встал»).
+            const double epsilon = 1e-6;
+            if (lastPlayheadTime > 0 && playheadTime <= lastPlayheadTime + epsilon)
             {
                 reason = SafetyReason.Watchdog; LastReason = reason; return false;
             }
-            if (!validator.WithinLimits(q)) { reason = SafetyReason.JointLimit; LastReason = reason; return false; }
+
+            // ЛИМИТЫ — ТОЛЬКО ПРИ НАЛИЧИИ ВАЛИДАТОРА (пределы живут в нём, выдумывать их нельзя).
+            if (validator != null && !validator.WithinLimits(q))
+            {
+                reason = SafetyReason.JointLimit; LastReason = reason; return false;
+            }
+
             if (clearance < minClearance * 0.5f) { reason = SafetyReason.Clearance; LastReason = reason; return false; }
 
             lastPlayheadTime = playheadTime;
