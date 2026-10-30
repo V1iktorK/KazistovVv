@@ -73,6 +73,21 @@ namespace TrajectoryCore
             return A.Support(dir) - B.Support(-dir);
         }
 
+        /// <summary>Есть ли в векторе NaN или бесконечность (отсев нечисловых данных, урок E-21).</summary>
+        private static bool IsFinite(Vector3 v)
+        {
+            return !float.IsNaN(v.x) && !float.IsNaN(v.y) && !float.IsNaN(v.z) &&
+                   !float.IsInfinity(v.x) && !float.IsInfinity(v.y) && !float.IsInfinity(v.z);
+        }
+
+        /// <summary>Все вершины оболочки конечны (оболочка без вершин проверяется отдельно).</summary>
+        private static bool IsFinite(Vector3[] hull)
+        {
+            if (hull == null) return true;              // отсутствие оболочки ловит `IsEmpty`
+            for (int i = 0; i < hull.Length; i++)
+                if (!IsFinite(hull[i])) return false;
+            return true;
+        }
         /// <summary>
         /// ПРИМИТИВ БЕЗ ГЕОМЕТРИИ — НЕ ПЕРЕСЕКАЕТ НИЧЕГО (исправлено 30.10.2026, S44).
         ///
@@ -100,6 +115,30 @@ namespace TrajectoryCore
         {
             // Пустой примитив не пересекается ни с чем — см. `IsEmpty`.
             if (IsEmpty(A) || IsEmpty(B)) return false;
+
+            // ОТСЕВ НЕЧИСЕЛ (добавлено 30.10.2026, S44 — урок E-21).
+            //
+            // ЧЕМ ЭТО ОПАСНО ЗДЕСЬ. `Support` вызывает `dir.normalized`: для направления с NaN
+            // результат тоже NaN, и дальше ВСЕ сравнения в GJK дают `false`:
+            //   • `dir.sqrMagnitude < Eps` — не срабатывает (NaN не меньше);
+            //   • `Vector3.Dot(p, dir) < 0f` — не срабатывает, то есть «разделяющая ось найдена»
+            //     НЕ ОБНАРУЖИВАЕТСЯ;
+            //   • цикл доходит до `return true` — «считаем контактом (консервативно)».
+            //
+            // Итог: тела, которые нигде не соприкасаются, объявляются столкнувшимися, и
+            // планировщик отказывает с ложным препятствием. Оператор ищет причину в роботе.
+            //
+            // ПОЧЕМУ НЕ «ПУСТИТЬ КАК ЕСТЬ»: если геометрия содержит NaN, достоверного ответа нет
+            // вообще. Возврат «пересекаются» — это ЛОЖНОЕ препятствие; возврат «не пересекаются» —
+            // пропуск настоящего. Выбираем отказ от контакта, потому что ложное препятствие
+            // останавливает работу на ровном месте, а исходная причина (NaN в данных) всё равно
+            // требует вмешательства.
+            if (!IsFinite(A.a) || !IsFinite(B.a)) return false;
+            if (A.kind == PrimKind.Capsule && (!IsFinite(A.b) || !IsFinite(B.b))) return false;
+            if (A.kind == PrimKind.Box && (!IsFinite(A.half) || !IsFinite(B.half))) return false;
+            if (A.kind == PrimKind.Hull && (!IsFinite(A.hull) || !IsFinite(B.hull))) return false;
+            if (float.IsNaN(A.r) || float.IsNaN(B.r) || float.IsInfinity(A.r) || float.IsInfinity(B.r))
+                return false;
 
             var simplex = new System.Collections.Generic.List<Vector3>(4);
             Vector3 dir = A.kind == PrimKind.Box ? -B.a : -A.a;
