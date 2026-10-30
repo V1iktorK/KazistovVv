@@ -64,7 +64,24 @@ namespace KazistovVvTests
             int update = text.IndexOf("void Update()", System.StringComparison.Ordinal);
             Assert.Greater(update, 0, "в KvXrHands нет метода Update");
 
-            string body = text.Substring(update, System.Math.Min(2500, text.Length - update));
+            // ГРАНИЦЫ МЕТОДА ПО ГЛУБИНЕ СКОБОК, А НЕ ПО ЧИСЛУ СИМВОЛОВ.
+            //
+            // ЧЕСТНО О ПЕРВОЙ ПОПЫТКЕ (30.10.2026). Сначала брались «первые 2500 символов после
+            // начала Update» — и тест объявил, что передач кистей НЕТ, хотя они там есть: вызовы
+            // уехали ниже из-за добавленного блока сброса отметок. Окно в символах — ненадёжный
+            // способ; правильный — считать скобки (за ночь это правило пригодилось шесть раз).
+            int open = text.IndexOf('{', update);
+            Assert.Greater(open, 0, "не найдено тело Update");
+
+            int depth = 1;
+            int at = open + 1;
+            while (at < text.Length && depth > 0)
+            {
+                if (text[at] == '{') depth++;
+                else if (text[at] == '}') depth--;
+                at++;
+            }
+            string body = text.Substring(update, at - update);
 
             int calls = Regex.Matches(body, @"FeedGestures\s*\(").Count;
             Assert.GreaterOrEqual(calls, 2,
