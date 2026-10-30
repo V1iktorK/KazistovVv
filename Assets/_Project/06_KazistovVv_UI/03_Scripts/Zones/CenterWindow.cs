@@ -175,13 +175,54 @@ namespace KazistovVvUI
             euler.y = RobotYaw;
             preview.transform.eulerAngles = euler;
 
-            if (previewRenderer != null)
+            // ПОДСВЕТКА ДОПУСТИМОСТИ (закрыто 30.10.2026, аудит S43).
+            //
+            // ПОЧЕМУ ОТДЕЛЬНЫЙ МЕТОД. Раньше покраска жила прямо здесь и молча пропускалась, если
+            // `previewRenderer` пуст: пустой префаб, модель без мешей, выключенные визуалы. Тогда
+            // призрак ставился без цвета, и оператор не понимал, можно ли ставить робота в это
+            // место. Теперь число покрашенных рендереров видно, а при нуле пишется причина.
+            int painted = PaintPreview(previewRenderers, valid);
+            if (painted == 0 && Time.frameCount % 120 == 0)
             {
-                Color c = valid
-                    ? new Color(0.3f, 1f, 0.4f, 0.45f)
-                    : new Color(1f, 0.3f, 0.3f, 0.45f);
-                previewRenderer.material.color = c;
+                Debug.LogWarning("[CenterWindow] превью не подсвечено: рендереров для покраски нет");
             }
+        }
+
+        /// <summary>
+        /// ВСЕ РЕНДЕРЕРЫ ПРЕВЬЮ (30.10.2026). У модели робота их много, у стола — один. Пустой
+        /// массив — законное состояние (пустой префаб), и обрабатывается без исключения.
+        /// </summary>
+        private Renderer[] previewRenderers = new Renderer[0];
+
+        /// <summary>
+        /// ПОКРАСИТЬ ПРЕВЬЮ В ЦВЕТ ДОПУСТИМОСТИ. Вынесено статическим методом — чтобы поведение
+        /// проверялось тестом без сцены и без GameObject. Возвращает число покрашенных рендереров
+        /// (0 — красить нечего, и это не ошибка вызывающего).
+        ///
+        /// ЦВЕТА — КОНТРАКТ: зелёный «можно», красный «нельзя». Их читает и тест, и глаз оператора.
+        /// </summary>
+        public static Color PreviewColor(bool valid)
+        {
+            return valid ? new Color(0.3f, 1f, 0.4f, 0.45f) : new Color(1f, 0.3f, 0.3f, 0.45f);
+        }
+
+        /// <summary>Покрасить все рендереры; null-ы в массиве пропускаются.</summary>
+        public static int PaintPreview(Renderer[] renderers, bool valid)
+        {
+            if (renderers == null) return 0;
+            Color c = PreviewColor(valid);
+            int painted = 0;
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer r = renderers[i];
+                if (r == null) continue;
+                Material m = r.material;          // экземпляр: оригинал модели не портится
+                if (m == null) continue;
+                if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
+                m.color = c;
+                painted++;
+            }
+            return painted;
         }
 
         private void CreatePreview(SpawnKind kind)
@@ -247,18 +288,21 @@ namespace KazistovVvUI
                             c.a));
                     }
                 }
-                previewRenderer = preview.GetComponentInChildren<Renderer>();
             }
             else
             {
-                foreach (Renderer r in preview.GetComponentsInChildren<Renderer>())
+                foreach (Renderer r in preview.GetComponentsInChildren<Renderer>(true))
                 {
                     Material previewMaterial = KazistovVvFeatures.KvRenderPipelineShaders.CreateLine(
                         "Материал_превью", Color.white);
                     if (previewMaterial != null) r.material = previewMaterial;
                 }
-                previewRenderer = preview.GetComponentInChildren<Renderer>();
             }
+
+            // ВСЕ рендереры собираются ОДИН раз, после того как превью собрано (30.10.2026):
+            // у фантома робота их десятки, и красить только первый — значит показывать
+            // наполовину зелёный призрак.
+            CollectPreviewRenderers();
         }
 
         public void DestroyPreview()
@@ -266,6 +310,34 @@ namespace KazistovVvUI
             if (preview != null) Destroy(preview);
             preview = null;
             previewRenderer = null;
+            previewRenderers = new Renderer[0];
+        }
+
+        /// <summary>
+        /// СОБРАТЬ РЕНДЕРЕРЫ ПРЕВЬЮ (30.10.2026). Вызывается один раз после сборки призрака.
+        ///
+        /// ПОЧЕМУ ОТДЕЛЬНЫЙ МЕТОД. `GetComponentInChildren<Renderer>()` возвращает ПЕРВЫЙ рендерер
+        /// или null. Для покраски «можно ставить / нельзя ставить» нужны все: у модели робота их
+        /// десятки, и первый попавшийся красил бы только одну часть призрака.
+        /// `GetComponentsInChildren(..., includeInactive: true)` — намеренно: часть узлов модели
+        /// бывает выключена, но видимые рендереры остаются.
+        /// </summary>
+        private void CollectPreviewRenderers()
+        {
+            if (preview == null)
+            {
+                previewRenderers = new Renderer[0];
+                return;
+            }
+            previewRenderers = preview.GetComponentsInChildren<Renderer>(true);
+            if (previewRenderers == null) previewRenderers = new Renderer[0];
+            previewRenderer = previewRenderers.Length > 0 ? previewRenderers[0] : null;
+
+            if (previewRenderer == null)
+            {
+                Debug.LogWarning("[CenterWindow] в превью «" + preview.name +
+                                 "» нет ни одного рендерера — подсветка допустимости ставить не покажется");
+            }
         }
 
         /// <summary>

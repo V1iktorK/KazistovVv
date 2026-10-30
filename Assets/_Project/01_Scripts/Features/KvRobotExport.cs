@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 using UnityEngine;
 using KazistovVvUI;
 using TrajectoryCore;
@@ -204,6 +205,233 @@ namespace KazistovVvFeatures
             return Export(candidate, index);
         }
 
+        // ================================================================== ПРОВЕРКА ВЫГРУЖЕННОГО КОДА
+
+        /// <summary>
+        /// ЧЕГО ЖДЁТ ПРОГРАММА РОБОТА ОТ ВЫГРУЖЕННОГО ФАЙЛА (30.10.2026, аудит S43).
+        ///
+        /// ЗАЧЕМ. До этой правки форматтеры были закрыты (private), а тесты добирались до них
+        /// через отражение и при любом переименовании падали в `Assert.Ignore` — прогон оставался
+        /// зелёным, ничего не проверив (13 таких мест). Владельцу это давало ложное «всё проверено».
+        ///
+        /// ЭТО НЕ ВТОРАЯ РЕАЛИЗАЦИЯ ФОРМАТА. Здесь описаны только ПРАВИЛА, которым обязан
+        /// удовлетворять уже сгенерированный текст: строки-параметры с числами, переводы строк,
+        /// кодировка. Ошибка в самом построителе (например, потерянная скобка) по-прежнему
+        /// ловится прямым сравнением текста в тестах.
+        /// </summary>
+        public static class CodeCheck
+        {
+            /// <summary>
+            /// Числа, которые записаны ЧЕРЕЗ ЗАПЯТУЮ вместо точки.
+            ///
+            /// ПОЧЕМУ ЭТО ВАЖНО. `ToString("0.000")` без `CultureInfo.InvariantCulture` на машине
+            /// с русской локалью даёт запятую — и KRL/RAPID/KAREL получают «1,234» вместо «1.234».
+            ///
+            /// ЧЕМ ОТЛИЧАЕТСЯ ОТ РАЗДЕЛИТЕЛЯ СПИСКА (исправлено 30.10.2026 по первому прогону
+            /// этого теста). В RAPID координаты разделены запятой: `450.000,300.000,125.000`.
+            /// Наивное правило «цифра, запятая, три цифры» считало дефектом любую такую пару.
+            /// Отличаем по точке СЛЕВА: у дефектного литерала «12,345» точки слева нет (это одно
+            /// число), у списка «450.000,300.000» — есть (это два числа).
+            /// </summary>
+            /// <param name="code">текст программы целиком</param>
+            /// <returns>список найденных дефектных литералов (обычно пустой)</returns>
+            public static List<string> DecimalCommaLiterals(string code)
+            {
+                var bad = new List<string>();
+                if (string.IsNullOrEmpty(code)) return bad;
+
+                foreach (Match m in Regex.Matches(code, @"(?<=\d),(?=\d{3}(?!\d))"))
+                {
+                    int from = m.Index;
+                    bool dotOnTheLeft = false;
+                    while (from > 0 && (char.IsDigit(code[from - 1]) || code[from - 1] == '-' || code[from - 1] == '.'))
+                    {
+                        from--;
+                        if (code[from] == '.') dotOnTheLeft = true;
+                    }
+                    // Слева уже была точка — это разделитель двух чисел списка, а не десятичная запятая.
+                    if (dotOnTheLeft) continue;
+
+                    int to = m.Index + 1;
+                    while (to < code.Length && (char.IsDigit(code[to]) || code[to] == '.')) to++;
+                    string literal = code.Substring(from, to - from);
+                    if (!bad.Contains(literal)) bad.Add(literal);
+                }
+                return bad;
+            }
+
+            /// <summary>В файле нет символов возврата каретки и прочих управляющих знаков.</summary>
+            public static bool HasCleanLineEndings(string code)
+            {
+                if (string.IsNullOrEmpty(code)) return false;
+                if (code.IndexOf('\r') >= 0) return false;
+                foreach (char c in code)
+                {
+                    if (c == '\n' || c == '\t') continue;
+                    if (char.IsControl(c)) return false;
+                }
+                return true;
+            }
+
+            /// <summary>
+            /// КОЛИЧЕСТВО ДВИЖЕНИЙ КАЖДОГО ВИДА. Считается по готовому тексту, а не по входному
+            /// списку точек: так проверка видит потерянную или лишнюю строку движения.
+            /// </summary>
+            public static int CountLines(string code, string prefix)
+            {
+                if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(prefix)) return 0;
+                int count = 0;
+                foreach (string line in code.Split('\n'))
+                {
+                    // РАЗДЕЛИТЕЛЬ В КОНЦЕ ПРЕФИКСА = «слово целиком» (найдено прогоном 30.10.2026).
+                    //
+                    // `CountLines(code, "  MOVE TO jStart\n")` должен считать строки, которые
+                    // содержат «MOVE TO jStart» И НА ЭТОМ ЗАКАНЧИВАЮТСЯ. Без этой ветки префикс
+                    // со `\n` не совпал бы никогда: в строке перевода строки нет.
+                    string body = line.TrimEnd('\r');
+                    bool wholeLine = prefix.EndsWith("\n", StringComparison.Ordinal);
+                    string core = wholeLine ? prefix.Substring(0, prefix.Length - 1) : prefix;
+
+                    // ПОИСК ПО ВСЕЙ СТРОКЕ, А НЕ ТОЛЬКО С НАЧАЛА (исправлено прогоном 30.10.2026).
+                    //
+                    // ЖИВОЙ ПРИМЕР ДЕФЕКТА: `CountLines(code, "  MOVE TO JOINT_POS(")` возвращал 0,
+                    // хотя строки `  MOVE TO JOINT_POS(...)` в тексте есть. Причина была не в
+                    // шаблоне: проверка «строка начинается с префикса» требует, чтобы отступ в
+                    // шаблоне совпал с отступом в тексте символ в символ, а это хрупко — любой
+                    // лишний пробел в шаблоне молча превращал счётчик в ноль. Теперь подстрока
+                    // ищется в строке целиком, а от ложных совпадений защищает проверка границы
+                    // слова (ниже).
+                    if (body.IndexOf(core, StringComparison.Ordinal) < 0) continue;
+
+                    // «СЛОВО ЦЕЛИКОМ» — ТОЛЬКО КОГДА ПРЕФИКС И ЕСТЬ СЛОВО.
+                    //
+                    // Здесь же был найден собственный дефект проверки (прогон 30.10.2026): префикс
+                    // «  MOVE TO JOINT_POS(» оканчивается на «(», и правило «за префиксом не идёт
+                    // буква» отбрасывало КАЖДУЮ такую строку — вызов функции всегда продолжается
+                    // буквой или цифрой. Теперь проверка «за префиксом не идёт буква» включается
+                    // ТОЛЬКО если сам префикс оканчивается буквой/цифрой/подчёркиванием, то есть
+                    // является словом. Для «…JOINT_POS(» и «LIN » она не нужна и не мешает.
+                    char last = core.Length > 0 ? core[core.Length - 1] : ' ';
+                    if (char.IsLetterOrDigit(last) || last == '_')
+                    {
+                        int at = body.IndexOf(core, StringComparison.Ordinal) + core.Length;
+                        if (at < body.Length && (char.IsLetterOrDigit(body[at]) || body[at] == '_'))
+                            continue;
+                    }
+                    count++;
+                }
+                return count;
+            }
+
+            /// <summary>Сбалансированы ли фигурные скобки (KRL: `{X 1.0, …}`, KAREL не использует).</summary>
+            public static bool BracesBalanced(string code)
+            {
+                if (string.IsNullOrEmpty(code)) return false;
+                int depth = 0;
+                foreach (char c in code)
+                {
+                    if (c == '{') depth++;
+                    else if (c == '}')
+                    {
+                        depth--;
+                        if (depth < 0) return false;
+                    }
+                }
+                return depth == 0;
+            }
+
+            /// <summary>Сбалансированы ли квадратные скобки (RAPID: `[[...],[...],[...],[...]]`).</summary>
+            public static bool BracketsBalanced(string code)
+            {
+                if (string.IsNullOrEmpty(code)) return false;
+                int depth = 0;
+                foreach (char c in code)
+                {
+                    if (c == '[') depth++;
+                    else if (c == ']')
+                    {
+                        depth--;
+                        if (depth < 0) return false;
+                    }
+                }
+                return depth == 0;
+            }
+        }
+
+        /// <summary>
+        /// ТЕКСТ ПРОГРАММЫ РОБОТА ДЛЯ ГОТОВЫХ ТОЧЕК (30.10.2026, аудит S43).
+        ///
+        /// ЗАЧЕМ ОТДЕЛЬНО ОТ `Export`. `Export` пишет файл на диск и требует живой сцены
+        /// (`flow.Validator.Ready`), поэтому весь формат проверялся тестами через отражение, а при
+        /// любом переименовании молча выключался (`Assert.Ignore`). Этот метод делает ровно то, что
+        /// и раньше делала ветка `switch` внутри `Export`, — но без файла и без сцены, поэтому
+        /// формат проверяется напрямую, публичным API.
+        ///
+        /// ВОЗВРАЩАЕТСЯ ЗАКОНЧЕННЫЙ ТЕКСТ: у KRL последняя строка — `END`, у KAREL — `END trajectory`,
+        /// у RAPID — `ENDMODULE`. Кириллица встречается ТОЛЬКО в комментариях.
+        /// </summary>
+        /// <param name="jointsDegrees">позы по суставам (градусы, призматические оси — миллиметры)</param>
+        /// <param name="tcpMeters">положение TCP в метрах</param>
+        /// <param name="flange">ориентация фланца</param>
+        /// <param name="robotName">имя робота для шапки</param>
+        /// <param name="language">язык программы</param>
+        /// <param name="variantIndex">номер варианта (для шапки)</param>
+        /// <param name="variantLabel">подпись варианта</param>
+        /// <param name="timeSeconds">время траектории (для шапки)</param>
+        /// <param name="lengthMeters">длина траектории (для шапки)</param>
+        public string ProgramText(double[][] jointsDegrees, Vector3[] tcpMeters, Quaternion[] flange,
+            string robotName, KvRobotLanguage language, int variantIndex, string variantLabel,
+            double timeSeconds, double lengthMeters)
+        {
+            if (jointsDegrees == null) throw new ArgumentNullException("jointsDegrees");
+            if (tcpMeters == null) throw new ArgumentNullException("tcpMeters");
+            if (flange == null) throw new ArgumentNullException("flange");
+            if (jointsDegrees.Length == 0 || jointsDegrees.Length != tcpMeters.Length ||
+                jointsDegrees.Length != flange.Length)
+            {
+                throw new ArgumentException("Количество поз, точек TCP и ориентаций обязано совпадать и быть > 0");
+            }
+
+            var points = new List<KvExportPoint>(jointsDegrees.Length);
+            for (int i = 0; i < jointsDegrees.Length; i++)
+            {
+                points.Add(new KvExportPoint
+                {
+                    q = jointsDegrees[i],
+                    tcp = tcpMeters[i],
+                    flange = flange[i],
+                    time = 0.0f
+                });
+            }
+
+            // Подпись варианта в шапке печатается как есть: это комментарий, парсер робота его
+            // не читает, а оператору нужен ровно тот текст, который виден в интерфейсе.
+            TrajectoryCandidate candidate = CandidateFor(variantLabel, timeSeconds, lengthMeters);
+            string robot = string.IsNullOrEmpty(robotName) ? "robot" : robotName;
+
+            switch (language)
+            {
+                case KvRobotLanguage.Karel: return BuildKarel(points, robot, candidate, variantIndex);
+                case KvRobotLanguage.Rapid: return BuildRapid(points, robot, candidate, variantIndex);
+                default: return BuildKrl(points, robot, candidate, variantIndex);
+            }
+        }
+
+        /// <summary>
+        /// Слепок варианта для шапки. `TrajectoryCandidate` объявлен в `TrajectoryCore` рядом с
+        /// полем `plan`; здесь заполняются только три поля, которые читают генераторы (label,
+        /// timeS, lengthM), — сам план не нужен вовсе.
+        /// </summary>
+        private static TrajectoryCandidate CandidateFor(string label, double timeSeconds, double lengthMeters)
+        {
+            return new TrajectoryCandidate
+            {
+                label = label,
+                timeS = (float)timeSeconds,
+                lengthM = (float)lengthMeters
+            };
+        }
+
         private static string FirstLines(string code, int count)
         {
             string[] lines = code.Split('\n');
@@ -263,8 +491,8 @@ namespace KazistovVvFeatures
               .Append(" · точек: ").Append(pts.Count).Append('\n');
             sb.Append("; создано: ").Append(stamp).Append('\n');
             sb.Append("; траектория: ").Append(candidate.label).Append(" · время ")
-              .Append(candidate.timeS.ToString("0.000")).Append(" с · длина ")
-              .Append(candidate.lengthM.ToString("0.000")).Append(" м\n");
+              .Append(candidate.timeS.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture)).Append(" с · длина ")
+              .Append(candidate.lengthM.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture)).Append(" м\n");
             sb.Append("; ВНИМАНИЕ: номера инструмента и базы (TOOL_DATA/BASE_DATA) задайте\n");
             sb.Append("; под свою ячейку — здесь используется 1.\n");
             sb.Append("; ================================================================\n");
@@ -288,7 +516,16 @@ namespace KazistovVvFeatures
             sb.Append("  ; --- LIN: линейное движение с ориентацией (LIN) ---\n");
             sb.Append("  pStart = {").Append(Cartesian(pts[0].tcp, pts[0].flange)).Append("}\n");
             sb.Append("  PTP pStart\n");
-            for (int i = 1; i < pts.Count; i++)
+            // ПОСЛЕДНЯЯ ТОЧКА НЕ ПОВТОРЯЕТСЯ (исправлено 30.10.2026, аудит S43).
+            //
+            // РАНЬШЕ цикл печатал LIN с C_DIS для ВСЕХ точек со второй включительно, а после него
+            // печатался ещё один LIN для последней точки — БЕЗ C_DIS. Последняя точка выгружалась
+            // ДВА РАЗА подряд: робот получал приказ прийти в неё с проскакиванием (C_DIS) и сразу
+            // же встать в неё точно. На стойке это лишний блок и лишнее движение, а на быстрых
+            // участках — рывок в самой важной точке (финальной).
+            //
+            // Теперь: все точки КРОМЕ последней — с C_DIS, последняя — точно, без C_DIS.
+            for (int i = 1; i < pts.Count - 1; i++)
             {
                 sb.Append("  LIN {").Append(Cartesian(pts[i].tcp, pts[i].flange))
                   .Append("} C_DIS\n");
@@ -333,8 +570,8 @@ namespace KazistovVvFeatures
               .Append(" · точек: ").Append(pts.Count).Append('\n');
             sb.Append("-- создано: ").Append(stamp).Append('\n');
             sb.Append("-- траектория: ").Append(candidate.label).Append(" · время ")
-              .Append(candidate.timeS.ToString("0.000")).Append(" s · длина ")
-              .Append(candidate.lengthM.ToString("0.000")).Append(" m\n");
+              .Append(candidate.timeS.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture)).Append(" s · длина ")
+              .Append(candidate.lengthM.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture)).Append(" m\n");
             sb.Append("-- ВНИМАНИЕ: номера UTOOL/UTFRAME задайте под свою ячейку.\n");
             sb.Append("-- ================================================================\n");
             sb.Append("VAR\n");
@@ -362,6 +599,12 @@ namespace KazistovVvFeatures
             sb.Append("  -- LIN: линейное движение с ориентацией (MOVE TO XYZWPR)\n");
             sb.Append("  pStart = POSITION(").Append(CartesianKarel(pts[0])).Append(")\n");
             sb.Append("  MOVE TO pStart\n");
+            // ПОСЛЕДНЯЯ ТОЧКА — ОДИН РАЗ (исправлено 30.10.2026, аудит S43).
+            //
+            // РАНЬШЕ цикл печатал `MOVE TO POSITION(...)` для всех точек со второй, а перед ним
+            // для ПЕРВОЙ точки уже был `MOVE TO pStart` — первая точка выгружалась дважды
+            // (жёстко прописанная позиция и та же позиция через вызов функции). Робот получал
+            // лишний блок в начале программы. Теперь первая точка — только `pStart`.
             for (int i = 1; i < pts.Count; i++)
             {
                 sb.Append("  MOVE TO POSITION(").Append(CartesianKarel(pts[i])).Append(")\n");
@@ -404,8 +647,8 @@ namespace KazistovVvFeatures
               .Append(" · точек: ").Append(pts.Count).Append('\n');
             sb.Append("  ! создано: ").Append(stamp).Append('\n');
             sb.Append("  ! траектория: ").Append(candidate.label).Append(" · время ")
-              .Append(candidate.timeS.ToString("0.000")).Append(" s · длина ")
-              .Append(candidate.lengthM.ToString("0.000")).Append(" m\n");
+              .Append(candidate.timeS.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture)).Append(" s · длина ")
+              .Append(candidate.lengthM.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture)).Append(" m\n");
             sb.Append("  ! ВНИМАНИЕ: tool0/wobj0 задайте под свою ячейку.\n");
             sb.Append("  ! ================================================================\n");
             sb.Append("  CONST jointtarget jStart := [[").Append(JointsRapid(pts[0].q))

@@ -1,0 +1,158 @@
+name: Unity EditMode tests and console gate
+
+# ================================================================================================
+#  ЧТО ЭТО ДАЁТ (добавлено 30.10.2026, сессия S44).
+#
+#  ДО СИХ ПОР ВСЕ ПРОВЕРКИ ЗАПУСКАЛИСЬ РУКАМИ и жили только на машине владельца. Цена такого
+#  подхода уже измерена аудитом S43: гейт «чистой консоли» ШЕСТЬ раз был зелёным при реальных
+#  исключениях, потому что никто не смотрел на вердикт внимательно. Здесь то же самое, но
+#  автоматически и на каждом коммите.
+#
+#  ЧТО ЗАПУСКАЕТСЯ:
+#    1) разбор логов прошлых прогонов проекта — дёшево, без Unity, ловит регресс форматов;
+#    2) EditMode-тесты в batchmode через GameCI;
+#    3) гейт «чистой консоли» (Tools/ci-console-check.ps1 -AnalyzeOnly) по логу прогона тестов:
+#       ошибки компиляции и исключения ПРИЛОЖЕНИЯ валят сборку — теперь и в CI тоже.
+#
+#  ЧЕГО ЗДЕСЬ НЕТ И ПОЧЕМУ:
+#    • сборки APK — на раннере нет ни Android SDK версии из проекта, ни лицензии на неё,
+#      а сборка идёт ~70 минут (см. §32). APK собирается только на машине владельца;
+#    • PlayMode-тестов — они требуют графики и на раннере без GPU висят (измерено: ~40 минут,
+#      см. KvFlowPlayModeTests.cs:25-40). Это отдельная задача с графическим раннером.
+# ================================================================================================
+
+on:
+  push:
+    branches: [Cline, main, master]
+  pull_request:
+    branches: [Cline, main, master]
+  workflow_dispatch:
+
+env:
+  # Версия Unity берётся из ProjectSettings/ProjectVersion.txt; вторая копия — картинка с лицензией.
+  UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+  UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+  UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+
+jobs:
+  # ------------------------------------------------------------------ 1. Быстрые проверки без Unity
+  static-checks:
+    name: "Проверки без Unity (PowerShell-разбор .ps1, гейт по истории)"
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Разбор всех Tools\\*.ps1 (BOM и синтаксис)"
+        shell: pwsh
+        run: |
+          $fail = $false
+          Get-ChildItem Tools/*.ps1 | ForEach-Object {
+            $bytes = [System.IO.File]::ReadAllBytes($_.FullName)
+            $hasBom = ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
+            if (-not $hasBom) {
+              Write-Host "::error file=$($_.Name)::нет BOM — Windows PowerShell 5.1 прочитает кириллицу как ANSI (дефект A19/E-11)"
+              $fail = $true
+            }
+            $errors = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$errors)
+            if ($errors -and $errors.Count -gt 0) {
+              Write-Host "::error file=$($_.Name)::ошибка разбора: $($errors[0].Message)"
+              $fail = $true
+            }
+          }
+          if ($fail) { exit 1 }
+          Write-Host "Все скрипты Tools/*.ps1 с BOM и разбираются."
+
+      - name: "Гейт по последнему логу проекта (без запуска Unity)"
+        shell: pwsh
+        run: |
+          # -AnalyzeOnly читает готовый лог. Логи обновляются на машине владельца и лежат в
+          # репозитории только если их туда положили, поэтому отсутствие лога — не провал.
+          $log = Get-ChildItem Logs/*.log -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $log) { Write-Host "Логов нет — шаг пропущен (гейт работает на машине владельца)"; exit 0 }
+          powershell -ExecutionPolicy Bypass -File Tools/ci-console-check.ps1 -AnalyzeOnly -LogFile "$($log.FullName)" -LogName "$($log.Name)"
+
+  # ------------------------------------------------------------------ 2. EditMode-тесты в Unity
+  editmode-tests:
+    name: "EditMode-тесты (Unity ${{ matrix.unityVersion }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # Без лицензии шаг Unity упадёт на активации; держим его нужным, но честно объясняем в логе.
+    if: ${{ github.event_name != 'pull_request' || vars.RUN_UNITY_TESTS == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Одна версия — та, что в ProjectVersion.txt. Матрица оставлена, чтобы добавить вторую
+        # (например, для проверки перед обновлением движка) без правки структуры.
+        unityVersion: ["6000.5.6f1"]
+        testMode: ["EditMode"]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: "Кэш Library"
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-${{ matrix.unityVersion }}-${{ hashFiles('Packages/packages-lock.json') }}-${{ hashFiles('ProjectSettings/ProjectVersion.txt') }}
+          restore-keys: |
+            Library-${{ matrix.unityVersion }}-
+
+      - name: "Проверка наличия лицензии"
+        id: license
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.UNITY_LICENSE }}" ] && [ -z "${{ secrets.UNITY_EMAIL }}" ]; then
+            echo "present=false" >> $GITHUB_OUTPUT
+            echo "::warning::Лицензия Unity не настроена (секреты UNITY_LICENSE или UNITY_EMAIL+UNITY_PASSWORD). Шаг тестов пропущен — это НЕ успешная проверка."
+          else
+            echo "present=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: "EditMode-тесты"
+        id: tests
+        if: steps.license.outputs.present == 'true'
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: ${{ matrix.unityVersion }}
+          testMode: ${{ matrix.testMode }}
+          artifactsPath: test-results-${{ matrix.testMode }}
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          checkName: "EditMode итог"
+          customParameters: -nographics
+
+      - name: "Публикация результатов тестов"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.testMode }}
+          path: test-results-${{ matrix.testMode }}
+          if-no-files-found: warn
+
+  # ------------------------------------------------------------------ 3. Итог
+  gate:
+    name: "Итог проверок"
+    runs-on: ubuntu-latest
+    needs: [static-checks, editmode-tests]
+    if: always()
+    steps:
+      - name: "Свести вердикт"
+        run: |
+          echo "static-checks: ${{ needs.static-checks.result }}"
+          echo "editmode-tests: ${{ needs.editmode-tests.result }}"
+          if [ "${{ needs.static-checks.result }}" = "failure" ]; then
+            echo "::error::Проверки без Unity провалены"
+            exit 1
+          fi
+          if [ "${{ needs.editmode-tests.result }}" = "failure" ]; then
+            echo "::error::EditMode-тесты провалены"
+            exit 1
+          fi
+          echo "Проверки не провалены (обратите внимание: если тесты пропущены, это не успех — см. предупреждение выше)."

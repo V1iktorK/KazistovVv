@@ -392,12 +392,19 @@ namespace KazistovVvTests
                 string t = Build(mBuildKrl, n, VariantLabel);
                 Assert.That(Count(t, @"(?m)^\s*PTP\b"), Is.EqualTo(n + 1),
                     "PTP = N+1 (стр. 280 + 283×(N−1) + 290), N=" + n);
-                Assert.That(Count(t, @"(?m)^\s*LIN\b"), Is.EqualTo(n),
-                    "LIN = N (стр. 293–297), N=" + n);
+                Assert.That(Count(t, @"(?m)^\s*LIN\b"), Is.EqualTo(n - 1),
+                    // LIN = N−1: промежуточные с C_DIS (N−2) + финальная точная (1).
+                    // ФИНАЛЬНАЯ ТОЧКА БОЛЬШЕ НЕ ДУБЛИРУЕТСЯ (исправлено 30.10.2026, аудит S43),
+                    // поэтому раньше здесь стояло «LIN = N»; значение изменено осознанно.
+                    "LIN = N−1 (промежуточные с C_DIS + финальная точная), N=" + n);
                 Assert.That(Count(t, "C_PTP"), Is.EqualTo(n - 1),
                     "C_PTP = N−1 (стр. 283), N=" + n);
-                Assert.That(Count(t, "C_DIS"), Is.EqualTo(n - 1),
-                    "C_DIS = N−1 (стр. 293–294), N=" + n);
+                // C_DIS = max(0, N−2): проскакивание ставится на все линейные участки КРОМЕ финального.
+                // Раньше здесь было «C_DIS = N−1», потому что финальная точка дублировалась
+                // (дефект исправлен 30.10.2026, аудит S43). При N=2 участок ровно один, и он же
+                // финальный — поэтому C_DIS нет вовсе.
+                Assert.That(Count(t, "C_DIS"), Is.EqualTo(System.Math.Max(0, n - 2)),
+                    "C_DIS = max(0, N−2), N=" + n);
             }
         }
 
@@ -417,7 +424,9 @@ namespace KazistovVvTests
                 if (!lines[i].Contains("C_DIS")) linPlain++;
             }
 
-            Assert.That(linTotal, Is.EqualTo(5), "LIN = N = 5");
+            // LIN = N−1 = 4: было N, потому что финальная точка дублировалась (дефект исправлен
+            // 30.10.2026, аудит S43). Значение изменено осознанно — это и есть доказательство правки.
+            Assert.That(linTotal, Is.EqualTo(4), "LIN = N−1 = 4 (финальная точка не дублируется)");
             Assert.That(linPlain, Is.EqualTo(1), "без C_DIS — ровно одна LIN (финальная, стр. 296)");
             Assert.That(lastLin, Is.GreaterThan(0));
             Assert.That(lines[lastLin + 1], Is.EqualTo("END"),
@@ -485,21 +494,25 @@ namespace KazistovVvTests
         }
 
         /// <summary>
-        /// KRL: НАХОДКА (характеризационный тест) — в строке-комментарии «траектория:» время и длина
-        /// печатаются БЕЗ InvariantCulture (стр. 266–267), поэтому их десятичный разделитель зависит
-        /// от текущей культуры: при ru-RU в файл попадает «время 12,500 с», тогда как все числа в
-        /// СТРОКАХ КОДА инвариантны. Тест сравнивает текст с тем же форматированием в текущей
-        /// культуре, поэтому детерминирован; при исправлении дефекта он сообщит об изменении.
+        /// KRL: В ШАПКЕ ВРЕМЯ И ДЛИНА — ВСЕГДА С ТОЧКОЙ (закрыто 30.10.2026, аудит S43).
+        ///
+        /// РАНЬШЕ ТЕСТ БЫЛ ХАРАКТЕРИЗАЦИОННЫМ. Он фиксировал дефект: время и длина печатались без
+        /// `CultureInfo.InvariantCulture`, поэтому на машине с русской локалью в файл попадало
+        /// «время 12,500 с». С 30.10.2026 дефект исправлен в трёх местах (KRL/KAREL/RAPID), и тест
+        /// перевёрнут: теперь он ТРЕБУЕТ точку независимо от локали. Это надёжнее исходной задумки
+        /// «сообщать об изменении»: ошибка ловится красным тестом, а не сообщением в отчёте.
         /// </summary>
         [Test]
-        public void Krl_HeaderComment_NumbersFollowCurrentCulture()
+        public void Krl_HeaderComment_NumbersAlwaysUseDecimalPoint()
         {
             string t = Build(mBuildKrl, 2, VariantLabel);
 
-            Assert.That(t, Does.Contain("время " + 12.5f.ToString("0.000") + " с"),
-                "стр. 266: candidate.timeS.ToString(\"0.000\") — без CultureInfo.InvariantCulture");
-            Assert.That(t, Does.Contain("длина " + 7.25f.ToString("0.000") + " м"),
-                "стр. 267: candidate.lengthM.ToString(\"0.000\") — без CultureInfo.InvariantCulture");
+            Assert.That(t, Does.Contain("время 12.500 с"),
+                "в шапке KRL время обязано быть с точкой независимо от локали машины");
+            Assert.That(t, Does.Contain("длина 7.250 м"),
+                "в шапке KRL длина обязана быть с точкой независимо от локали машины");
+            Assert.That(t, Does.Not.Contain("12,500"), "десятичная запятая вернулась в шапку KRL");
+            Assert.That(t, Does.Not.Contain("7,250"), "десятичная запятая вернулась в шапку KRL");
         }
 
         /// <summary>
