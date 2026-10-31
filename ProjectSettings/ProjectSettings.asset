@@ -151,8 +151,6 @@ PlayerSettings:
   bundleVersion: 0.1.0
   preloadedAssets:
   - {fileID: 11400000, guid: 50ab90bc1871b68438e64f3fff277520, type: 2}
-  - {fileID: 5342762823486622313, guid: ce411fbda9bcf434bb06705526caf448, type: 2}
-  - {fileID: 6474963767375008123, guid: 5b531b598392332448fb7f1991871e15, type: 2}
   metroInputSource: 0
   wsaTransparentSwapchain: 0
   xboxOneDisableKinectGpuReservation: 1
@@ -277,7 +275,8 @@ PlayerSettings:
   AndroidTargetArchitectures: 2
   AndroidSplashScreenScale: 0
   androidSplashScreen: {fileID: 0}
-  AndroidKeystoreName: '{inproject}: keystore/kazistovvv.keystore'
+  AndroidKeystoreName: "C:/Users/\u041E\u043B\u044C\u0433\u0430/OneDrive/Documentos/\u043D\u043E\u0432\u043E\u0435
+    \u043F\u0440\u043E\u0441\u0442\u0440\u0430\u043D\u0441\u0442\u0432\u043E/KazistovVv/keystore/kazistovvv.keystore"
   AndroidKeyaliasName: kazistovvv
   AndroidEnableArmv9SecurityFeatures: 0
   AndroidEnableArm64MTE: 0
@@ -913,7 +912,7 @@ PlayerSettings:
     PS4: UNITY_POST_PROCESSING_STACK_V2
     PS5: UNITY_POST_PROCESSING_STACK_V2
     QNX: UNITY_POST_PROCESSING_STACK_V2
-    Standalone: APP_UI_EDITOR_ONLY;GLADE_CINEMACHINE;GLADE_INPUT_SYSTEM;GLADE_UGUI;OVR_DISABLE_HAND_PINCH_BUTTON_MAPPING;UNITY_POST_PROCESSING_STACK_V2;USE_INPUT_SYSTEM_POSE_CONTROL;USE_STICK_CONTROL_THUMBSTICKS
+    Standalone: APP_UI_EDITOR_ONLY;GLADE_CINEMACHINE;GLADE_INPUT_SYSTEM;GLADE_UGUI;OVR_DISABLE_HAND_PINCH_BUTTON_MAPPING;UNITY_POST_PROCESSING_STACK_V2;USE_INPUT_SYSTEM_POSE_CONTROL;USE_STICK_CONTROL_THUMBSTICKS;SENTIS_ANALYTICS_ENABLED
     VisionOS: UNITY_POST_PROCESSING_STACK_V2
     WebGL: UNITY_POST_PROCESSING_STACK_V2
     XboxOne: UNITY_POST_PROCESSING_STACK_V2
