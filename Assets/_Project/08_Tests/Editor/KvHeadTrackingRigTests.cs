@@ -1,38 +1,43 @@
 // ================================================================================================
-//  KvHeadTrackingRigTests.cs — EditMode-тесты ПРИМЕНЕНИЯ РИГА К КАМЕРЕ (сессия S44, живой шлем).
+//  KvHeadTrackingRigTests.cs — EditMode-тесты ПРИМЕНЕНИЯ ПОЗЫ ГОЛОВЫ К КАМЕРЕ.
 //
-//  ОТКУДА ЗАДАЧА. 31.10.2026 на PICO 4 Ultra оператор увидел: «камера перевёрнута и не
-//  поворачивается вместе с головой», «всё колбасит», «меню далеко».
+//  ИСТОРИЯ ЭТОГО ФАЙЛА (31.10.2026, живой шлем) — пример того, как НЕ НАДО ДЕЛАТЬ ВЫВОДЫ.
+//
+//  ЧТО УВИДЕЛ ОПЕРАТОР: «камера перевёрнута и не поворачивается вместе с головой», «всё колбасит»,
+//  «меню далеко».
 //
 //  ЖУРНАЛ ШЛЕМА:
 //      Камера следует за головой: поза (-0.41, 0.92, 0.32) · высота 0,92 м
 //      проба ориентации: курс шлема 0.0° → 192.6° → 185.3° → 96.5° → 5.7° → 277.4°
 //      панель от глаз: 1.15 м → 3.65 м → 48.73 м → 52.30 м
 //
-//  ПРИЧИНА: ДВОЙНОЕ ПРИМЕНЕНИЕ РИГА.
-//    1) `KvXrInputSource.TryPose` → `ToWorld(...)` → `TrackingOrigin.TransformPoint(position)`
-//       — поза УЖЕ переведена в мировые координаты;
-//    2) `KvXrHeadTracking` писал её в камеру через `SetPositionAndRotation`, а камера ЛЕЖИТ
-//       ВНУТРИ рига — риг применялся второй раз.
+//  ЧТО Я РЕШИЛ (НЕВЕРНО): «поза уже переведена в мир через `ToWorld`, а камера лежит внутри рига —
+//  значит риг применяется дважды». Написал «исправление» с `InverseTransformPoint` и тесты,
+//  которые «доказывали» причину.
 //
-//  ПОЧЕМУ НЕ ПРОЯВЛЯЛОСЬ РАНЬШЕ: пока риг в нуле с единичным поворотом, двойное применение равно
-//  одинарному. Риг двигают и поворачивают (`KvXrLocomotion`) — и ошибка накапливается.
+//  ЧТО ПОКАЗАЛИ ТЕСТЫ: `Transform.SetPositionAndRotation` для ДОЧЕРНЕГО объекта задаёт МИРОВЫЕ
+//  координаты (движок сам пересчитывает в локальные). Двойного применения не было НИКОГДА, и
+//  ошибка промаха в тесте была ровно 0,0 м вместо ожидаемых 26 м.
 //
-//  ЧТО ПРОВЕРЯЕТСЯ:
-//    1) перед записью позы камеры она переводится в ЛОКАЛЬНЫЕ координаты;
-//    2) перевод делается через родителя камеры, а не через самого рига «на глаз»;
-//    3) `ToWorld` по-прежнему переводит в мир (иначе сломается всё остальное);
-//    4) математика верна: двойное применение даёт ошибку, одинарное — нет (проверяется числом).
+//  ЧТО СДЕЛАНО: «исправление» откачено коммитом `29f223a`. Причина дефекта ОСТАЁТСЯ НЕИЗВЕСТНОЙ —
+//  и это записано честно, а не подменено красивой версией.
+//
+//  ЧТО ПРОВЕРЯЕТСЯ ЗДЕСЬ ТЕПЕРЬ: только то, что доказано.
+//    1) поза головы действительно применяется к камере каждый кадр;
+//    2) `SetPositionAndRotation` задаёт мировую позу (поведение движка — проверяется числом);
+//    3) `ToWorld` переводит в мир (от него зависят лучи, руки и панель).
+//
+//  ЧЕГО ЗДЕСЬ НЕТ: утверждения о причине дефекта. Пока причина не найдена, тест на неё был бы
+//  «зелёным по построению» — ровно то, от чего предостерегает урок E-16.
 // ================================================================================================
 
 using System.IO;
-using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
 
 namespace KazistovVvTests
 {
-    /// <summary>Камера получает позу ровно с одним применением рига.</summary>
+    /// <summary>Поза головы применяется к камере; проверяется только доказанное.</summary>
     public class KvHeadTrackingRigTests
     {
         private static string Find(string fileName)
@@ -43,21 +48,14 @@ namespace KazistovVvTests
             return found.Length > 0 ? found[0] : null;
         }
 
-        /// <summary>
-        /// ПЕРЕД ЗАПИСЬЮ ПОЗА ПЕРЕВОДИТСЯ В ЛОКАЛЬНЫЕ КООРДИНАТЫ. Без этого риг применяется
-        /// дважды, и оператор видит мир с высоты 0,92 м вместо 1,60.
-        /// </summary>
-        [Test]
-        public void PoseIsConvertedToLocalBeforeApply()
+        private static string BodyOf(string fileName, string signature)
         {
-            string path = Find("KvXrHeadTracking.cs");
-            Assert.IsNotNull(path, "не найден KvXrHeadTracking.cs");
+            string path = Find(fileName);
+            Assert.IsNotNull(path, "не найден " + fileName);
 
             string text = File.ReadAllText(path);
-
-            // Берём тело ApplyFromTracking по глубине скобок.
-            int start = text.IndexOf("void ApplyFromTracking", System.StringComparison.Ordinal);
-            Assert.Greater(start, 0, "нет метода ApplyFromTracking");
+            int start = text.IndexOf(signature, System.StringComparison.Ordinal);
+            Assert.Greater(start, 0, "в " + fileName + " нет " + signature);
 
             int open = text.IndexOf('{', start);
             int depth = 1, at = open + 1;
@@ -67,175 +65,98 @@ namespace KazistovVvTests
                 else if (text[at] == '}') depth--;
                 at++;
             }
-            string body = text.Substring(start, at - start);
+            return text.Substring(start, at - start);
+        }
 
-            StringAssert.Contains("InverseTransformPoint", body,
-                "поза записывается в камеру БЕЗ перевода в локальные координаты — риг применится " +
-                "дважды, и оператор увидит мир с 0,92 м вместо 1,60");
+        /// <summary>
+        /// ПОЗА ГОЛОВЫ ПРИМЕНЯЕТСЯ К КАМЕРЕ. Это единственное, что точно работает: без этого
+        /// мир вообще не следовал бы за головой.
+        /// </summary>
+        [Test]
+        public void HeadPoseIsAppliedToCamera()
+        {
+            string body = BodyOf("KvXrHeadTracking.cs", "void ApplyFromTracking");
 
             StringAssert.Contains("SetPositionAndRotation", body,
-                "поза камеры больше не применяется — следование за головой сломано");
+                "поза головы не применяется к камере — следование за головой сломано");
+            StringAssert.Contains("TryHeadPose", body,
+                "поза берётся не из системы ввода — появится второй источник истины");
         }
 
         /// <summary>
-        /// ПЕРЕВОД ЧЕРЕЗ РОДИТЕЛЯ, А НЕ ЧЕРЕЗ РИГ НАПРЯМУЮ.
-        ///
-        /// `SetPositionAndRotation` пишет в систему координат РОДИТЕЛЯ. Значит и обратный перевод
-        /// обязан быть от родителя: если камера когда-нибудь окажется вложенной глубже (промежуточный
-        /// узел), перевод «от рига» дал бы неверный результат.
+        /// ПРИ ОТСУТСТВИИ ТРЕКИНГА КАМЕРА НЕ ПЕРЕСТАВЛЯЕТСЯ. Иначе она прыгнет в ноль — а это ровно
+        /// та точка на полу, из которой оператор и смотрел (так уже было, это записано в коде).
         /// </summary>
         [Test]
-        public void ConversionUsesCameraParent()
+        public void CameraIsNotMovedWithoutTracking()
         {
-            string path = Find("KvXrHeadTracking.cs");
-            Assert.IsNotNull(path);
+            string body = BodyOf("KvXrHeadTracking.cs", "void ApplyFromTracking");
 
-            string text = File.ReadAllText(path);
-            int start = text.IndexOf("void ApplyFromTracking", System.StringComparison.Ordinal);
-            int open = text.IndexOf('{', start);
-            int depth = 1, at = open + 1;
-            while (at < text.Length && depth > 0)
+            // Отказ обязан быть ДО записи позы.
+            int refuse = body.IndexOf("return;", System.StringComparison.Ordinal);
+            int apply = body.IndexOf("SetPositionAndRotation", System.StringComparison.Ordinal);
+
+            Assert.Greater(refuse, 0, "нет ветки отказа при отсутствии трекинга");
+            Assert.Greater(apply, refuse,
+                "поза применяется РАНЬШЕ отказа — при потере трекинга камера прыгнет в ноль");
+        }
+
+        // ---------------------------------------------------------------- ПОВЕДЕНИЕ ДВИЖКА
+
+        /// <summary>
+        /// `SETPOSITIONANDROTATION` ДЛЯ ДОЧЕРНЕГО ОБЪЕКТА ЗАДАЁТ МИРОВУЮ ПОЗУ.
+        ///
+        /// ЭТО ГЛАВНЫЙ ТЕСТ ФАЙЛА: он проверяет ФАКТ, на котором сломалось моё неверное объяснение.
+        /// Я утверждал, что запись в дочерний объект «применяет риг второй раз». Движок делает
+        /// иначе: сам пересчитывает мировую позу в локальную. Теперь это закреплено числом,
+        /// чтобы никто (включая меня) не повторил ту же ошибку рассуждения.
+        /// </summary>
+        [Test]
+        public void SetPositionAndRotationOnChildSetsWorldPose()
+        {
+            var rig = new GameObject("rig");
+            rig.transform.position = new Vector3(0f, 0f, 26f);
+
+            var cam = new GameObject("cam");
+            cam.transform.SetParent(rig.transform, false);
+
+            try
             {
-                if (text[at] == '{') depth++;
-                else if (text[at] == '}') depth--;
-                at++;
-            }
-            string body = text.Substring(start, at - start);
+                // Поза в мире — та, что должна получиться.
+                Vector3 wanted = new Vector3(-0.4f, 1.6f, 26.3f);
+                cam.transform.SetPositionAndRotation(wanted, Quaternion.identity);
 
-            Assert.IsTrue(Regex.IsMatch(body, @"transform\.parent"),
-                "перевод в локальные координаты не использует РОДИТЕЛЯ камеры — при вложенности " +
-                "больше одного уровня результат будет неверным");
+                Vector3 got = cam.transform.position;
+                Assert.AreEqual(wanted.x, got.x, 0.001f);
+                Assert.AreEqual(wanted.y, got.y, 0.001f, "высота глаз обязана быть ровно та, что задали");
+                Assert.AreEqual(wanted.z, got.z, 0.001f);
+
+                // И локальная поза при этом ПЕРЕСЧИТАНА движком, а не равна мировой.
+                Vector3 local = cam.transform.localPosition;
+                Assert.AreEqual(26.3f - 26f, local.z, 0.001f,
+                    "движок обязан пересчитать мировую позу в локальную — именно поэтому " +
+                    "двойного применения рига не происходит");
+            }
+            finally
+            {
+                Object.DestroyImmediate(cam);
+                Object.DestroyImmediate(rig);
+            }
         }
 
         /// <summary>
-        /// `ToWorld` ПО-ПРЕЖНЕМУ ПЕРЕВОДИТ В МИР.
-        ///
-        /// Опасность при исправлении: можно было «решить» проблему, убрав перевод в мир из
-        /// `ToWorld`. Но от него зависят лучи, руки, панель и всё остальное — тогда сломается
-        /// больше, чем починится.
+        /// `TOWORLD` ПО-ПРЕЖНЕМУ ПЕРЕВОДИТ В МИР. От него зависят лучи, руки, панель и зазоры —
+        /// трогать его ради камеры было бы грубой ошибкой.
         /// </summary>
         [Test]
         public void ToWorldStillConvertsToWorld()
         {
-            string path = Find("KvXrInputSource.cs");
-            Assert.IsNotNull(path, "не найден KvXrInputSource.cs");
-
-            string text = File.ReadAllText(path);
-            int start = text.IndexOf("static void ToWorld", System.StringComparison.Ordinal);
-            Assert.Greater(start, 0, "нет метода ToWorld");
-
-            int open = text.IndexOf('{', start);
-            int depth = 1, at = open + 1;
-            while (at < text.Length && depth > 0)
-            {
-                if (text[at] == '{') depth++;
-                else if (text[at] == '}') depth--;
-                at++;
-            }
-            string body = text.Substring(start, at - start);
+            string body = BodyOf("KvXrInputSource.cs", "static void ToWorld");
 
             StringAssert.Contains("TransformPoint", body,
-                "ToWorld больше не переводит в мир — от него зависят лучи, руки и панель, " +
-                "починить одну камеру ценой всего остального нельзя");
-        }
-
-        // ---------------------------------------------------------------- МАТЕМАТИКА
-
-        /// <summary>
-        /// ПРОВЕРКА ЧИСЛОМ: ДВОЙНОЕ ПРИМЕНЕНИЕ ДАЁТ ТУ САМУЮ ОШИБКУ.
-        ///
-        /// Воспроизводим то, что видел оператор: риг сдвинут на 26 м, поза головы в системе
-        /// отслеживания — (–0,4; 1,6; 0,3). Считаем правильный результат и «двойной» — и убеждаемся,
-        /// что они РАСХОДЯТСЯ, а после исправления совпадают.
-        ///
-        /// Это и есть доказательство, что причина именно в двойном применении, а не в трекинге.
-        /// </summary>
-        [Test]
-        public void DoubleRigApplicationProducesTheObservedError()
-        {
-            // Риг сдвинут вперёд на 26 м (как в журнале: «сдвиг (0.00, 0.00, 26.00)»).
-            var rig = new GameObject("rig");
-            rig.transform.position = new Vector3(0f, 0f, 26f);
-            rig.transform.rotation = Quaternion.identity;
-
-            // Камера лежит ВНУТРИ рига.
-            var cam = new GameObject("cam");
-            cam.transform.SetParent(rig.transform, false);
-
-            try
-            {
-                // Поза в системе отслеживания (то, что отдаёт OpenXR).
-                Vector3 tracked = new Vector3(-0.4f, 1.6f, 0.3f);
-
-                // ПРАВИЛЬНО: в мир = риг + поза.
-                Vector3 world = rig.transform.TransformPoint(tracked);
-                Assert.AreEqual(1.6f, world.y, 0.001f, "в мире глаза обязаны быть на 1,60 м");
-
-                // ПРАВИЛЬНО: писать в камеру надо ЛОКАЛЬНУЮ позу — она равна исходной.
-                Vector3 local = rig.transform.InverseTransformPoint(world);
-                Assert.AreEqual(tracked.x, local.x, 0.001f);
-                Assert.AreEqual(tracked.y, local.y, 0.001f, "локальная высота обязана остаться 1,60");
-                Assert.AreEqual(tracked.z, local.z, 0.001f);
-
-                // НЕПРАВИЛЬНО (как было): писать МИРОВУЮ позу в локальный трансформ.
-                cam.transform.SetPositionAndRotation(world, Quaternion.identity);
-                Vector3 resultingWorld = cam.transform.position;
-
-                // Ошибка обязана быть равна смещению рига — иначе объяснение неверно.
-                float error = Vector3.Distance(resultingWorld, world);
-                Assert.AreEqual(26f, error, 0.5f,
-                    "двойное применение обязано давать промах на смещение рига (26 м), " +
-                    "а получилось " + error.ToString("0.0") + " м — значит причина ДРУГАЯ");
-            }
-            finally
-            {
-                Object.DestroyImmediate(cam);
-                Object.DestroyImmediate(rig);
-            }
-        }
-
-        /// <summary>
-        /// ПОВОРОТ РИГА ТОЖЕ ДАЁТ ОШИБКУ. В журнале курс прыгал на сотни градусов — это вторая
-        /// половина того же дефекта, и проверять её надо отдельно от смещения.
-        /// </summary>
-        [Test]
-        public void DoubleRigApplicationAlsoBreaksRotation()
-        {
-            var rig = new GameObject("rig");
-            rig.transform.rotation = Quaternion.Euler(0f, 90f, 0f);
-
-            var cam = new GameObject("cam");
-            cam.transform.SetParent(rig.transform, false);
-
-            try
-            {
-                Vector3 trackedPos = new Vector3(0f, 1.6f, 1.0f);
-                Quaternion trackedRot = Quaternion.identity;
-
-                // ПРАВИЛЬНО: мир = поворот рига × поза трекинга.
-                Vector3 worldPos = rig.transform.TransformPoint(trackedPos);
-                Quaternion worldRot = rig.transform.rotation * trackedRot;
-
-                // Проверяем, что обратный перевод возвращает исходное — а без него риг применится дважды.
-                Vector3 backToLocal = rig.transform.InverseTransformPoint(worldPos);
-                Assert.AreEqual(trackedPos.z, backToLocal.z, 0.001f,
-                    "обратный перевод обязан вернуть исходную позу трекинга");
-
-                Quaternion backToLocalRot = Quaternion.Inverse(rig.transform.rotation) * worldRot;
-                Assert.Less(Quaternion.Angle(trackedRot, backToLocalRot), 0.01f,
-                    "обратный перевод поворота обязан вернуть исходный поворот");
-
-                // НЕПРАВИЛЬНО: писать мировую позу в локальный трансформ при повёрнутом риге.
-                cam.transform.SetPositionAndRotation(worldPos, worldRot);
-                Vector3 wrong = cam.transform.position;
-                Assert.Greater(Vector3.Distance(wrong, worldPos), 0.5f,
-                    "поворот рига обязан давать заметную ошибку при двойном применении");
-            }
-            finally
-            {
-                Object.DestroyImmediate(cam);
-                Object.DestroyImmediate(rig);
-            }
+                "ToWorld больше не переводит в мир — от него зависят лучи, руки и панель");
+            StringAssert.Contains("TrackingOrigin", body,
+                "ToWorld не использует начало отслеживания — позы перестанут совпадать с миром");
         }
     }
 }

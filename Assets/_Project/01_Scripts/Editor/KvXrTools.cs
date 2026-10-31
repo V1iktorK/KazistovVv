@@ -462,6 +462,34 @@ namespace KazistovVvXrEditor
             ConfigureXrLoaders();
             AddXrSceneToBuildSilent();
 
+            // НАСТРОИТЬ ПОДПИСЬ ПЕРЕД СБОРКОЙ (добавлено 31.10.2026, S44).
+            //
+            // ЧТО БЫЛО. Сборка падала с «No keystore passwords were found». При этом ключ в
+            // проекте ЕСТЬ (`keystore/kazistovvv.keystore`), и пароль тоже известен —
+            // `KvAndroidSigning.ResolvePassword()` берёт его из переменной окружения
+            // `KAZISTOVVV_KEYPASS`, затем из `EditorPrefs`, затем из встроенного значения.
+            //
+            // ПРИЧИНА. `KvAndroidSigning.Configure()` настраивает `PlayerSettings.Android.*`,
+            // но его ВЫЗЫВАЛ ТОЛЬКО ПУНКТ МЕНЮ. В пакетном режиме (`-batchmode -executeMethod`)
+            // меню никто не нажимает — значит подпись оставалась НЕ настроенной, и Gradle
+            // честно отказывался подписывать.
+            //
+            // ПОСЛЕДСТВИЕ ДЛЯ РАБОТЫ: собрать APK из командной строки было НЕВОЗМОЖНО вообще,
+            // хотя скрипт `Tools/xr-build-apk-ascii.ps1` для этого и написан.
+            //
+            // ТЕПЕРЬ настройка вызывается здесь, до сборки. Если пароля нет — `Configure()`
+            // печатает понятную ошибку, а не молчит.
+            try
+            {
+                KazistovVvXrEditor.KvAndroidSigning.Configure();
+            }
+            catch (System.Exception error)
+            {
+                // Подпись — не повод падать здесь: сборка всё равно сообщит о проблеме понятнее,
+                // если ключ действительно нужен. Но в журнале причина останется.
+                Debug.LogWarning("[KvXr] настройка подписи не удалась: " + error.Message);
+            }
+
             // ПЕРЕКЛЮЧАЕМ АКТИВНУЮ ПЛАТФОРМУ НА ANDROID ПЕРЕД СБОРКОЙ.
             //
             // Почему это обязательно: HDRP-валидатор перед сборкой проверяет графические API
