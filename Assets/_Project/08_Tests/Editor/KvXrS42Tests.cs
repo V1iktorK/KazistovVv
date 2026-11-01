@@ -330,14 +330,18 @@ namespace KazistovVvTests
         }
 
         /// <summary>
-        /// 10. ЧИСЛА КВАДРАТНОГО СТОЛА — ТЕ, ЧТО ПОДТВЕРДИЛ ВЛАДЕЛЕЦ (В2): 0,72 × 0,48 м, верх 0,98 м.
-        /// Заодно проверяется, что это ровно стол ПК, уменьшенный в 20 раз (пропорция сохранена).
+        /// 10. ЧИСЛА КВАДРАТНОГО СТОЛА — ТЕ, ЧТО ПОДТВЕРДИЛ ВЛАДЕЛЕЦ (В2), с уточнением 01.11.2026.
+        ///
+        /// ГЛУБИНА ИЗМЕНИЛАСЬ: 0,48 → 0,504 м. Причина — решение владельца подогнать виртуальный
+        /// стол под РЕАЛЬНЫЙ 100 × 70 см (пропорция 10:7). Стол ПК стал 14,4 × 10,08 м, значит
+        /// проекция «в 20 раз меньше» — 0,72 × 0,504. Пропорция сохранена: 0,72/0,504 = 10/7.
         /// </summary>
         [Test]
         public void SquareTable_MatchesPcNumbers()
         {
             Assert.AreEqual(0.72f, KvXrTableKinds.SquareWidth, 0.0001f, "ширина 0,72 м");
-            Assert.AreEqual(0.48f, KvXrTableKinds.SquareDepth, 0.0001f, "глубина 0,48 м");
+            Assert.AreEqual(0.504f, KvXrTableKinds.SquareDepth, 0.0001f,
+                "глубина 0,504 м (было 0,48 — пропорция стола изменена на 10:7, как у реального)");
             Assert.AreEqual(0.98f, KvXrTableKinds.TopHeight, 0.0001f, "верх стола 0,98 м");
 
             Assert.AreEqual(TrajectoryCore.StandBuilder.TableWidth / 20f, KvXrTableKinds.SquareWidth, 0.0001f,
@@ -345,7 +349,8 @@ namespace KazistovVvTests
             Assert.AreEqual(TrajectoryCore.StandBuilder.TableDepth / 20f, KvXrTableKinds.SquareDepth, 0.0001f,
                 "глубина — та же, что у стола ПК, уменьшенная в 20 раз");
 
-            Assert.AreEqual(0.8653f, KvXrTableKinds.SquareDiagonal, 0.001f, "диагональ 0,87 м");
+            Assert.AreEqual(0.879f, KvXrTableKinds.SquareDiagonal, 0.001f,
+                "диагональ 0,88 м (было 0,87 — выросла вместе с глубиной: sqrt(0,72² + 0,504²) = 0,879)");
         }
 
         /// <summary>
