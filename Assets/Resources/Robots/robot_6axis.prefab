@@ -1,0 +1,174 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1001 &3440172951110152598
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 100024, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+      propertyPath: m_Name
+      value: robot_6axis
+      objectReference: {fileID: 0}
+    - target: {fileID: 400024, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 0.01
+      objectReference: {fileID: 0}
+    - target: {fileID: 400024, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 0.01
+      objectReference: {fileID: 0}
+    - target: {fileID: 400024, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 0.01
+      objectReference: {fileID: 0}
+    - target: {fileID: 400024, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 400024, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0.98
+      objectReference: {fileID: 0}
+    - target: {fileID: 400024, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -24
+      objectReference: {fileID: 0}
+    - target: {fileID: 400024, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 400024, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 400024, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 400024, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 400024, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 400024, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 400024, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 100024, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 6195195520824022480}
+  m_SourcePrefab: {fileID: 100100000, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+--- !u!1 &3440172951110055726 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 100024, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+  m_PrefabInstance: {fileID: 3440172951110152598}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &6195195520824022480
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3440172951110055726}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e2711c6a09f3e764eb0acea8a5e41eb2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SixAxisController
+  robotName: "6-\u043E\u0441\u0435\u0432\u043E\u0439 \u0440\u043E\u0431\u043E\u0442"
+  tcp: {fileID: 0}
+  maxSpeed: 1
+  isActive: 0
+  movementSpeedScale: 0.34
+  telemetryEnabled: 1
+  jointTemperature: 25
+  operatingHours: 0
+  isDualArm: 0
+  fixedBase: {fileID: 3440172951110281998}
+  endEffector: {fileID: 3440172951110281986}
+  fixedBaseName: LS10-B702S_base_1
+  endEffectorName: Axis6_2
+  alternativeEndEffectorName: LS10-B702S_z_5
+  ikIterations: 12
+  ikTolerance: 0.01
+  ik: {fileID: 0}
+  jointTransforms:
+  - {fileID: 3440172951110282006}
+  - {fileID: 3440172951110282002}
+  - {fileID: 3440172951110282014}
+  - {fileID: 3440172951110282010}
+  - {fileID: 3440172951110281990}
+  - {fileID: 3440172951110281986}
+  baseTransform: {fileID: 3440172951110281998}
+  baseName: LS10-B702S_base_1
+  jointAxesLocal:
+  - {x: 0, y: 1, z: 0}
+  - {x: 0, y: 0, z: 1}
+  - {x: 0, y: 0, z: 1}
+  - {x: -0.9838539, y: 0.17897342, z: 0}
+  - {x: 0, y: 0, z: 1}
+  - {x: 0, y: 1, z: 0}
+  autoDetectAxesFromLinks: 0
+  fixLegacyMeshParents: 1
+  positionSmoothing: 0.85
+  rotationSmoothing: 0.9
+  jointLimits:
+  - {x: -170, y: 170}
+  - {x: -90, y: 150}
+  - {x: -70, y: 225}
+  - {x: -180, y: 180}
+  - {x: -120, y: 120}
+  - {x: -180, y: 180}
+  enableSelfCollisionGuard: 1
+  linkRadius: 0.07
+  selectiveRollback: 1
+  selfCollisionStopTime: 0.25
+--- !u!4 &3440172951110281986 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 400020, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+  m_PrefabInstance: {fileID: 3440172951110152598}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &3440172951110281990 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 400016, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+  m_PrefabInstance: {fileID: 3440172951110152598}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &3440172951110281998 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 400024, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+  m_PrefabInstance: {fileID: 3440172951110152598}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &3440172951110282002 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 400004, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+  m_PrefabInstance: {fileID: 3440172951110152598}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &3440172951110282006 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 400000, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+  m_PrefabInstance: {fileID: 3440172951110152598}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &3440172951110282010 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 400012, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+  m_PrefabInstance: {fileID: 3440172951110152598}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &3440172951110282014 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 400008, guid: 65c1693bdb32d734e91340b1c85bee93, type: 3}
+  m_PrefabInstance: {fileID: 3440172951110152598}
+  m_PrefabAsset: {fileID: 0}
