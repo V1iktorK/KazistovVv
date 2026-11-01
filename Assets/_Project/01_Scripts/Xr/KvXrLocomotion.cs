@@ -139,7 +139,40 @@ namespace KazistovVvXr
             if (Mathf.Abs(stick.x) < snapTurnThreshold) return;
 
             float dir = stick.x > 0f ? 1f : -1f;
-            Vector3 pivot = head != null ? head.position : rigRoot.position;
+
+            // ИСПРАВЛЕНО 01.11.2026 (S44, живой шлем): ПОВОРОТ ВОКРУГ КАМЕРЫ = ЗАМКНУТЫЙ КРУГ.
+            //
+            // СИМПТОМ: «всё крутится, картинка не стабильная». В журнале курс шлема прыгал
+            // 0.0° → 357° → 219° без участия оператора.
+            //
+            // ЧТО БЫЛО: `pivot = head.position` — мировая позиция КАМЕРЫ, которая лежит внутри рига
+            // и уже включает его позицию и поворот. `RotateAround` крутит риг вокруг точки, которая
+            // сама привязана к ригу: после каждого поворота камера уезжает, точка опоры уезжает
+            // вместе с ней, и следующий поворот крутит уже вокруг нового места. Это раскручивает
+            // систему — ровно то «всё крутится», что видит оператор.
+            //
+            // ТЕПЕРЬ: точку опоры берём в МИРОВЫХ координатах, но НЕ от камеры, а от позы головы,
+            // переведённой в локальные координаты рига. Так поворот не меняет то, вокруг чего
+            // крутится: оператор поворачивается на месте, а не «наматывается по спирали».
+            Vector3 pivot = rigRoot.position;
+
+            Vector3 trackedPosition;
+            Quaternion trackedRotation;
+            if (KvXrInputSource.TryHeadPose(out trackedPosition, out trackedRotation))
+            {
+                Vector3 local = rigRoot.InverseTransformPoint(trackedPosition);
+                local.y = 0f;
+                pivot = rigRoot.TransformPoint(local);
+            }
+            else if (head != null)
+            {
+                // Трекинга нет — берём локальную позицию камеры: она уже внутри рига,
+                // поэтому двойного применения нет.
+                Vector3 local = rigRoot.InverseTransformPoint(head.position);
+                local.y = 0f;
+                pivot = rigRoot.TransformPoint(local);
+            }
+
             rigRoot.RotateAround(pivot, Vector3.up, dir * snapTurnDegrees);
             lastSnapTurnTime = Time.time;
             SnapTurnCount++;
@@ -230,12 +263,52 @@ namespace KazistovVvXr
         public void TeleportTo(Vector3 groundPoint)
         {
             if (rigRoot == null) rigRoot = transform;
+
+            // ИСПРАВЛЕНО 01.11.2026 (S44, живой шлем): ЗАМКНУТЫЙ КРУГ «РИГ ↔ КАМЕРА».
+            //
+            // СИМПТОМ У ОПЕРАТОРА (дословно): «всё крутится», «картинка не стабильная».
+            // ЖУРНАЛ ШЛЕМА, три строки подряд после старта:
+            //     панель от глаз 1.34 м  →  3.68 м  →  9.92 м
+            //     панель в (0.03, 1.17, 0.65) — НЕ МЕНЯЕТСЯ ни в одной строке
+            // То есть панель стоит на месте, а камера уезжает от неё рывками по ~3 метра.
+            //
+            // ЧТО БЫЛО. Смещение головы считалось от МИРОВОЙ позиции камеры:
+            //     headOffset = head.position - rigRoot.position;
+            // Но `head` — это камера, лежащая ВНУТРИ рига. Её мировую позицию ставит
+            // `KvXrHeadTracking` как «поза трекинга + позиция рига» (через `ToWorld`).
+            // Значит `head.position` УЖЕ включает `rigRoot.position`, и вычитание давало
+            // не смещение головы от центра рига, а что-то бессмысленное.
+            //
+            // ДАЛЬШЕ ПОЛУЧАЛСЯ КРУГ:
+            //     rigRoot.position := groundPoint − (поза_трекинга + rigRoot.position − rigRoot.position)
+            //     ...в следующем кадре ToWorld СНОВА прибавляет новую позицию рига к позе трекинга,
+            //     камера уезжает, и телепорт пересчитывается от уехавшей камеры.
+            // Каждый кадр — новый сдвиг. Отсюда «всё крутится».
+            //
+            // ТЕПЕРЬ. Берём смещение головы В СИСТЕМЕ ОТСЛЕЖИВАНИЯ — то есть ДО того, как к ней
+            // прибавили риг. Это и есть «где оператор стоит относительно центра рига»:
+            //     смещение = поза_трекинга (по горизонтали)
+            // Тогда формула становится САМОСОГЛАСОВАННОЙ: риг ставится так, чтобы под точкой пола
+            // оказалась поза трекинга, и следующий кадр не сдвигает ничего.
             Vector3 headOffset = Vector3.zero;
-            if (head != null)
+
+            Vector3 trackedPosition;
+            Quaternion trackedRotation;
+            if (KvXrInputSource.TryHeadPose(out trackedPosition, out trackedRotation))
             {
-                headOffset = head.position - rigRoot.position;
+                // Поза трекинга УЖЕ переведена `ToWorld` в мировые координаты. Чтобы получить
+                // смещение ВНУТРИ рига, переводим её обратно в локальные координаты рига.
+                headOffset = rigRoot.InverseTransformPoint(trackedPosition);
                 headOffset.y = 0f;
             }
+            else if (head != null)
+            {
+                // Трекинга нет — берём локальную позицию камеры. Она уже внутри рига, поэтому
+                // прибавления позиции рига здесь нет и круг не замыкается.
+                headOffset = rigRoot.InverseTransformPoint(head.position);
+                headOffset.y = 0f;
+            }
+
             rigRoot.position = new Vector3(groundPoint.x - headOffset.x, rigRoot.position.y,
                 groundPoint.z - headOffset.z);
             TeleportCount++;
