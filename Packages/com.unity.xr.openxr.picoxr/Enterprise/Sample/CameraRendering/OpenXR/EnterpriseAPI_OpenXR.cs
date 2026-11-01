@@ -112,7 +112,7 @@ public class EnterpriseAPI_OpenXR : MonoBehaviour
         IntPtr surface = IntPtr.Zero;
         yield return new WaitUntil(() =>
         {
-            surface = OpenXRLayerUtility.GetLayerAndroidSurfaceObject(_overlay.GetInstanceID());
+            surface = OpenXRLayerUtility.GetLayerAndroidSurfaceObject(_overlay.GetEntityId().GetHashCode());
             PXR_Enterprise.StartPreviewfor4U(surface,Mode);
             return (surface != IntPtr.Zero);
         });

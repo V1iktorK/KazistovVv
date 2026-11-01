@@ -87,7 +87,7 @@ public class VirtualDisplayDemo_OpenXR : MonoBehaviour
         IntPtr surface = IntPtr.Zero;
         yield return new WaitUntil(() =>
         {
-            surface = OpenXRLayerUtility.GetLayerAndroidSurfaceObject(_overlay.GetInstanceID());
+            surface = OpenXRLayerUtility.GetLayerAndroidSurfaceObject(_overlay.GetEntityId().GetHashCode());
 
             displayId = PXR_Enterprise.CreateVirtualDisplay("VirtualDisplayDemo", surface,
                 320, flags,720,1280);
