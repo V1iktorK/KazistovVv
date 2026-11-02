@@ -186,6 +186,50 @@ namespace KazistovVv.Tests
             StringAssert.Contains("openarm_right_hand_tcp", text, "не задан TCP правой руки");
         }
 
+
+        /// <summary>
+        /// КРОНШТЕЙН НЕ ДУБЛИРУЕТСЯ МЕЖДУ КОПИЯМИ РУК (добавлено 02.11.2026).
+        ///
+        /// ДЕФЕКТ, КОТОРЫЙ ЭТО ЛОВИТ: KvDualArm создаёт ДВЕ копии одного префаба, и каждая
+        /// содержит ВСЮ модель, включая тело-кронштейн. Если оставить кронштейн в обеих копиях,
+        /// две одинаковые детали окажутся ровно в одной точке — Z-fighting: грани мерцают,
+        /// на корпусе появляется «мясо». Тело одно, руки две.
+        /// </summary>
+        [Test]
+        public void DualArm_HidesSharedBodyInSecondCopy()
+        {
+            string file = Path.Combine(ProjectRoot, "Assets", "_Project", "01_Scripts", "Core",
+                "KvDualArm.cs");
+            Assert.IsTrue(File.Exists(file), "не найден KvDualArm.cs: " + file);
+            string text = File.ReadAllText(file);
+
+            StringAssert.Contains("isRightArm", text,
+                "у правой копии должна скрываться общая часть модели (кронштейн): иначе " +
+                "две одинаковые детали наложатся и грани будут мерцать");
+            StringAssert.Contains("Z-fighting", text,
+                "причина скрытия кронштейна в правой копии должна быть записана — иначе через " +
+                "месяц правку уберут как «непонятную»");
+        }
+
+        /// <summary>
+        /// ПАРА СОЗДАЁТСЯ ИЗ ОДНОГО ПРЕФАБА (не требует переделанной модели).
+        ///
+        /// Владелец планирует разделить модель в Blender, но система обязана работать УЖЕ СЕЙЧАС,
+        /// с тем префабом, что есть. Иначе «двурукий» будет ждать файла, которого может не быть.
+        /// </summary>
+        [Test]
+        public void DualArm_CanSpawnFromSinglePrefab()
+        {
+            string file = Path.Combine(ProjectRoot, "Assets", "_Project", "01_Scripts", "Core",
+                "KvDualArm.cs");
+            string text = File.ReadAllText(file);
+
+            StringAssert.Contains("SpawnFromOnePrefab", text,
+                "должен быть режим создания пары из ОДНОГО префаба");
+            StringAssert.Contains("LeftPrefix", text, "должен быть префикс левой руки");
+            StringAssert.Contains("RightPrefix", text, "должен быть префикс правой руки");
+        }
+
         /// <summary>
         /// ОСИ ВРАЩЕНИЯ ПО УМОЛЧАНИЮ — Y.
         ///

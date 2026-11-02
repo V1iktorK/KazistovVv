@@ -106,12 +106,32 @@ namespace KazistovVv.Core
             // Скрываем ЧУЖУЮ цепочку: левой руке не нужна правая, и наоборот.
             string foreignPrefix = isLeft ? RightPrefix : LeftPrefix;
             int hidden = 0;
+            bool isRightArm = !isLeft;
             foreach (Transform t in go.GetComponentsInChildren<Transform>(true))
             {
                 if (t == null || t == go.transform) continue;
-                if (!t.name.StartsWith(foreignPrefix, StringComparison.Ordinal)) continue;
-                t.gameObject.SetActive(false);
-                hidden++;
+
+                // 1. ЧУЖАЯ РУКА — скрываем всегда: левой копии не нужна правая и наоборот.
+                if (t.name.StartsWith(foreignPrefix, StringComparison.Ordinal))
+                {
+                    t.gameObject.SetActive(false);
+                    hidden++;
+                    continue;
+                }
+
+                // 2. ОБЩИЙ КРОНШТЕЙН — скрываем ТОЛЬКО у ПРАВОЙ копии (исправлено 02.11.2026).
+                //
+                // ПОЧЕМУ. Обе копии содержат ВСЮ модель, включая тело-кронштейн. Если оставить
+                // его в двух копиях, две одинаковые детали окажутся ровно в одной точке — это
+                // Z-fighting: грани мерцают, «мясо» на корпусе. Оставляем кронштейн у левой
+                // копии (она первая), у правой скрываем: тело одно, руки две.
+                if (isRightArm && !t.name.StartsWith(ownPrefix, StringComparison.Ordinal) &&
+                    !t.name.StartsWith(LeftPrefix, StringComparison.Ordinal))
+                {
+                    // Это не наша рука и не левая (её уже скрыли) — значит общая часть модели.
+                    t.gameObject.SetActive(false);
+                    hidden++;
+                }
             }
 
             // --- шесть суставов СВОЕЙ руки (у модели по семь звеньев: 0…6, где 6 — фланец)
