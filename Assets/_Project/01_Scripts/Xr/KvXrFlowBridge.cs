@@ -18,7 +18,13 @@ namespace KazistovVvXr
     /// `KvStageHub*`) привязывают к нему зоны, сингулярности, силы и теплокарты — второй реализации нет.
     ///
     /// ТРИ ПРАВИЛА:
-    ///   1. ЛАЗЕРЫ ПОТОКА ВЫКЛЮЧЕНЫ (`redLaserOn = false`, `greenLaserOn = false`): в шлеме приняты свои.
+    ///   1. ЛАЗЕРЫ — ЛУЧИ РУК, КАК НА КОМПЬЮТЕРЕ (пункт 2 владельца 02.11.2026). Прежнее правило
+    ///      «лазеры потока выключены (`redLaserOn = false`, `greenLaserOn = false`)» снято: поток
+    ///      не рисует линии сам (его `LaserManager` — это только геометрия для выбора), а рисовать
+    ///      второй комплект лучей поверх принятых в шлеме нельзя — было бы четыре линии вместо двух.
+    ///      Поэтому лазеры потока — это лучи рук: правая рука ЗЕЛЁНАЯ (выбор траектории/фантома),
+    ///      левая КРАСНАЯ (новая точка). Курки включают их по одному: левый — красный, правый —
+    ///      зелёный. И оба луча обрываются на первом попадании (`KvXrLaserRay`), а не идут сквозь.
     ///   2. ПОДТВЕРЖДЕНИЕ ТОЛЬКО ВНЕ ИНТЕРФЕЙСА (правило `KvXrFlowRules`, второго не заводится).
     ///   3. КАМЕРУ ПОТОК НЕ ДВИГАЕТ: `camSelector` в шлеме пуст, позу пишет только OpenXR.
     /// </summary>
@@ -28,6 +34,16 @@ namespace KazistovVvXr
     {
         /// <summary>Ключ настройки «кормить поток прицелом».</summary>
         public const string PrefKeyFeedAim = "KazistovVv.XR.FlowAim";
+
+        /// <summary>
+        /// ПОРОГ КУРКА, С КОТОРОГО ЛАЗЕР СЧИТАЕТСЯ ВКЛЮЧЁННЫМ (пункт 2 владельца 02.11.2026).
+        ///
+        /// На компьютере лазеры — тумблеры Z/X. В шлеме отдельной кнопки нет, поэтому лазер горит,
+        /// пока нажат курок своей руки: левый — КРАСНЫЙ (новая точка), правый — ЗЕЛЁНЫЙ (выбор
+        /// траектории/фантома). Тот же порог используется для яркости луча в `KvXrLaserColors`,
+        /// поэтому «какой лазер включён» видно и в шлеме, и в журнале.
+        /// </summary>
+        public const float LaserTriggerThreshold = 0.65f;
 
         /// <summary>Камера шлема (ставится ригом).</summary>
         public Camera headCamera;
@@ -39,7 +55,7 @@ namespace KazistovVvXr
         public bool feedConfirm = true;
 
         /// <summary>Порог курка, с которого считается нажатие.</summary>
-        public float triggerThreshold = 0.65f;
+        public float triggerThreshold = LaserTriggerThreshold;
 
         /// <summary>Дальность прицела, метры.</summary>
         public float aimMaxDistanceMeters = 6f;
@@ -65,6 +81,34 @@ namespace KazistovVvXr
 
         /// <summary>Созданный поток (для проверок и журнала).</summary>
         public TrajectoryFlowController Flow { get { return flow; } }
+
+        /// <summary>
+        /// КРАСНЫЙ ЛАЗЕР ВКЛЮЧЁН В ЭТОМ КАДРЕ (новая точка, левый курок). Читается диагностикой и
+        /// тестом: состояние лазеров больше не «выключено насовсем», как было до 02.11.2026.
+        /// </summary>
+        public bool RedLaserOn { get; private set; }
+
+        /// <summary>ЗЕЛЁНЫЙ ЛАЗЕР ВКЛЮЧЁН В ЭТОМ КАДРЕ (выбор траектории/фантома, правый курок).</summary>
+        public bool GreenLaserOn { get; private set; }
+
+        /// <summary>Включает ли это значение курка лазер (правило одно на оба луча, проверяется тестом).</summary>
+        public static bool LaserHeld(float triggerValue)
+        {
+            return triggerValue >= LaserTriggerThreshold;
+        }
+
+        /// <summary>
+        /// ЛАЗЕР ЭТОЙ РУКИ ВКЛЮЧЁН? На компьютере Z — красный лазер левой руки, X — зелёный правой;
+        /// в шлеме те же два лазера включаются курками. По этой проверке луч руки становится плотнее
+        /// (`KvXrLaserColors.Ray(..., true)`), то есть цвет в шлеме говорит, каким лазером работает
+        /// оператор — ровно то, что владелец назвал «лазеры не разноцветные как на ПК».
+        /// </summary>
+        public static bool HandLaserHeld(KvXrQuickHand hand)
+        {
+            return hand == KvXrQuickHand.Left
+                ? LaserHeld(KvXrInputSource.LeftTrigger)
+                : LaserHeld(KvXrInputSource.RightTrigger);
+        }
 
         /// <summary>Активный мост (для кнопки B — сброс потока, эквивалент Esc).</summary>
         public static KvXrFlowBridge Active { get; private set; }
@@ -110,8 +154,17 @@ namespace KazistovVvXr
             Vector3 normal = Vector3.up;
             bool aimHit = false;
 
+            // ЛУЧ ПРИЦЕЛА УПИРАЕТСЯ В МИР, А НЕ ПРОХОДИТ СКВОЗЬ (пункт 2 владельца 02.11.2026).
+            //
+            // Маска задана ЯВНО. `DefaultRaycastLayers` и так исключает слой `IgnoreRaycast`, но
+            // перечислять это руками полезно: модели контроллеров лежат именно там, и случайное
+            // «попадание в собственную руку» на нуле метров молча обнулило бы весь прицел. Физическая
+            // длина берётся ДО первого попадания (робот, стол, пол), а не фиксированные 6 м:
+            // иначе `aimPoint` уезжал за стол, и поток «не видел» робота под лучом.
+            int aimMask = ~(1 << KvXrControllerVisuals.IgnoreRaycastLayer);
             RaycastHit hit;
-            if (Physics.Raycast(origin, direction, out hit, aimMaxDistanceMeters))
+            if (Physics.Raycast(origin, direction, out hit, aimMaxDistanceMeters, aimMask,
+                    QueryTriggerInteraction.Ignore))
             {
                 aimPoint = hit.point;
                 normal = hit.normal;
@@ -133,8 +186,19 @@ namespace KazistovVvXr
             leftTriggerWasDown = leftDown;
             rightTriggerWasDown = rightDown;
 
-            bool redOn = leftFront;      // красный лазер = левый курок
-            bool greenOn = rightFront;   // зелёный лазер = правый курок
+            // ЛАЗЕР ГОРИТ, ПОКА КУРОК НАЖАТ, а не один кадр (02.11.2026).
+            //
+            // ЧТО БЫЛО. Сюда передавались только ФРОНТЫ (`leftFront`/`rightFront`) — флаг был
+            // истинным ровно один кадр. Для самого подтверждения этого хватало, но «лазер включён»
+            // означало «один кадр из девяноста»: состояние лазера нельзя было ни показать, ни
+            // проверить, и строка журнала честно писала «лазеры потока выключены».
+            //
+            // ЧТО СТАЛО. Передаётся настоящее состояние курков: пока держишь левый — красный лазер
+            // (новая точка), пока правый — зелёный (выбор траектории/фантома). Подтверждение
+            // по-прежнему идёт по фронту (`triggerFront`), поэтому одно нажатие не делает два
+            // действия (§27) — это разные вещи и смешивать их нельзя.
+            bool redOn = leftDown;       // красный лазер = левый курок
+            bool greenOn = rightDown;    // зелёный лазер = правый курок
 
             // Кнопка A (стандарт Quest) — то же подтверждение, что курок лучевой руки.
             if (confirmRequested)
@@ -143,6 +207,9 @@ namespace KazistovVvXr
                 else greenOn = true;
             }
 
+            RedLaserOn = redOn;
+            GreenLaserOn = greenOn;
+
             // Фронты считаются раздельно: одно нажатие = одно действие (§27).
             bool triggerFront = leftFront || rightFront || confirmRequested;
             bool triggerDown = leftDown || rightDown;
@@ -150,8 +217,13 @@ namespace KazistovVvXr
                            ShouldFeedConfirm(overInterface, triggerDown || confirmRequested);
             confirmRequested = false;
 
-            // Лазеры потока визуально ВЫКЛЮЧЕНЫ (в шлеме свои), но флаги лазеров —
-            // это выбор действия: красный = новая точка, зелёный = подтверждение.
+            // ЛАЗЕРЫ ПОТОКА БОЛЬШЕ НЕ «ВЫКЛЮЧЕНЫ» (пункт 2 владельца 02.11.2026).
+            //
+            // Поток сам линий не рисует (`LaserManager` — это геометрия для выбора, а не
+            // `LineRenderer`). Видимые лазеры в шлеме — лучи рук: правая ЗЕЛЁНАЯ, левая КРАСНАЯ,
+            // и оба обрываются на первом попадании (`KvXrLaserRay`). Поэтому «включить лазеры
+            // потока» = передать потоку настоящее состояние курков и не рисовать второй комплект
+            // линий поверх принятых: иначе в шлеме было бы четыре луча вместо двух.
             flow.UpdateAim(aimPoint, aimHit && !overInterface, confirm, false,
                            redOn, greenOn, normal, aimHit);
 

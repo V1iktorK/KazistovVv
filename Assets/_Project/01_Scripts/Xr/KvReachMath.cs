@@ -7,6 +7,11 @@ namespace KazistovVvXr
     /// та же величина, что считают сингулярностные зоны (`KvSingularityZones.cs:141-153`), вынесена в
     /// одно место, чтобы радиус автостола и пороги зон не разъехались.
     /// Измерено по сцене: 6-осевой — 2,368 м, SCARA LS10-B702S — 0,713 м.
+    ///
+    /// ПУНКТ 8 ВЛАДЕЛЬЦА (02.11.2026): «Автостол … должен быть … шире его максимально достигаемой
+    /// точки». Поэтому радиус автостола — ПОЛНЫЙ ВЫЛЕТ + ЗАПАС, без коэффициента 0,95.
+    /// Прежняя формула 0,95 × вылет + 0,10 у 6-осевого робота давала 2,3496 м против вылета
+    /// 2,368 м — стол был на 18 мм УЖЕ рабочей зоны, и рука доставала за кромку.
     /// </summary>
     public static class KvReachMath
     {
@@ -29,11 +34,28 @@ namespace KazistovVvXr
             return Mathf.Max(MinChainMeters, len);
         }
 
-        /// <summary>Радиус автостола: 0,95 × вылет + 0,10 м.</summary>
+        /// <summary>
+        /// Радиус автостола: ПОЛНЫЙ вылет руки + запас 0,10 м. Коэффициента уменьшения здесь быть не
+        /// должно: стол обязан быть ШИРЕ максимально достигаемой точки робота, а не уже неё.
+        /// </summary>
         public static float AutoRadius(float chainLengthMeters)
         {
-            return KvXrTableKinds.AutoReachFactor * Mathf.Max(MinChainMeters, chainLengthMeters)
-                   + KvXrTableKinds.AutoMarginMeters;
+            return Mathf.Max(MinChainMeters, chainLengthMeters) + KvXrTableKinds.AutoMarginMeters;
+        }
+
+        /// <summary>
+        /// Наибольший вылет среди роботов сцены (пусто/нет данных — 0).
+        /// Нужен, когда в шлеме при запуске пусто и активного робота ещё нет: автостол строится по
+        /// САМОЙ ДАЛЬНЕЙ рабочей зоне, а не по габариту основания (пункт 8 владельца).
+        /// </summary>
+        public static float MaxReach(float[] reaches)
+        {
+            if (reaches == null) return 0f;
+
+            float best = 0f;
+            for (int i = 0; i < reaches.Length; i++)
+                if (reaches[i] > best) best = reaches[i];
+            return best;
         }
     }
 }

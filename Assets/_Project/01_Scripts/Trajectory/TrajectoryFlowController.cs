@@ -2084,6 +2084,15 @@ public class TrajectoryFlowController : MonoBehaviour
             state.phase = FlowState.RobotMoving;
             robot.enabled = false;
             HideTrajectoryVisuals();                   // ШАГ 5: траектории исчезают
+
+            // ДИАГНОСТИКА ПУСКА (02.11.2026, пункт 4 владельца: «не все траектории корректно
+            // включаются»). В журнале шлема не было НИ ОДНОЙ строки про пуск траектории —
+            // поэтому по логам нельзя было понять, какая включилась, а какая нет.
+            // Здесь пишем: какая именно, сколько шагов в плане и скорость.
+            Debug.Log("[Flow] ПУСК траектории «" + where + "» · шагов " + plan.Path.Length +
+                      " · индекс " + state.selectedTrajectory + " из " + state.candidates.Count +
+                      " · скорость " + robotMoveSpeed.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture));
+
             Report("Движение робота по «" + where + "» · скорость " +
                    FormatSpeed(robotMoveSpeed) + " · фантом остаётся видимым до конца движения",
                    Palette.Ok);
@@ -2091,6 +2100,11 @@ public class TrajectoryFlowController : MonoBehaviour
         else
         {
             phantomSelectionLatch = false;
+
+            // ДИАГНОСТИКА ОТКАЗА (пункт 4): почему траектория НЕ включилась.
+            Debug.Log("[Flow] ОТКАЗ пуска траектории «" + where + "» · причина: " +
+                      SafetyGate.Describe(gate.LastReason));
+
             Report("Safety отклонила движение: " + SafetyGate.Describe(gate.LastReason), Palette.Bad);
         }
     }
@@ -2122,7 +2136,21 @@ public class TrajectoryFlowController : MonoBehaviour
     {
         if (state.phase != FlowState.RobotMoving) return;
         if (robot != null) robot.enabled = true;
+
+        // ДИАГНОСТИКА (02.11.2026, пункт 3 владельца: «начальный робот не пропадает»).
+        // Считаем фантомов ДО и ПОСЛЕ уборки — так видно, убрались ли они на самом деле,
+        // а не «должны были убраться». Проверка журнала шлема показала, что этих чисел
+        // не было вовсе, и вопрос решался гаданием.
+        int beforeHide = PhantomManager.CountPhantomsInScene();
         phantoms.Hide();
+        int afterHide = PhantomManager.CountPhantomsInScene();
+        if (PhantomManager.logLifecycle)
+        {
+            Debug.Log("[Flow] движение завершено · фантомов до уборки " + beforeHide +
+                      " · после " + afterHide +
+                      (afterHide > 0 ? "  ⚠ ОСТАЛИСЬ (это и видит оператор)" : "  (убраны)"));
+        }
+
         HideTrajectories();
         if (pointHud != null) pointHud.SetVisible(false);
         generating = false;

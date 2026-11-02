@@ -1066,6 +1066,15 @@ ShowRows(KvXrScreenModel.BuildProperties(info));
 
 // ИМЯ МЕНЯЕТСЯ В ШЛЕМЕ (§41): путь тот же, что на компьютере — ярлык узла дерева.
 CreateIcon("Prop_Rename", "rename", "Изменить имя объекта", new Vector2(-0.15f, -0.29f),                delegate { OpenNameInput(); }, false, "имя", 0.10f, 0.055f);
+
+// ЗАДАЧА 7: УРНА В «СВОЙСТВАХ» — для ВЫБРАННОГО робота. Это та же основная панель (панель у руки),
+// подпись называет робота, а действие — тот же `DeleteObject`, что и у урны в меню: второй
+// реализации удаления в проекте не появляется.
+if (selectedObjectIndex >= 0 && selectedObjectIndex < objects.Count && objects[selectedObjectIndex] != null)
+{
+                Transform doomed = objects[selectedObjectIndex];
+CreateIcon("Prop_Delete", "trash", "Удалить робота «" + NameOf(doomed) + "»",                    new Vector2(0.15f, -0.29f),                    delegate { DeleteObject(doomed, "робот"); }, false, null, 0.10f, 0.055f);
+}
 }
 private void BuildHelpScreen()
 {
@@ -1537,10 +1546,17 @@ int index = i;
 bool active = (int)startSection == i;
 CreateIcon("MenuSec_" + i, KvXrStartMenuLayout.SectionIcon(i),                    KvXrStartMenuLayout.SectionTitle(i), KvXrStartMenuLayout.SectionCenter(i),                    delegate { SelectStartSection(index); }, active,                    KvXrStartMenuLayout.SectionTitle(i),                    KvXrStartMenuLayout.SectionHalfSize.x * 2f,                    KvXrStartMenuLayout.SectionHalfSize.y * 2f, true);
 }            List<string> rows = StartContentLabels();
+
+// ЗАДАЧА 7 ВЛАДЕЛЬЦА: «нельзя удалить стол или робота (должна быть кнопочка внутри основной,
+// с указанным роботом или столом, на которой должна быть нарисована урна)». Поэтому у КАЖДОЙ
+// существующей строки-объекта поверх неё стоит маленькая кнопка с урной. У строк создания
+// («Добавить…», «Запустить стенд») урны нет: удалять там нечего.
+int existingRows = ExistingObjectRows();
 for (int i = 0; i < rows.Count && i < KvXrStartMenuLayout.MaxContentRows; i++)
 {
 int index = i;
 CreateIcon("MenuRow_" + i, "chevron-right", rows[i], KvXrStartMenuLayout.ContentCenter(i),                    delegate { PressStartRow(index); }, false, rows[i],                    KvXrStartMenuLayout.ContentHalfSize.x * 2f,                    KvXrStartMenuLayout.ContentHalfSize.y * 2f, true);
+if (i < existingRows) AddRowDeleteButton(i);
 }
 Status = "меню · раздел «" + KvXrStartMenuLayout.SectionTitle((int)startSection) +                     "» · строк " + rows.Count + " · столов " + startTables.Count +                     " · роботов " + startRobots.Count;
 }
@@ -1590,6 +1606,116 @@ private static string NameOf(Transform target)
             RegisteredObject registered = target.GetComponent<RegisteredObject>();
 if (registered != null && !string.IsNullOrEmpty(registered.DisplayName)) return registered.DisplayName;
 return target.name;
+}
+
+// ==================================================== ЗАДАЧА 7: УРНА В СТРОКЕ ОБЪЕКТА
+
+/// <summary>
+/// ПОЛОВИНА РАЗМЕРА КНОПКИ С УРНОЙ ВНУТРИ СТРОКИ МЕНЮ, метры. Строка содержимого — 0,57 × 0,052 м
+/// (`KvXrStartMenuLayout.ContentHalfSize`), кнопка — 0,06 × 0,046 м: помещается в строку целиком.
+/// Меньше делать нельзя: цель 0,04 м по высоте в шлеме уже трудно навести (те же числа, что у
+/// кнопок окна компьютера — 0,06 × 0,032 м).
+/// </summary>
+private static readonly Vector2 RowDeleteHalfSize = new Vector2(0.030f, 0.023f);
+
+/// <summary>Отступ кнопки с урной от правого края строки, метры.</summary>
+private const float RowDeleteInsetMeters = 0.004f;
+
+/// <summary>
+/// ГДЕ СТОИТ УРНА: у ПРАВОГО КРАЯ той же строки, ВНУТРИ неё. Правый край строки — 0,42 м от центра
+/// панели, правый край кнопки — 0,416 м, поэтому она не выходит за строку и не налезает на соседние.
+/// </summary>
+private static Vector2 RowDeleteCenter(int row)
+{
+    Vector2 center = KvXrStartMenuLayout.ContentCenter(row);
+    return new Vector2(
+        center.x + KvXrStartMenuLayout.ContentHalfSize.x - RowDeleteHalfSize.x - RowDeleteInsetMeters,
+        center.y);
+}
+
+/// <summary>
+/// СКОЛЬКО ПЕРВЫХ СТРОК РАЗДЕЛА — СУЩЕСТВУЮЩИЕ ОБЪЕКТЫ. Порядок строк задаёт `StartContentLabels`:
+/// сначала столько объектов, сколько поместилось (`MaxExistingRows`), затем строки создания. Только
+/// у этих первых строк есть что удалять.
+/// </summary>
+private int ExistingObjectRows()
+{
+    if (startSection == KvXrStartSection.Tables)
+        return Mathf.Min(startTables.Count, KvXrStartMenuRows.MaxExistingRows);
+    if (startSection == KvXrStartSection.Robots)
+        return Mathf.Min(startRobots.Count, KvXrStartMenuRows.MaxExistingRows);
+    return 0;
+}
+
+/// <summary>Объект сцены, показанный в строке `row` (null — строка не про объект).</summary>
+private Transform StartObjectAt(int row)
+{
+    if (row < 0) return null;
+    if (startSection == KvXrStartSection.Tables) return row < startTables.Count ? startTables[row] : null;
+    if (startSection == KvXrStartSection.Robots) return row < startRobots.Count ? startRobots[row] : null;
+    return null;
+}
+
+/// <summary>
+/// КНОПКА С УРНОЙ ВНУТРИ СТРОКИ (задача 7). Подпись НАЗЫВАЕТ объект, как и просил владелец —
+/// «кнопочка… с указанным роботом или столом»: по удержанию луча видно «Удалить стол
+/// «Стол_квадрат_101530»», то есть что именно удалится, а не «какая-то урна».
+///
+/// СОЗДАЁТСЯ ПОСЛЕ строки, поэтому рисуется поверх её подложки, и попадает в список целей луча
+/// отдельной целью: `CreateIcon` — единственное место, где список пополняется, так что «видно, а
+/// луч не ловит» (карточка Б50) здесь повториться не может. Когда луч ближе к центру урны, побеждает
+/// она; когда ближе к центру строки — выбирается сам объект (попадание берёт ближайшую цель).
+/// </summary>
+private void AddRowDeleteButton(int row)
+{
+    Transform target = StartObjectAt(row);
+    if (target == null) return;
+    string kind = startSection == KvXrStartSection.Tables ? "стол" : "робот";
+    Transform doomed = target;
+    CreateIcon("MenuDelete_" + row, "trash", "Удалить " + kind + " «" + NameOf(target) + "»",
+        RowDeleteCenter(row), delegate { DeleteObject(doomed, kind); }, false, null,
+        RowDeleteHalfSize.x * 2f, RowDeleteHalfSize.y * 2f, true);
+}
+
+/// <summary>
+/// УДАЛИТЬ СТОЛ ИЛИ РОБОТА ИЗ СЦЕНЫ (задача 7: «нельзя удалить стол или робота»).
+///
+/// ПОРЯДОК — И ПОЧЕМУ ИМЕННО ТАКОЙ:
+///   1) объект ВЫКЛЮЧАЕТСЯ до уничтожения: `Destroy` выполняется в конце кадра, а списки столов
+///      и роботов ищут ТОЛЬКО включённые объекты (`FindObjectsInactive.Exclude`). Без выключения
+///      удалённая строка осталась бы на панели до следующей пересборки — владелец нажал бы урну
+///      и не увидел бы, что объект удалён;
+///   2) уничтожается сам объект сцены: `Destroy` в игре, `DestroyImmediate` в проверках (там
+///      `Application.isPlaying` ложно, и `Destroy` в EditMode не сработал бы вовсе);
+///   3) сбрасывается выбор, если удалили именно его: номера строк после удаления сдвигаются, и
+///      «Свойства» показали бы ЧУЖОЙ объект по старому номеру;
+///   4) списки и панель пересобираются, в журнал уходит строка с числами — по ней видно, ЧТО
+///      удалено и сколько осталось («сделано» без строки в журнале не принимается).
+///
+/// ДЕРЕВО КОМПЬЮТЕРА ОБНОВИТСЯ САМО: оно строится из сцены и пересобирается по изменению подписи
+/// (автообновление включено по умолчанию), а уничтоженный объект в следующем кадре в сцену уже не
+/// входит — «мёртвой» строки в дереве не остаётся.
+/// </summary>
+private void DeleteObject(Transform target, string kind)
+{
+    if (target == null)
+    {
+        Debug.Log("[KvXr] УДАЛЕНИЕ: " + kind + " уже отсутствует — удалять нечего");
+        return;
+    }
+
+    string name = NameOf(target);
+    bool wasSelected = SelectedObject() == target;
+
+    target.gameObject.SetActive(false);
+    if (Application.isPlaying) Destroy(target.gameObject);
+    else DestroyImmediate(target.gameObject);
+
+    if (wasSelected) selectedObjectIndex = -1;
+    RefreshStartLists();
+    Rebuild();
+    Debug.Log("[KvXr] УДАЛЕНО: " + kind + " «" + name + "» · осталось столов " +
+              startTables.Count + " · роботов " + startRobots.Count);
 }
 
 /// <summary>ПЕРЕКЛЮЧИТЬ РАЗДЕЛ МЕНЮ; список справа перестраивается.</summary>
@@ -1682,7 +1808,9 @@ Debug.Log("[KvXr] МЕНЮ: выбран " + kind + " «" + NameOf(target) + "»
 private void CreateStartTable(KvXrStartRowAction action)
 {
             KvXrTableKind kind = action == KvXrStartRowAction.CreateAutoTable                ? KvXrTableKind.Auto : KvXrTableKind.Square;
-float reach = KvXrObjectFactory.ReachOf(KvXrObjectFactory.ActiveRobot());
+// ПУНКТ 8 ВЛАДЕЛЬЦА (02.11.2026): радиус автостола — от максимального вылета руки робота
+// (выбранного, затем активного, затем любого сценного), а не от габарита основания.
+float reach = KvXrObjectFactory.ReachForAutoTable(SelectedObject());
 Vector3 spot = KvXrObjectFactory.SpotInFrontOf(headCamera, KvXrObjectFactory.SpawnDistanceMeters);
 Vector3 eye = headCamera != null ? headCamera.transform.position : Vector3.zero;
 float yaw = KvXrObjectFactory.YawTowards(spot, eye);
@@ -1836,14 +1964,22 @@ CreateLabel("ScreenRow_" + drawn, list[i], new Vector2(0f, top - drawn * spacing
 private Text CreateLabel(string name, string text, Vector2 offsetMeters, int fontSize)
 {
             if (canvasRect == null) return null;
+
+            // ЗАДАЧА 6 («текст уменьшаем — очень большой»): размер подписи идёт через коэффициент
+            // `KvTheme.TextScale` (по умолчанию 0,45 — примерно в 2,2 раза мельче). Числа в вызовах
+            // ниже остаются ПРЕЖНИМИ: они означают РОЛЬ текста (заголовок 18, строка 17, подсказка
+            // 13), а не конечные пиксели. Поэтому одна настройка уменьшает вид всего интерфейса
+            // шлема, и видно, что именно уменьшено.
+            int size = KvTheme.ScaledText(fontSize);
+
 var go = new GameObject(name, typeof(RectTransform));
             go.transform.SetParent(canvasRect, false);
-            Text text2 = KvTheme.CreateText((RectTransform)go.transform, "Text", text, fontSize,                TextAnchor.MiddleCenter, KvTheme.TextMain);
+            Text text2 = KvTheme.CreateText((RectTransform)go.transform, "Text", text, size,                TextAnchor.MiddleCenter, KvTheme.TextMain);
             RectTransform rect = text2.rectTransform;
             rect.anchorMin = new Vector2(0.5f, 0.5f);
             rect.anchorMax = new Vector2(0.5f, 0.5f);
             rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.sizeDelta = new Vector2(canvasSize * 0.92f, fontSize * 1.6f);
+            rect.sizeDelta = new Vector2(canvasSize * 0.92f, size * 1.6f);
 float unit = Mathf.Max(0.0001f, metersPerCanvasUnit);
             rect.anchoredPosition = offsetMeters / unit;
             rows.Add(go);
@@ -2333,7 +2469,8 @@ float scale = Mathf.Max(0.0001f, metersPerCanvasUnit);
             canvasRect.localScale = new Vector3(scale, scale, scale);
 
 // Подпись — одна на всю панель, показывается по удержанию.
-label = KvTheme.CreateText(canvasRect, "PanelLabel", "", 30,                TextAnchor.MiddleCenter, KvTheme.TextMain);
+// ЗАДАЧА 6: размер подписи тоже идёт через коэффициент текста (было 30 px — это 7,5 см буквы).
+label = KvTheme.CreateText(canvasRect, "PanelLabel", "", KvTheme.ScaledText(30),                TextAnchor.MiddleCenter, KvTheme.TextMain);
             RectTransform lr = label.rectTransform;
             lr.anchorMin = new Vector2(0.5f, 0.5f);
             lr.anchorMax = new Vector2(0.5f, 0.5f);
@@ -2375,7 +2512,11 @@ ApplyRounded(bg, rounded);
             bg.raycastTarget = true;
 if (!string.IsNullOrEmpty(text))
 {
-                Text keyLabel = KvTheme.CreateText(rect, "Key", text,                    Mathf.Clamp(Mathf.RoundToInt(heightPx * 0.55f), 8, 22),                    TextAnchor.MiddleCenter, KvTheme.TextMain);
+                // ЗАДАЧА 6: подпись внутри кнопки уменьшается тем же коэффициентом, что и все
+                // подписи панели. Иначе текст на кнопках остался бы прежним и «уменьшение» было
+                // бы видно только на строках экранов.
+                int keySize = KvTheme.ScaledText(Mathf.Clamp(Mathf.RoundToInt(heightPx * 0.55f), 8, 22));
+                Text keyLabel = KvTheme.CreateText(rect, "Key", text, keySize,                    TextAnchor.MiddleCenter, KvTheme.TextMain);
                 keyLabel.raycastTarget = false;
                 keyLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
                 keyLabel.verticalOverflow = VerticalWrapMode.Truncate;

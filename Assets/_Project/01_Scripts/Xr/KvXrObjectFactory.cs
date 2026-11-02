@@ -23,39 +23,104 @@ namespace KazistovVvXr
         /// <summary>Расстояние от оператора до центра создаваемого стола, метры.</summary>
         public const float SpawnDistanceMeters = 1.20f;
 
-        /// <summary>Вылет руки робота, метры (по пивотам до TCP — та же формула, что у зон).</summary>
+        /// <summary>
+        /// Вылет руки робота, метры (по пивотам до TCP — та же формула, что у зон).
+        ///
+        /// ВАЖНО ПРО ВЫКЛЮЧЕННЫХ РОБОТОВ. В шлеме при запуске стенды погашены, и `Awake` у их роботов
+        /// мог не выполниться — тогда `jointTransforms` пусты, и вылет «получался» 0,05 м. Поэтому
+        /// при пустых полях суставы добираются тем же `PoseValidator`, что и зона достижимости
+        /// (одна логика поиска по именам Axis1…Axis6): вылет не зависит от того, включён робот или нет.
+        /// </summary>
         public static float ReachOf(RobotController robot)
         {
             if (robot == null) return KvReachMath.MinChainMeters;
 
             var six = robot as SixAxisController;
-            if (six != null && six.jointTransforms != null)
+            if (six != null)
             {
-                var pivots = new System.Collections.Generic.List<Vector3>();
-                for (int i = 0; i < six.jointTransforms.Length; i++)
-                    if (six.jointTransforms[i] != null) pivots.Add(six.jointTransforms[i].position);
-                Vector3 tcp = six.tcp != null ? six.tcp.position
-                            : (six.endEffector != null ? six.endEffector.position : robot.transform.position);
-                return KvReachMath.ChainLength(pivots.ToArray(), tcp);
+                if (six.jointTransforms == null || six.jointTransforms.Length == 0)
+                {
+                    // Тот же поиск суставов/TCP, что у зон: второго способа в проекте не заводим.
+                    var validator = new PoseValidator();
+                    validator.Init(robot);
+                }
+
+                if (six.jointTransforms != null)
+                {
+                    var pivots = new System.Collections.Generic.List<Vector3>();
+                    for (int i = 0; i < six.jointTransforms.Length; i++)
+                        if (six.jointTransforms[i] != null) pivots.Add(six.jointTransforms[i].position);
+                    Vector3 tcp = six.tcp != null ? six.tcp.position
+                                : (six.endEffector != null ? six.endEffector.position : robot.transform.position);
+                    return KvReachMath.ChainLength(pivots.ToArray(), tcp);
+                }
             }
 
             var scara = robot as SCARAController;
-            if (scara != null && scara.joint1 != null && scara.joint2 != null && scara.joint3 != null)
+            if (scara != null)
             {
-                var pivots = new[] { scara.joint1.position, scara.joint2.position, scara.joint3.position };
-                return KvReachMath.ChainLength(pivots, scara.joint3.position);
+                if (scara.joint1 == null || scara.joint2 == null || scara.joint3 == null)
+                {
+                    var validator = new PoseValidator();
+                    validator.Init(robot);
+                }
+
+                if (scara.joint1 != null && scara.joint2 != null && scara.joint3 != null)
+                {
+                    var pivots = new[] { scara.joint1.position, scara.joint2.position, scara.joint3.position };
+                    return KvReachMath.ChainLength(pivots, scara.joint3.position);
+                }
             }
 
             return KvReachMath.MinChainMeters;
         }
 
-        /// <summary>Первый активный робот сцены (тот, по вылету которого считается автостол).</summary>
+        /// <summary>Первый активный робот сцены (для имён в экранах и команд).</summary>
         public static RobotController ActiveRobot()
         {
             RobotController[] robots = Object.FindObjectsByType<RobotController>(FindObjectsInactive.Exclude);
             for (int i = 0; i < robots.Length; i++)
                 if (robots[i] != null && robots[i].isActiveAndEnabled) return robots[i];
             return robots.Length > 0 ? robots[0] : null;
+        }
+
+        /// <summary>
+        /// РОБОТ, ПО КОТОРОМУ СТРОИТСЯ АВТОСТОЛ (пункт 8 владельца, 02.11.2026).
+        /// Порядок выбора:
+        ///   1) робот, явно выбранный оператором в меню (если передан);
+        ///   2) активный робот сцены;
+        ///   3) ЛЮБОЙ робот сцены, включая выключенного: в шлеме при запуске пусто, сценные
+        ///      роботы погашены, но их вылет известен — берём САМЫЙ БОЛЬШОЙ.
+        /// Именно третий пункт не даёт автостолу стать размером с основание робота: раньше при пустой
+        /// сцене `ActiveRobot()` возвращал null, вылет падал до 0,05 м, и стол получался 0,15 м.
+        /// </summary>
+        public static RobotController RobotForAutoTable(Transform selected)
+        {
+            if (selected != null)
+            {
+                RobotController picked = selected.GetComponentInParent<RobotController>();
+                if (picked != null) return picked;
+            }
+
+            RobotController active = ActiveRobot();
+            if (active != null) return active;
+
+            RobotController[] all = Object.FindObjectsByType<RobotController>(FindObjectsInactive.Include);
+            float[] reaches = new float[all.Length];
+            for (int i = 0; i < all.Length; i++)
+                reaches[i] = all[i] != null ? ReachOf(all[i]) : 0f;
+
+            // Политика «берём самый большой вылет» живёт в KvReachMath и покрыта тестом.
+            float bestReach = KvReachMath.MaxReach(reaches);
+            for (int i = 0; i < all.Length; i++)
+                if (all[i] != null && Mathf.Abs(reaches[i] - bestReach) < 0.0001f) return all[i];
+            return null;
+        }
+
+        /// <summary>Вылет руки, от которого строится автостол (по правилу `RobotForAutoTable`).</summary>
+        public static float ReachForAutoTable(Transform selected)
+        {
+            return ReachOf(RobotForAutoTable(selected));
         }
 
         /// <summary>ТОЧКА ПЕРЕД ОПЕРАТОРОМ на полу (для создаваемого стола).</summary>

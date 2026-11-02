@@ -368,6 +368,29 @@ namespace KazistovVvXr
             // меню»). Раньше скрывался только случай «попал в кнопку», а на плите шарик оставался.
             bool stoppedOnInterface = realHit || limit < limitBeforeSurface - 0.0005f;
 
+            // ЛАЗЕР УПИРАЕТСЯ В МИР, А НЕ ПРОХОДИТ СКВОЗЬ НЕГО (пункт 2 владельца 02.11.2026:
+            // «лазеры … не упираются в роботов и столы и пол»).
+            //
+            // ЧТО БЫЛО И ПОЧЕМУ ВЛАДЕЛЕЦ ПРАВ. В §42 в `Aiming` действительно добавили
+            // `Physics.Raycast` — но основной луч в шлеме идёт НЕ через `Aiming`: при
+            // `useEventSystemFallback = false` (значение по умолчанию) кадр вызывает
+            // `AimAlongPanel`, а здесь физической проверки не было НИ ОДНОЙ. То есть правка §42
+            // исполнялась в мёртвой ветке, а живой луч по-прежнему заканчивался на
+            // `origin + direction * rayLength` — отсюда «длина 8,90 м» в журнале и луч сквозь стол,
+            // робота и пол. Второй луч (`KvXrSecondaryRay`) мир проверял, главный — нет; поэтому
+            // один луч упирался, а другой проходил насквозь.
+            //
+            // ЧТО СТАЛО. Здесь та же проверка, что у второго луча: берётся БЛИЖАЙШЕЕ из двух
+            // попаданий — интерфейс (кнопка или плита) либо геометрия сцены. Слой `IgnoreRaycast`
+            // (модели контроллеров, второй луч) исключён: иначе луч упирался бы в собственную руку
+            // на нуле метров и «не доходил» до робота.
+            Vector3 worldPoint = Vector3.zero;
+            string worldName = null;
+            bool worldHit = false;
+            if (!stoppedOnInterface)
+                worldHit = HitWorld(origin, direction, limit, out worldPoint, out worldName);
+            aimingAtWorld = worldHit;
+
             // ПЕРЕНОС ОКНА (указание владельца 24.10.2026): «перемещение окна должно осуществляться
             // либо за нажатие кнопки указательным пальцем при прицеле на ВЕРХНЮЮ часть окна, либо
             // нажатием средним пальцем при прицеле на ЛЮБУЮ точку окна».
@@ -386,26 +409,57 @@ namespace KazistovVvXr
             // из меню»). Над меню и окнами шарика нет: там и так видно подсветку кнопки, а шарик
             // закрывал бы её. Луч в интерфейсе заканчивается точно в точке касания — это же число
             // используется и для метки, поэтому они не могут разойтись.
-            float cursorDistance = KvXrCursor.RayLengthMeters(realHit, along, limit);
-            Vector3 cursorPoint = realHit ? hitPoint : origin + direction.normalized * cursorDistance;
+            //
+            // ДЛИНА СЧИТАЕТСЯ ПО БЛИЖАЙШЕМУ ПОПАДАНИЮ, а не «на всю длину»: правило вынесено в
+            // `KvXrLaserRay.EndMeters` и покрыто тестом — «упирается в робота/стол/пол» иначе
+            // проверялось бы только глазами в шлеме.
+            float worldDistance = worldHit ? Vector3.Distance(origin, worldPoint) : 0f;
+            bool plateHit = stoppedOnInterface && !realHit;
+            float cursorDistance = KvXrLaserRay.EndMeters(plateHit, along, worldHit, worldDistance, limit);
+            Vector3 cursorPoint = realHit
+                ? hitPoint
+                : origin + direction.normalized * cursorDistance;
 
             // ПРИ ПЕРЕНОСЕ ОКНА ЛАЗЕР СЛЕДИТ ЗА ПЕРЕМЕЩЕНИЕМ (указание владельца 24.10.2026: «надо,
             // чтобы лазер следил за перемещением»). Кончик луча едет вместе с той точкой окна, за
             // которую взяли: окно уехало на Δ — кончик уехал на то же Δ. В центр кнопки он при этом
             // не прыгает (предыдущее указание), поэтому «замороженная» точка — это точка ЗАХВАТА,
             // а не точка экрана.
-            if (windowDrag.Active) cursorPoint = windowDrag.CurrentPoint;
+            if (windowDrag.Active)
+            {
+                cursorPoint = windowDrag.CurrentPoint;
+                cursorDistance = Vector3.Distance(origin, cursorPoint);
+            }
+
+            // КОНЕЦ ЛУЧА — НАРУЖУ. По этой точке второй луч сводит свой красный/зелёный луч в ту же
+            // цель, как на компьютере (см. `KvXrSecondaryRay.TryHeadFallbackAim`). Иначе, когда
+            // контроллер второй руки не отслеживается, второй луч исчезал, и в шлеме оставался ОДИН
+            // цвет — ровно жалоба «лазеры не разноцветные».
+            RayEndPoint = cursorPoint;
 
             if (line != null)
             {
                 line.enabled = true;
                 line.SetPosition(0, origin);
                 line.SetPosition(1, cursorPoint);
-                line.startColor = KvXrLaserColors.Ray(KvXrInputSource.RayHand, aimingAtUi);
+
+                // ЦВЕТ ГОВОРИТ О ДЕЙСТВИИ (как Z/X на компьютере). Оттенок — по руке (правая зелёная,
+                // левая красная, `KvXrLaserColors`), а «на цели» он становится плотнее, когда луч
+                // попал в интерфейс ИЛИ в мир. Раньше в этом месте проверялся только интерфейс,
+                // поэтому о стол/робота луч упирался бы, но оставался бледным — владелец и говорил,
+                // что цвета «не как в ПК». Нажатый курок своей руки тоже зажигает лазер.
+                bool onTarget = aimingAtUi || aimingAtWorld ||
+                                KvXrFlowBridge.HandLaserHeld(KvXrInputSource.RayHand);
+                line.startColor = KvXrLaserColors.Ray(KvXrInputSource.RayHand, onTarget);
                 line.endColor = line.startColor;
             }
 
-            UpdateCursor(cursorPoint, KvXrCursor.State(!stoppedOnInterface, false));
+            UpdateCursor(cursorPoint, KvXrCursor.State(!stoppedOnInterface || worldHit, false));
+
+            // СТРОКА-ДОКАЗАТЕЛЬСТВО «УПЁРСЯ В МИР» — только при смене цели, чтобы не засорять журнал
+            // на 90 кадров в секунду. Без неё проверка «луч упирается в робота/стол/пол» снова была
+            // бы только на глаз — а правило проекта: пункт без строки журнала считается непроверенным.
+            LogLaserTarget(worldHit, worldName, cursorDistance, stoppedOnInterface);
 
             // НАВЕДЕНИЕ: меняем цель только при смене иконки — иначе журнал утонул бы. Во время
             // переноса окна подсветка не перескакивает (см. заморозку метки выше).
@@ -652,6 +706,9 @@ namespace KazistovVvXr
                 aimingAtWorld = false;
             }
 
+            // Точка конца — наружу: второй луч сводит к ней свой луч (как на ПК).
+            RayEndPoint = endPoint;
+
             if (line != null)
             {
                 line.enabled = true;
@@ -707,13 +764,42 @@ namespace KazistovVvXr
         /// <summary>Луч попал в геометрию сцены (стол, робот, пол, стена).</summary>
         public bool AimingAtWorld { get { return aimingAtWorld; } }
 
+        /// <summary>
+        /// ТОЧКА, В КОТОРОЙ СЕЙЧАС ЗАКАНЧИВАЕТСЯ ЛУЧ (интерфейс, мир или полная длина).
+        ///
+        /// ЗАЧЕМ НАРУЖУ. Второй луч (`KvXrSecondaryRay`) на компьютере сходится с основным в одной
+        /// точке. В шлеме, когда контроллер второй руки не отслеживается, свести свой луч было
+        /// некуда, и он просто исчезал — в шлеме оставался один цвет. Теперь второй луч берёт эту
+        /// точку и идёт в неё от своего плеча, как на ПК (пункт 2 владельца 02.11.2026).
+        /// </summary>
+        public Vector3 RayEndPoint { get; private set; }
+
+        /// <summary>Луч нарисован в этом кадре (нужно второму лучу: без основного сведения нет).</summary>
+        public bool RayVisible { get { return line != null && line.enabled; } }
+
         private bool aimingAtWorld;
         private string worldName;
 
-        /// <summary>БЛИЖАЙШАЯ ГЕОМЕТРИЯ ПОД ЛУЧОМ: точка попадания в метрах от руки.</summary>
+        /// <summary>Имя последней цели, в которую упёрся ОСНОВНОЙ луч (журнал, без спама каждый кадр).</summary>
+        private string lastLaserTargetName;
+
+        /// <summary>БЛИЖАЙШАЯ ГЕОМЕТРИЯ ПОД ЛУЧОМ: точка попадания и имя объекта.</summary>
         private bool HitWorld(Vector3 origin, Vector3 direction, float maxDistance, out Vector3 point)
         {
+            string ignored;
+            return HitWorld(origin, direction, maxDistance, out point, out ignored);
+        }
+
+        /// <summary>
+        /// БЛИЖАЙШАЯ ГЕОМЕТРИЯ ПОД ЛУЧОМ: точка попадания и имя объекта (для строки журнала).
+        /// Имя берётся с коллайдера — по нему владелец видит в журнале, во что именно упёрся луч:
+        /// «Стенд_1», «Стол», «XrFloor», а не абстрактное «попадание есть».
+        /// </summary>
+        private bool HitWorld(Vector3 origin, Vector3 direction, float maxDistance, out Vector3 point,
+                              out string name)
+        {
             point = origin;
+            name = null;
 
             int mask = ~(1 << KvXrControllerVisuals.IgnoreRaycastLayer);
             RaycastHit hit;
@@ -722,7 +808,31 @@ namespace KazistovVvXr
                 return false;
 
             point = hit.point;
+            name = hit.collider != null ? hit.collider.name : "без имени";
             return true;
+        }
+
+        /// <summary>
+        /// СТРОКА «ЛАЗЕР УПЁРСЯ» (пункт 2 владельца 02.11.2026). Пишется ТОЛЬКО при смене цели:
+        /// на 90 кадрах в секунду безусловный `Debug.Log` засорил бы журнал и стоил бы кадрового
+        /// бюджета (правило §44 — строки в кадровом коде только под условием).
+        /// </summary>
+        private void LogLaserTarget(bool hit, string name, float distance, bool overInterface)
+        {
+            string current = hit ? name : null;
+            if (current == lastLaserTargetName) return;
+            lastLaserTargetName = current;
+
+            if (hit)
+            {
+                Debug.Log("[KvXr] ЛАЗЕР: упёрся в «" + name + "» на " +
+                          distance.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) +
+                          " м · " + KvXrLaserColors.Label(KvXrInputSource.RayHand) + " луч");
+            }
+            else if (!overInterface)
+            {
+                Debug.Log("[KvXr] ЛАЗЕР: перед лучом препятствий нет — идёт на полную длину");
+            }
         }
 
         /// <summary>

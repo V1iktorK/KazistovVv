@@ -48,6 +48,56 @@ namespace KazistovVvXr
         /// <summary>ПЕРЕНОС ОКНА ВТОРОЙ РУКОЙ — тот же механизм, что у основного луча.</summary>
         private readonly KvXrWindowDrag windowDrag = new KvXrWindowDrag();
 
+        /// <summary>Основной луч: у него берётся точка, куда свести второй луч при резервном пути.</summary>
+        private KvXrUiPointer mainPointer;
+
+        /// <summary>Смещение резервной «руки» вбок от камеры, метры (на ПК — `laserHandOffset` 0,35).</summary>
+        private const float FallbackHandOffsetMeters = 0.30f;
+
+        /// <summary>Опускание резервной «руки» от камеры, метры (на ПК — `laserDownOffset` 0,15).</summary>
+        private const float FallbackDownOffsetMeters = 0.12f;
+
+        /// <summary>
+        /// РЕЗЕРВНАЯ ТОЧКА ВТОРОГО ЛУЧА, КОГДА ВТОРОЙ КОНТРОЛЛЕР НЕ ОТСЛЕЖИВАЕТСЯ.
+        ///
+        /// На компьютере луч всегда начинается из `camera ± right*0.35 − up*0.15` и сходится с
+        /// другим лучом в точке прицела. Здесь то же самое, только цель берётся у основного луча
+        /// (`KvXrUiPointer.RayEndPoint`): так в шлеме ВСЕГДА видно два цвета, даже когда вторая рука
+        /// не подхватилась, и лучи сходятся, а не идут параллельно.
+        ///
+        /// Возвращает false, если основного луча нет: второй луч без цели не рисуется.
+        /// </summary>
+        private bool TryHeadFallbackAim(out Vector3 origin, out Vector3 target)
+        {
+            origin = Vector3.zero;
+            target = Vector3.zero;
+
+            // Поиск кэшируется: `FindAnyObjectByType` каждый кадр — та же ошибка, что была с
+            // `Camera.main` в этом файле (§44, `KvXrFrameBudgetTests`).
+            if (mainPointer == null) mainPointer = Object.FindAnyObjectByType<KvXrUiPointer>();
+            if (mainPointer == null || !mainPointer.RayVisible) return false;
+
+            Camera camera = headCamera != null ? headCamera : Camera.main;
+            if (camera == null) return false;
+
+            float side = SourceHand == KvXrQuickHand.Left ? -1f : 1f;
+            origin = camera.transform.position
+                     + camera.transform.right * (side * FallbackHandOffsetMeters)
+                     - camera.transform.up * FallbackDownOffsetMeters;
+            target = mainPointer.RayEndPoint;
+
+            // Слишком близко — сведение выродилось бы в точку и луч «мигнул».
+            //
+            // ОТСЕВ НЕЧИСЛА (класс E-21): поза камеры и точка основного луча приходят из XR-рантайма,
+            // при потере отслеживания там возможен NaN. Сравнение `sqrMagnitude > …` для NaN всегда
+            // false и ПРОПУСТИЛО бы мусор вместо отбраковки — сначала проверяем числа, потом длину.
+            Vector3 delta = target - origin;
+            if (float.IsNaN(delta.x) || float.IsNaN(delta.y) || float.IsNaN(delta.z) ||
+                float.IsInfinity(delta.x) || float.IsInfinity(delta.y) || float.IsInfinity(delta.z))
+                return false;
+            return delta.sqrMagnitude > 1e-4f;
+        }
+
         /// <summary>Длина второго луча в этом кадре (для журнала и отчёта).</summary>
         public float CurrentLength { get; private set; }
 
@@ -104,14 +154,36 @@ namespace KazistovVvXr
             Vector3 origin;
             Quaternion rotation;
             bool hasPose = KvXrInputSource.TryAimPose(SourceHand, out origin, out rotation);
+
+            // РЕЗЕРВНЫЙ ЛУЧ — КАК НА КОМПЬЮТЕРЕ (пункт 2 владельца 02.11.2026: «лазеры не
+            // разноцветные как на ПК версии»).
+            //
+            // ЧТО БЫЛО. Если у второй руки нет позы (контроллер спит, отслеживается только рука
+            // луча, контроллеров нет вовсе), второй луч просто ИСЧЕЗАЛ. В шлеме оставался один
+            // луч одного цвета — владелец так и видел «лазеры не разноцветные». На компьютере
+            // такой проблемы нет: оба луча всегда начинаются из смещений от камеры, даже если рук
+            // в кадре нет.
+            //
+            // ЧТО СТАЛО. Если своей позы нет, но основной луч нарисован, второй идёт из резервной
+            // точки у плеча (как `laserHandOffset`/`laserDownOffset` на ПК) В ТУ ЖЕ ТОЧКУ, где
+            // закончился основной луч. Так красный и зелёный сходятся в одной цели, как на ПК.
+            // Если основного луча нет — по-прежнему прячемся: рисовать луч «в пустоту» нельзя.
+            bool headFallback = false;
+            Vector3 fallbackTarget = Vector3.zero;
             if (!hasPose)
             {
-                if (line != null) line.enabled = false;
-                if (marker != null && marker.gameObject.activeSelf) marker.gameObject.SetActive(false);
-                return;
+                if (!TryHeadFallbackAim(out origin, out fallbackTarget))
+                {
+                    if (line != null) line.enabled = false;
+                    if (marker != null && marker.gameObject.activeSelf) marker.gameObject.SetActive(false);
+                    return;
+                }
+                headFallback = true;
             }
 
-            Vector3 direction = rotation * Vector3.forward;
+            Vector3 direction = headFallback
+                ? (fallbackTarget - origin).normalized
+                : rotation * Vector3.forward;
 
             // Наведение СЧИТАЕТСЯ, но НЕ НАЖИМАЕТ: панель отвечает на номер иконки, а нажатия здесь
             // нет вовсе — `KvXrSecondaryRayLogic.CanPress()` всегда false.
@@ -242,27 +314,39 @@ namespace KazistovVvXr
                 // НЕ на интерфейсе и окно не несут.
                 bool showMarker = panel == null && !dragging;
                 if (marker.gameObject.activeSelf != showMarker) marker.gameObject.SetActive(showMarker);
-                if (!showMarker) return;
-                marker.position = end;
 
-                // КАМЕРА БЕРЁТСЯ ИЗ КЭША, А НЕ ЧЕРЕЗ `Camera.main` КАЖДЫЙ КАДР (исправлено
-                // 30.10.2026, S44).
+                // ЦВЕТ ЛУЧА ОБНОВЛЯЕТСЯ И ТОГДА, КОГДА ШАРИК СКРЫТ (исправлено 02.11.2026).
                 //
-                // ЧТО БЫЛО. `Camera.main` — это НЕ свойство, а ПОИСК по тегу `MainCamera` среди
-                // всех камер сцены. Вызов стоял внутри `Update`, то есть выполнялся на каждом
-                // кадре: в шлеме это 90 раз в секунду. В этом проекте камер несколько (вид сверху,
-                // сбоку, от первого лица), поэтому поиск небесплатен, и его цена попадает прямо в
-                // бюджет кадра.
-                //
-                // ЧТО СТАЛО. Камера ищется один раз, а результат ЗАПОМИНАЕТСЯ в то же поле, что
-                // заполняет `Start`. После первого кадра поиска нет вовсе.
-                if (headCamera == null) headCamera = Camera.main;
-                Camera camera = headCamera;
-                if (camera != null)
+                // ЧТО БЫЛО. Здесь стоял `if (!showMarker) return;` — ранний выход из всего `Update`.
+                // Шарик скрыт всегда, когда луч над панелью/иконкой или несут окно, поэтому именно
+                // в этих состояниях строка ниже (`startColor`/`endColor`) НЕ выполнялась. Луч
+                // оставался цвета прошлого кадра, а на первом кадре — белым по умолчанию материала.
+                // Владелец видел «не разноцветные лазеры» ровно тогда, когда наводил на интерфейс.
+                // Ранний `return` в середине метода — тот же класс дефекта, что E-08/5.18: он молча
+                // выключает половину того, что должно было выполниться.
+                if (showMarker)
                 {
-                    Vector3 toEye = camera.transform.position - end;
-                    if (toEye.sqrMagnitude > 0.0001f)
-                        marker.rotation = Quaternion.LookRotation(toEye.normalized, camera.transform.up);
+                    marker.position = end;
+
+                    // КАМЕРА БЕРЁТСЯ ИЗ КЭША, А НЕ ЧЕРЕЗ `Camera.main` КАЖДЫЙ КАДР (исправлено
+                    // 30.10.2026, S44).
+                    //
+                    // ЧТО БЫЛО. `Camera.main` — это НЕ свойство, а ПОИСК по тегу `MainCamera` среди
+                    // всех камер сцены. Вызов стоял внутри `Update`, то есть выполнялся на каждом
+                    // кадре: в шлеме это 90 раз в секунду. В этом проекте камер несколько (вид сверху,
+                    // сбоку, от первого лица), поэтому поиск небесплатен, и его цена попадает прямо в
+                    // бюджет кадра.
+                    //
+                    // ЧТО СТАЛО. Камера ищется один раз, а результат ЗАПОМИНАЕТСЯ в то же поле, что
+                    // заполняет `Start`. После первого кадра поиска нет вовсе.
+                    if (headCamera == null) headCamera = Camera.main;
+                    Camera camera = headCamera;
+                    if (camera != null)
+                    {
+                        Vector3 toEye = camera.transform.position - end;
+                        if (toEye.sqrMagnitude > 0.0001f)
+                            marker.rotation = Quaternion.LookRotation(toEye.normalized, camera.transform.up);
+                    }
                 }
             }
 
@@ -277,14 +361,19 @@ namespace KazistovVvXr
                           "длина " + CurrentLength.ToString("0.00") + " м");
             }
 
-            // ЦВЕТ — РУКИ, КОТОРОЙ ПРИНАДЛЕЖИТ ВТОРОЙ ЛУЧ (§41, указание владельца: «перекрасим лазер
-            // правого и левого контроллеров как в комп версии»). Это рука, ПРОТИВОПОЛОЖНАЯ лучу
-            // нажатия: если нажимает правая (зелёный), второй луч — левый (красный), и наоборот.
-            // Наведение делает тот же цвет чуть ярче — цвет руки не подменяется.
             if (line != null && material != null)
             {
-                Color color = KvXrLaserColors.Ray(
-                    KvXrLaserColors.Opposite(KvXrInputSource.RayHand), overIcon);
+                // ЦВЕТ — РУКИ, КОТОРОЙ ПРИНАДЛЕЖИТ ВТОРОЙ ЛУЧ (§41, указание владельца: «перекрасим
+                // лазер правого и левого контроллеров как в комп версии»). Это рука, ПРОТИВОПОЛОЖНАЯ
+                // лучу нажатия: если нажимает правая (зелёный), второй луч — левый (красный).
+                //
+                // НАВЕДЕНИЕ И НАЖАТЫЙ КУРОК ДЕЛАЮТ ТОТ ЖЕ ЦВЕТ ПЛОТНЕЕ, но не подменяют его: цвет
+                // руки — это и есть «красный/зелёный лазер», как на компьютере (Z — красный,
+                // X — зелёный). Курок второй руки зажигает именно её луч — владелец видит, каким
+                // лазером работает.
+                KvXrQuickHand hand = KvXrLaserColors.Opposite(KvXrInputSource.RayHand);
+                bool onTarget = overIcon || aimingAtWorld || KvXrFlowBridge.HandLaserHeld(hand);
+                Color color = KvXrLaserColors.Ray(hand, onTarget);
                 line.startColor = color;
                 line.endColor = color;
             }

@@ -965,6 +965,26 @@ namespace TrajectoryCore
         /// HideInHierarchy ставятся на копию и всех потомков, материалы делаются
         /// бирюзовыми полупрозрачными («рентген», ZTest Always).
         /// </summary>
+        /// <summary>
+        /// ЖУРНАЛ ФАНТОМОВ (добавлено 02.11.2026 по жалобе владельца, пункт 3).
+        ///
+        /// СЛОВА ВЛАДЕЛЬЦА: «после достижения роботом последнего положения начальный робот не
+        /// пропадает (может я добавлял по 2-3 робота и из-за этого он не пропадал — не исключено,
+        /// посмотри по логам)».
+        ///
+        /// ПОЧЕМУ ПОНАДОБИЛОСЬ. Проверка журнала шлема 02.11.2026 показала: в 27 705 строках НЕ БЫЛО
+        /// ни одной строки про фантомы. То есть по логам нельзя было ответить даже на вопрос
+        /// «сколько их создано», не говоря уже о «почему не исчез».
+        ///
+        /// ЧТО ПИШЕТ: создание (с номером и позой), удаление (с числом удалённых), и состояние
+        /// «сколько живых, сколько доехало». Хватает, чтобы увидеть: фантом исчез или остался,
+        /// и сколько их было.
+        ///
+        /// ПОЧЕМУ НЕ ВСЕГДА: строка на каждый кадр засорила бы журнал. Пишем только при событиях
+        /// (создание/удаление) и итог после уборки.
+        /// </summary>
+        public static bool logLifecycle = true;
+
         private GameObject CreateGhost(PhantomConfig cfg, int index)
         {
             // Копия создаётся «тихим» Instantiate, но её Awake (RobotController → RobotInventory.Guard)
@@ -981,6 +1001,14 @@ namespace TrajectoryCore
             // записью в редакторе (виден в Hierarchy, поиском по сцене не находится).
             ghost.hideFlags = GhostHideFlags;
             ghost.transform.SetParent(root, false);
+
+            if (logLifecycle)
+            {
+                Debug.Log("[Phantom] создан Phantom_" + index +
+                          " · поза " + ghost.transform.position.ToString("0.00") +
+                          " · всего живых: " + (configs.Count + 1) +
+                          " · шаблон: " + (template != null ? template.robotName : "НЕТ"));
+            }
             ghost.transform.position = template.transform.position;
             ghost.transform.rotation = template.transform.rotation;
             ghost.transform.localScale = Vector3.one;
@@ -1059,6 +1087,11 @@ namespace TrajectoryCore
 
         private void DestroyGhosts(bool sweepScene)
         {
+            // ДИАГНОСТИКА (02.11.2026, пункт 3 владельца): сколько убираем и что осталось.
+            // Без этих чисел вопрос «фантом не пропал» решался гаданием.
+            int registered = configs.Count;
+            int inContainer = root != null ? root.childCount : 0;
+
             for (int i = 0; i < configs.Count; i++) KillGhost(configs[i].ghost);
 
             if (root != null)
@@ -1075,6 +1108,37 @@ namespace TrajectoryCore
 
             ClearLists();
             lastHighlight = -2;
+
+            if (logLifecycle && (registered > 0 || inContainer > 0))
+            {
+                // Сколько осиротевших копий осталось в сцене ПОСЛЕ уборки. Если больше нуля —
+                // значит какая-то копия живёт вне контейнера, и её никто не удаляет.
+                int leftoverInScene = CountPhantomsInScene();
+                Debug.Log("[Phantom] уборка: снято с учёта " + registered +
+                          " · было в контейнере " + inContainer +
+                          " · осталось в сцене " + leftoverInScene +
+                          (leftoverInScene > 0 ? "  ⚠ ОСТАЛИСЬ НЕУБРАННЫЕ" : ""));
+            }
+        }
+
+        /// <summary>
+        /// СКОЛЬКО ФАНТОМОВ ОСТАЛОСЬ В СЦЕНЕ (для диагностики, 02.11.2026).
+        ///
+        /// Ищем по ИМЕНИ (`Phantom_*`) и по контейнеру `Phantoms`, в том числе неактивные.
+        /// Нужно, чтобы отличить две разные причины «фантом не пропал»:
+        ///   • осталось 0, но оператор видит робота → он видит НЕ фантом (другая модель);
+        ///   • осталось больше 0 → уборка не находит часть копий.
+        /// </summary>
+        public static int CountPhantomsInScene()
+        {
+            int count = 0;
+            foreach (Transform t in UnityEngine.Object.FindObjectsByType<Transform>(
+                         FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                if (t == null) continue;
+                if (t.name.StartsWith("Phantom_") || t.name == "Phantoms") count++;
+            }
+            return count;
         }
 
         /// <summary>

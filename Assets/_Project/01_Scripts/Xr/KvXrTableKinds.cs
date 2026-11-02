@@ -13,13 +13,19 @@ namespace KazistovVvXr
     /// 14,4 × 9,6. Владелец решил подогнать виртуальный стол под РЕАЛЬНЫЙ 100 × 70 см (10:7),
     /// поэтому глубина стола стала 10,08 м, а проекция — 0,504 м. Пропорция сохранена точно:
     /// 0,72 / 0,504 = 10/7, как и 14,4 / 10,08.
+    ///
+    /// ИЗМЕНЕНИЕ 02.11.2026 (пункт 8 владельца). Радиус автостола больше НЕ умножается на 0,95:
+    /// он равен ПОЛНОМУ вылету руки + 0,10 м. Прежний коэффициент делал стол уже максимально
+    /// достигаемой точки 6-осевого робота (0,95 × 2,368 + 0,10 = 2,3496 м &lt; 2,368 м), а владелец
+    /// требует: «он должен быть … шире его максимально достигаемой точки».
     /// </summary>
     public static class KvXrTableKinds
     {
         public const float SquareWidth = 0.72f;      // 14,4 / 20
         public const float SquareDepth = 0.504f;     // 10,08 / 20 — обновлено 01.11.2026 (пропорция 10:7)
         public const float TopHeight = TrajectoryCore.StandBuilder.TopHeight;
-        public const float AutoReachFactor = 0.95f;
+
+        /// <summary>Запас автостола за кромкой рабочей зоны, метры (радиус = вылет + запас).</summary>
         public const float AutoMarginMeters = 0.10f;
 
         /// <summary>Толщина столешницы создаваемого стола, метры (как у стендов ПК).</summary>
@@ -31,7 +37,7 @@ namespace KazistovVvXr
             get { return Mathf.Sqrt(SquareWidth * SquareWidth + SquareDepth * SquareDepth); }
         }
 
-        /// <summary>Радиус стола: у квадратного — половина диагонали, у авто — по вылету руки.</summary>
+        /// <summary>Радиус стола: у квадратного — половина диагонали, у авто — по полному вылету руки.</summary>
         public static float Radius(KvXrTableKind kind, float robotReachMeters)
         {
             if (kind == KvXrTableKind.Square) return SquareDiagonal * 0.5f;
@@ -55,8 +61,8 @@ namespace KazistovVvXr
 
             float radius = KvReachMath.AutoRadius(robotReachMeters);
             return string.Format(System.Globalization.CultureInfo.InvariantCulture,
-                "[KvXr] СТОЛ: авторадиус {0:0.00} м = {1:0.00} × вылета {2:0.00} м + {3:0.00} м",
-                radius, AutoReachFactor, robotReachMeters, AutoMarginMeters);
+                "[KvXr] СТОЛ: авторадиус {0:0.00} м = полный вылет {1:0.00} м + запас {2:0.00} м (стол шире рабочей зоны)",
+                radius, robotReachMeters, AutoMarginMeters);
         }
     }
 }
