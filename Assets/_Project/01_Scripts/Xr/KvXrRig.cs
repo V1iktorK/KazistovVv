@@ -35,6 +35,17 @@ namespace KazistovVvXr
         /// <summary>Резервный масштаб разрешения глаза при низком пресете (1 — без изменений).</summary>
         public float eyeTextureResolutionScale = 1f;
 
+        /// <summary>
+        /// СКОЛЬКО ЖДАТЬ ГОТОВНОСТИ XR ПЕРЕД ОПРЕДЕЛЕНИЕМ РЕЖИМА, секунды (S45).
+        ///
+        /// ЗАЧЕМ. На первом запуске PICO показывает системный диалог разрешений; пока он открыт,
+        /// приложение на паузе и XR не активен. Если определить режим в этот момент, получится
+        /// «сквозной вид НЕТ» при выданном расширении — и приложение навсегда останется в VR.
+        /// Десяти секунд хватает и на диалог, и на подъём подсистемы; если XR так и не поднялся —
+        /// режим VR и честная строка в журнале.
+        /// </summary>
+        public float modeDetectionTimeoutSeconds = 12f;
+
         /// <summary>OpenXR найден и активен.</summary>
         public bool OpenXrActive { get; private set; }
 
@@ -117,39 +128,49 @@ namespace KazistovVvXr
 
         void Start()
         {
-            // 30.10.2026 (S44): РЕЖИМ РАБОТЫ ОПРЕДЕЛЯЕТСЯ ЗДЕСЬ И ОДИН РАЗ.
-            //
-            // До этого приложение всегда строило виртуальную лабораторию, а сквозной вид считался
-            // украшением. Для MR/AR это неверно: у них другие опоры, другой масштаб и другие
-            // состояния. Режим вычисляется по ФАКТИЧЕСКИМ возможностям устройства (а не по названию
-            // шлема: оператор мог выключить сквозной вид в настройках) и печатается одной строкой.
-            // Если возможностей MR нет — приложение честно становится VR и говорит это, а не
-            // показывает серый экран.
-            KvXrCapabilities.Answer passthrough = KvXrCapabilities.Passthrough();
-            KvXrCapabilities.Answer anchors = KvXrCapabilities.SpatialAnchors();
-            KvXrCapabilities.Answer camera = KvXrCapabilities.Camera();
-
-            KvXrPlatformModeSelector.Apply(
-                passthroughAvailable: KvXrCapabilities.IsYes(passthrough),
-                spatialAnchorsAvailable: KvXrCapabilities.IsYes(anchors),
-                cameraAvailable: KvXrCapabilities.IsYes(camera));
-
-            // СТРОКА О ВОЗМОЖНОСТЯХ — ОТДЕЛЬНО ОТ СТРОКИ О РЕЖИМЕ (30.10.2026).
-            //
-            // Разница важна наладчику: «режим VR» может значить и «устройство не умеет», и
-            // «мы не смогли спросить». Без этой строки обе ситуации выглядели бы одинаково.
-            Debug.Log("[KvXr] " + KvXrCapabilities.Describe(passthrough, anchors, camera));
-
             // §37: ЧТО ЖИВЁТ ТОЛЬКО В РАНТАЙМЕ. Модели контроллеров и исполнитель жестов создаются
             // ЗДЕСЬ, а не лежат в сцене: файл XrMain.unity не правится вовсе, поэтому принятое в
             // §35–§36 не может сломаться от правки сцены. Оба вызова идемпотентны.
             EnsureRuntimeComponents();
 
-            if (!logOnStart) return;
-            Debug.Log("[KvXr] " + Status);
-            Debug.Log("[KvXr] " + KvXrInputSource.Describe());
-            Debug.Log("[KvXr] " + KvXrSettings.BuildRigConfig().Describe());
-            Debug.Log("[KvXr] " + KvXrSettings.DescribePointer());
+            if (logOnStart)
+            {
+                Debug.Log("[KvXr] " + Status);
+                Debug.Log("[KvXr] " + KvXrInputSource.Describe());
+                Debug.Log("[KvXr] " + KvXrSettings.BuildRigConfig().Describe());
+                Debug.Log("[KvXr] " + KvXrSettings.DescribePointer());
+            }
+
+            // 02.11.2026 (S45): РЕЖИМ ОПРЕДЕЛЯЕТСЯ ПОСЛЕ ГОТОВНОСТИ XR, А НЕ «НА ПЕРВОМ КАДРЕ».
+            //
+            // НАЙДЕНО НА ЖИВОМ ШЛЕМЕ. На первом запуске PICO показывает системный диалог
+            // разрешений. Пока он открыт, приложение на паузе, а `XRSettings.isDeviceActive` —
+            // ЛОЖЬ. Проба, выполненная в этот момент, честно отвечала «сквозной вид НЕТ», и режим
+            // навсегда оставался VR: оператор нажимал «Разрешить», возвращался в приложение — и
+            // видел виртуальную лабораторию, хотя шлем умеет MR (журнал 02.11.2026: строка
+            // «РЕЖИМ: ВИРТУАЛЬНАЯ РЕАЛЬНОСТЬ … сквозной вид НЕТ» при выданном XR_FB_passthrough).
+            //
+            // Поэтому проба ждёт, пока XR реально поднимется (после диалога/паузы), и только потом
+            // решает режим. Ожидание ограничено: если XR не поднялся — режим VR, честная строка.
+            StartCoroutine(DetectModeWhenXrReady());
+        }
+
+        /// <summary>
+        /// ОПРЕДЕЛИТЬ РЕЖИМ, КОГДА XR ГОТОВ. Ждёт `XrRunning` не дольше `modeDetectionTimeoutSeconds`:
+        /// системный диалог разрешений ставит приложение на паузу, и проба до него бессмысленна.
+        /// </summary>
+        private System.Collections.IEnumerator DetectModeWhenXrReady()
+        {
+            float deadline = Time.unscaledTime + Mathf.Max(1f, modeDetectionTimeoutSeconds);
+            while (!KvXrCapabilities.XrRunning && Time.unscaledTime < deadline)
+                yield return null;
+
+            KvXrPlatformModeSelector.EnsureApplied();
+
+            if (!logOnStart) yield break;
+            Debug.Log("[KvXr] режим определён после готовности XR: " +
+                      (KvXrCapabilities.XrRunning ? "XR активен" : "XR НЕ активен за " +
+                       modeDetectionTimeoutSeconds.ToString("0") + " с"));
         }
 
         /// <summary>

@@ -38,8 +38,15 @@ namespace KazistovVvXr
         /// <summary>Через сколько секунд после старта MR искать поверхность для автопостановки.</summary>
         public float autoPlaceDelaySeconds = 3f;
 
-        /// <summary>Через сколько секунд, если реальных поверхностей нет, ставить робота на пол (запасной путь).</summary>
-        public float fallbackFloorDelaySeconds = 12f;
+        /// <summary>Как часто повторять попытку автопостановки на реальную поверхность, секунды.</summary>
+        public float autoPlaceRetrySeconds = 4f;
+
+        /// <summary>
+        /// Через сколько секунд, если реальных поверхностей нет, ставить робота на пол (запасной
+        /// путь). 25 секунд, а не 12: меш комнаты на PICO появляется не мгновенно, и поспешный
+        /// «пол вместо стола» выглядел бы как дефект постановки.
+        /// </summary>
+        public float fallbackFloorDelaySeconds = 25f;
 
         /// <summary>Камера оператора (нужна для направления «лицом к оператору» и запасного луча).</summary>
         public Camera headCamera;
@@ -88,8 +95,9 @@ namespace KazistovVvXr
         private Vector3 hitPoint;
         private Vector3 hitNormal;
         private float startedAt;
-        private bool autoPlaceTried;
+        private float nextAutoTry;
         private bool fallbackTried;
+        private bool placedFromFallback;
         private bool warnedNoSurface;
         private bool aWasDown;
 
@@ -168,16 +176,24 @@ namespace KazistovVvXr
 
             UpdateAim();
 
+            float elapsed = Time.unscaledTime - startedAt;
+
             // АВТОПОСТАНОВКА: без неё в MR было бы «пусто и непонятно, что делать».
-            if (!Placed && !autoPlaceTried && Time.unscaledTime - startedAt >= autoPlaceDelaySeconds)
+            //
+            // ПОЧЕМУ ПОВТОРЯЕМ, А НЕ ОДИН РАЗ (найдено на устройстве 02.11.2026): меш комнаты на
+            // PICO появляется не мгновенно (а если шлем только что надели — и вовсе через несколько
+            // секунд). Однократная попытка через 3 с давала «поверхность не найдена» и оставляла
+            // робота на полу. Теперь попытка повторяется, пока оператор не подтвердил точку.
+            if (!PlacedByOperator && elapsed >= nextAutoTry)
             {
-                autoPlaceTried = true;
+                nextAutoTry = elapsed + Mathf.Max(1f, autoPlaceRetrySeconds);
                 TryAutoPlace();
             }
 
             // ЗАПАСНОЙ ПУТЬ: реальных поверхностей нет — ставим робота на пол перед оператором,
-            // но говорим об этом прямо, а не делаем вид, что стол найден.
-            if (!Placed && !fallbackTried && Time.unscaledTime - startedAt >= fallbackFloorDelaySeconds)
+            // но говорим об этом прямо, а не делаем вид, что стол найден. Если поверхности появятся
+            // позже, постановка с пола будет перенесена на стол (см. TryAutoPlace).
+            if (!Placed && !fallbackTried && elapsed >= fallbackFloorDelaySeconds)
             {
                 fallbackTried = true;
                 PlaceFallbackOnFloor();
@@ -322,8 +338,13 @@ namespace KazistovVvXr
                 }
             }
 
-            Debug.Log("[KvMr] автопостановка: реальная горизонтальная поверхность перед оператором не найдена — " +
-                      "жду подтверждения (наведите луч на стол и нажмите A)");
+            if (!warnedNoSurface)
+            {
+                warnedNoSurface = true;
+                Debug.Log("[KvMr] автопостановка: реальная горизонтальная поверхность перед оператором " +
+                          "пока не найдена — повторяю попытку каждые " + autoPlaceRetrySeconds.ToString("0") +
+                          " с · можно навести луч на стол и нажать A");
+            }
         }
 
         /// <summary>Запасной путь: реальных поверхностей нет — робот на полу в 1,2 м перед оператором.</summary>
@@ -343,8 +364,10 @@ namespace KazistovVvXr
             point.y = 0f;
             Place(point, Vector3.up, "запасной путь: реальных поверхностей нет, пол перед оператором");
             Debug.LogWarning("[KvMr] реальные поверхности не появились — робот поставлен на ПОЛ перед оператором. " +
-                             "Сквозной вид включён, но физика комнаты недоступна: проверьте разрешение " +
-                             "на пространственные данные и включённые MR-фичи (журнал выше).");
+                             "Сквозной вид включён, но физика комнаты недоступна. ЧТО ПРОВЕРИТЬ: " +
+                             "(1) шлем надет; (2) в настройках PICO выполнена разметка комнаты (сквозной вид → " +
+                             "разметка помещения); (3) разрешение на пространственные данные выдано. " +
+                             "Если поверхности появятся позже, робот будет перенесён с пола на стол автоматически.");
         }
 
         /// <summary>
@@ -367,16 +390,25 @@ namespace KazistovVvXr
 
             Placed = true;
             PlacementCount++;
+            bool fromFallback = cause != null && cause.StartsWith("запасной", System.StringComparison.Ordinal);
+            bool wasFallback = placedFromFallback;
+            placedFromFallback = fromFallback;
             LastSurfacePoint = surfacePoint;
             LastSurfaceNormal = surfaceNormal;
             LastYawDegrees = yaw;
             LastCause = cause;
 
             var c = System.Globalization.CultureInfo.InvariantCulture;
+            if (wasFallback && !fromFallback)
+            {
+                Debug.Log("[KvMr] робот ПЕРЕНЕСЁН с пола на реальную поверхность: поверхности комнаты " +
+                          "появились позже — постановка исправлена автоматически");
+            }
             Debug.Log("[KvMr] РОБОТ ПОСТАВЛЕН НА РЕАЛЬНУЮ ПОВЕРХНОСТЬ (" + cause + "): точка " +
                       surfacePoint.x.ToString("0.000", c) + "; " + surfacePoint.y.ToString("0.000", c) + "; " +
                       surfacePoint.z.ToString("0.000", c) + " м · нормаль вверх " +
-                      surfaceNormal.y.ToString("0.00", c) + " · поворот " + yaw.ToString("0", c) + "° · масштаб 1.000");
+                      surfaceNormal.y.ToString("0.00", c) + " · поворот " + yaw.ToString("0", c) + "° · масштаб " +
+                      (room != null ? room.RobotSize.y.ToString("0.000", c) : "1.000") + " м (высота робота, замер)");
         }
 
         /// <summary>Поворот робота лицом к оператору (робот смотрит на него передней стороной).</summary>

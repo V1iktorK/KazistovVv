@@ -146,20 +146,32 @@ namespace KazistovVvXr
             KvXrSettingsChanged.SettingsChanged -= ApplyLayers;
         }
 
-        void Start()
+        /// <summary>
+        /// СТАРТ: ждать определения режима (он определяется после готовности XR, а не на первом
+        /// кадре — на первом запуске PICO показывает диалог разрешений, и XR в этот момент не
+        /// активен). Затем, если режим MR, — включить MR.
+        /// </summary>
+        private System.Collections.IEnumerator Start()
         {
             if (headCamera == null) headCamera = Camera.main;
             if (!table.IsValid) table = KvXrMrPlacement.DefaultTable;
             if (!room.IsValid) room = KvXrMrPlacement.DefaultRoom;
 
-            // ПОРЯДОК Start НЕ ГАРАНТИРОВАН. Если этот компонент стартует раньше `KvXrRig`,
-            // режим ещё не определён и `MrActive` был бы false — MR не включился бы на шлеме,
-            // который его умеет. Гарантируем определение режима здесь (идемпотентно).
-            KvXrPlatformModeSelector.EnsureApplied();
+            // ЖДЁМ ОПРЕДЕЛЕНИЯ РЕЖИМА. Порядок Start между объектами не гарантирован, а сам режим
+            // теперь определяется корутиной рига после готовности XR. Ждём факт `Applied`, а не
+            // время: на шлеме это единицы секунд, в редакторе — сразу.
+            float deadline = Time.unscaledTime + Mathf.Max(15f, waitForModeSeconds);
+            while (!KvXrPlatformModeSelector.Applied && Time.unscaledTime < deadline)
+                yield return null;
+
+            if (!KvXrPlatformModeSelector.Applied)
+            {
+                Debug.LogWarning("[KvXr] режим не определён за " + Mathf.Max(15f, waitForModeSeconds).ToString("0") +
+                                 " с — считаем VR (безопасный вариант: виртуальная лаборатория видна)");
+            }
 
             // РОБОТА СТАВИМ НА «РЕАЛЬНЫЙ СТОЛ» ТОЛЬКО В MR. В VR реального стола нет, и постановка
-            // переносила робота В НАЧАЛО КООРДИНАТ — то есть туда, где стоит оператор. Робот,
-            // внутри которого стоишь, не виден: изнутри модели видны только обратные стороны граней.
+            // переносила робота В НАЧАЛО КООРДИНАТ — то есть туда, где стоит оператор.
             if (ShouldPlaceRobotOnRealTable(MrActive)) BeginMrSession();
             else
             {
@@ -172,6 +184,9 @@ namespace KazistovVvXr
 
             Debug.Log("[KvXr] " + KvXrMrPlacement.Describe(table, room, workZoneRadiusMeters));
         }
+
+        /// <summary>Сколько ждать определения режима, секунды (страховка; обычно единицы секунд).</summary>
+        public float waitForModeSeconds = 15f;
 
         /// <summary>
         /// НАЧАТЬ СЕАНС СМЕШАННОЙ РЕАЛЬНОСТИ (добавлено 02.11.2026, S45).
