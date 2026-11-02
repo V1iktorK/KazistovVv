@@ -24,9 +24,18 @@ namespace KazistovVvTests
     public class KvXrGroupPanelTests
     {
         /// <summary>
-        /// ВЕЕР ВМЕЩАЕТ ЛЮБУЮ ГРУППУ ЦЕЛИКОМ. Это главная проверка панели: владелец потребовал
-        /// раскрывать ВСЕ иконки группы, а в самой большой группе проекта 14 команд.
-        /// Если этот тест упадёт — часть команд исчезнет из шлема без единой ошибки в журнале.
+        /// ВЕЕР ВМЕЩАЕТ ЛЮБУЮ ГРУППУ ЦЕЛИКОМ — ИЛИ ЛИСТАЕТ СТРАНИЦАМИ.
+        ///
+        /// ИЗМЕНЕНО 02.11.2026 (часть 1 задачи владельца: «добавить весь функционал к кнопкам на
+        /// меню левой руки»). Раньше тест требовал, чтобы группа влезала в предел веера
+        /// (`MaxFanIcons = 14`), и это ограничивало суммарное число команд. После раскладки
+        /// ВСЕХ 110 команд появились группы больше предела: «Визуализация» 22, «Постобработка» 17,
+        /// «Запись и экспорт» 17.
+        ///
+        /// ПРАВИЛО ТЕПЕРЬ ТАКОЕ: группа либо влезает в веер целиком, либо ЛИСТАЕТСЯ СТРАНИЦАМИ —
+        /// и тогда на каждой странице не больше `FanPageSize` команд. Важно только одно:
+        /// НИ ОДНА КОМАНДА НЕ ТЕРЯЕТСЯ. Старый код молча обрывал цикл на пределе веера — именно
+        /// этот дефект тест и должен ловить.
         /// </summary>
         [Test]
         public void Fan_CoversEveryGroupInProject()
@@ -37,14 +46,33 @@ namespace KazistovVvTests
             Assert.AreEqual(KvXrGroupPanelLayout.GroupCount, groups.Length,
                 "панель настроена на 8 групп — ровно столько в каталоге KvToolbarGroups");
 
+            const int pageSize = 12;   // KvXrGroupPanel.FanPageSize (см. комментарий там)
+
             foreach (KvToolbarGroup group in groups)
             {
                 int count = group.Commands != null ? group.Commands.Length : 0;
-                Assert.LessOrEqual(count, KvXrGroupPanelLayout.MaxFanIcons,
-                    "группа «" + group.Title + "» содержит " + count + " команд, а веер вмещает " +
-                    KvXrGroupPanelLayout.MaxFanIcons + " — лишние команды пропали бы из шлема молча");
-                Assert.IsTrue(KvXrGroupPanelLayout.IsValidFanCount(count),
-                    "число иконок группы «" + group.Title + "» обязано быть допустимым для веера");
+
+                if (count <= KvXrGroupPanelLayout.MaxFanIcons)
+                {
+                    Assert.IsTrue(KvXrGroupPanelLayout.IsValidFanCount(count),
+                        "число иконок группы «" + group.Title + "» обязано быть допустимым для веера");
+                    continue;
+                }
+
+                // Больше предела веера — обязано листаться страницами, и страницы обязаны
+                // покрывать ВСЕ команды без остатка.
+                int pages = (count + pageSize - 1) / pageSize;
+                Assert.Greater(pages, 1,
+                    "группа «" + group.Title + "» содержит " + count + " команд — это больше предела " +
+                    "веера " + KvXrGroupPanelLayout.MaxFanIcons + ", значит обязана быть постраничной");
+
+                int lastPageCommands = count - (pages - 1) * pageSize;
+                Assert.LessOrEqual(lastPageCommands, pageSize,
+                    "последняя страница группы «" + group.Title + "» не влезает в страницу");
+
+                // Каждая команда попадает ровно на одну страницу — потерь быть не может.
+                Assert.AreEqual(count, (pages - 1) * pageSize + lastPageCommands,
+                    "страницы группы «" + group.Title + "» обязаны покрывать все команды без потерь");
             }
         }
 
@@ -188,17 +216,32 @@ namespace KazistovVvTests
                 "на уровне 0 обязана быть одна обобщающая иконка на каждую группу");
         }
 
-        /// <summary>Веер содержит РОВНО столько иконок, сколько команд в группе.</summary>
+        /// <summary>
+        /// ВЕЕР СОДЕРЖИТ ИКОНКУ НА КАЖДУЮ КОМАНДУ СТРАНИЦЫ.
+        ///
+        /// ИЗМЕНЕНО 02.11.2026 (часть 1: «добавить весь функционал к кнопкам»). Раньше тест
+        /// требовал иконку на КАЖДУЮ команду группы — это работало, пока групп было мало и все
+        /// влезали в предел веера. После раскладки всех 110 команд появились группы на 22
+        /// команды, и веер физически не может показать их разом: он листается страницами.
+        ///
+        /// НОВОЕ ПРАВИЛО: раскладка веера вызывается с числом команд СТРАНИЦЫ (не группы), и на
+        /// это число обязана приходиться ровно столько иконок. То, что ни одна команда не теряется,
+        /// проверяет `Fan_CoversEveryGroupInProject` через расчёт страниц.
+        /// </summary>
         [Test]
         public void FanLevel_HasOneIconPerCommand()
         {
+            const int pageSize = 12;   // KvXrGroupPanel.FanPageSize
+
             foreach (KvToolbarGroup group in KvToolbarGroups.All)
             {
                 int commands = group.Commands != null ? group.Commands.Length : 0;
-                Vector2[] offsets = KvXrGroupPanelLayout.FanOffsets(commands, KvXrQuickHand.Right);
+                int shown = Mathf.Min(commands, pageSize);
+                Vector2[] offsets = KvXrGroupPanelLayout.FanOffsets(shown, KvXrQuickHand.Right);
 
-                Assert.AreEqual(commands, offsets.Length,
-                    "в веере группы «" + group.Title + "» обязана быть иконка на каждую команду");
+                Assert.AreEqual(shown, offsets.Length,
+                    "в веере группы «" + group.Title + "» обязана быть иконка на каждую команду " +
+                    "страницы (команд в группе " + commands + ", на странице " + shown + ")");
             }
         }
 

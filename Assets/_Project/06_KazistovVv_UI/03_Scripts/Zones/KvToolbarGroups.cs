@@ -48,55 +48,77 @@ namespace KazistovVvUI
             }
         }
 
+        /// <summary>
+        /// РАСКЛАДКА ВСЕХ КОМАНД ПО ГРУППАМ (переписано 02.11.2026, задача части 1).
+        ///
+        /// СЛОВА ВЛАДЕЛЬЦА: «добавить весь функционал к кнопкам на меню левой руки».
+        ///
+        /// ЧТО БЫЛО. В 8 группах лежало 78 идентификаторов, из них 15 ОТСУТСТВОВАЛИ в реестре
+        /// команд (мёртвые: valid.run, forces.tab, lab.tree, lab.run, collision.toggle,
+        /// collision.tab, report.make, report.pdf, net.tab, web.toggle, mobile.toggle,
+        /// script.tab, bt.tab, cameras.tab, show.trajectories, fail.tab), а 48 РЕАЛЬНЫХ команд
+        /// компьютера не попадали в шлем вообще. Итог: из 110 команд шлем видел 63.
+        ///
+        /// ЧТО СТАЛО. Все 110 зарегистрированных команд разложены по 8 группам. Проверяется
+        /// тестом KvXrMenuCoverageTests: каждая команда реестра обязана быть в меню.
+        ///
+        /// КАК РАСКЛАДЫВАЛИ. Группы шлема — это не копия меню компьютера: у владельца в шлеме
+        /// своя логика («Постобработка», «Визуализация»), и она сохранена. Команды, которых
+        /// не хватало, добавлены в конец «своей» группы по смыслу: постобработка → «Постобработка»,
+        /// зоны и измерение → «Визуализация», файлы → «Запись и экспорт», пульт и геймпад → «Сеть».
+        /// </summary>
         private static KvToolbarGroup[] Build()
         {
             return new[]
             {
-                // --- 1. РОБОТ: выбор робота/SCARA, движение, стоп, позы, суставы, захват
                 new KvToolbarGroup("robot", "Робот", "robot",
-                    "robot.switch", "robot.playpause", "robot.stop", "estop", "edit.reset",
-                    "joints.panel", "pose.save", "pose.goto", "gripper.toggle", "valid.run"),
+                    "robot.switch", "robot.playpause", "robot.stop", "estop",
+                    "edit.reset", "joints.panel", "pose.save", "pose.goto",
+                    "gripper.toggle"),
 
-                // --- 2. ТОЧКА И ТРАЕКТОРИЯ: лазеры, точки, waypoints, сравнение, графики
                 new KvToolbarGroup("path", "Точка и траектория", "point",
                     "point.select", "path.select", "waypoint.add", "waypoint.move",
                     "waypoint.delete", "waypoint.build", "waypoint.play", "compare.mark",
-                    "compare.open", "graph.open"),
+                    "compare.open", "graph.open", "waypoint.earlier", "waypoint.later",
+                    "waypoint.clear"),
 
-                // --- 3. ПОСТОБРАБОТКА: сглаживание, время/энергия, ограничения, верстак
                 new KvToolbarGroup("post", "Постобработка", "graph",
                     "post.smooth", "post.timeoptimal", "post.energy", "post.auto",
-                    "workbench.toggle", "constr.tab", "constr.toggle", "wp.tab"),
+                    "workbench.toggle", "constr.tab", "constr.toggle", "wp.tab",
+                    "post.apply.smooth", "post.apply.topt", "post.apply.energy", "post.auto.selected",
+                    "wp.orient", "wp.speed", "wp.detour", "wp.pause",
+                    "wp.clear"),
 
-                // --- 4. ВИЗУАЛИЗАЦИЯ: зона, лимиты, метрики, сингулярности, карты, силы, стенд
                 new KvToolbarGroup("view", "Визуализация", "workspace",
                     "view.workspace", "view.limits", "view.metrics", "view.singularity",
-                    "view.heatmap", "view.clearance", "forces.tab", "lab.tree", "lab.run",
-                    "collision.toggle", "collision.tab", "health.toggle", "obstacle.toggle"),
+                    "view.heatmap", "view.clearance", "health.toggle", "obstacle.toggle",
+                    "zone.box", "zone.sphere", "zone.cylinder", "zone.discard",
+                    "tool.measure", "tool.measure.reset", "tool.grid", "tool.grid.clear",
+                    "obstacle.discard", "tool.flashlight", "view.panel.tree", "view.panel.properties",
+                    "view.panel.settings", "ui.toggle"),
 
-                // --- 5. ЗАПИСЬ И ЭКСПОРТ: запись, воспроизведение, снимки, отчёт, экспорт/импорт
                 new KvToolbarGroup("export", "Запись и экспорт", "record",
                     "record.toggle", "record.play", "shot.screenshot", "video.toggle",
-                    "report.make", "report.pdf", "export.robot", "import.tab",
-                    "session.save", "session.load"),
+                    "export.robot", "import.tab", "session.save", "session.load",
+                    "record.speed", "log.export", "session.panel", "file.export",
+                    "shot.annotate", "export.lang", "export.tab", "import.scan",
+                    "file.import"),
 
-                // --- 6. СЕТЬ И АВТОМАТИЗАЦИЯ: сеть, дашборд, скрипты, деревья поведения, сценарии
                 new KvToolbarGroup("net", "Сеть и автоматизация", "lan",
-                    "net.tab", "web.toggle", "mobile.toggle", "script.tab", "bt.tab",
-                    "scenarios.open", "scenarios.run", "pendant.toggle"),
+                    "scenarios.open", "scenarios.run", "pendant.toggle", "pendant.variant",
+                    "pendant.attach", "pendant.jogmode", "gamepad.hud"),
 
-                // --- 7. НАСТРОЙКИ: тема, язык, панель настроек, палитра, клавиши, раскладка
                 new KvToolbarGroup("ui", "Настройки", "settings",
-                    "view.theme", "lang.cycle", "ui.settings", "ui.palette", "help.hotkeys",
-                    "ui.resetlayout", "features.open", "startmenu.show", "tut.toggle",
-                    "help.open"),
+                    "view.theme", "lang.cycle", "ui.settings", "ui.palette",
+                    "help.hotkeys", "ui.resetlayout", "features.open", "startmenu.show",
+                    "tut.toggle", "help.open", "tut.restart", "help.about",
+                    "ui.access"),
 
-                // --- 8. ПРОЧЕЕ: команды, ранее стоявшие в тулбаре, но не попавшие в группы
-                //     (сюда же автоматически уходят новые команды, если их не разложили).
                 new KvToolbarGroup("misc", "Прочее", "more",
-                    "cameras.tab", "eta.toggle", "presentation.toggle", "log.open",
-                    "demo.quick", "obstacle.evaluate", "zone.panel", "show.trajectories",
-                    "perf.open", "fail.tab")
+                    "eta.toggle", "presentation.toggle", "log.open", "demo.quick",
+                    "obstacle.evaluate", "zone.panel", "perf.open", "demo.pickplace",
+                    "edit.undo", "edit.redo", "calib.tab", "payload.tab"),
+
             };
         }
 

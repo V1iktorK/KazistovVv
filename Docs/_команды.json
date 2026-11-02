@@ -1,0 +1,698 @@
+[
+  {
+    "file": "FeatureHub.cs",
+    "id": "record.toggle",
+    "title": "Записать движение",
+    "menuPath": "Сервис/Запись/Записать движение"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "record.play",
+    "title": "Проиграть запись",
+    "menuPath": "Сервис/Запись/Проиграть запись"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "record.speed",
+    "title": "Скорость воспроизведения",
+    "menuPath": "Сервис/Запись/Скорость воспроизведения"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "pose.save",
+    "title": "Сохранить текущую позу как…",
+    "menuPath": "Робот/Позы/Сохранить текущую позу как…"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "pose.goto",
+    "title": "Перейти в позу",
+    "menuPath": "Робот/Позы/Перейти в позу"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "joints.panel",
+    "title": "Панель суставов",
+    "menuPath": "Робот/Ручное управление суставами"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "estop",
+    "title": "АВАРИЙНАЯ ОСТАНОВКА",
+    "menuPath": "Робот/АВАРИЙНАЯ ОСТАНОВКА"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "zone.box",
+    "title": "Зона запрета: куб",
+    "menuPath": "Вид/Зоны запрета/Куб"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "zone.sphere",
+    "title": "Зона запрета: сфера",
+    "menuPath": "Вид/Зоны запрета/Сфера"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "zone.cylinder",
+    "title": "Зона запрета: цилиндр",
+    "menuPath": "Вид/Зоны запрета/Цилиндр"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "zone.panel",
+    "title": "Зоны запрета: список",
+    "menuPath": "Вид/Зоны запрета/Список зон"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "zone.discard",
+    "title": "Отбрасывать опасные траектории",
+    "menuPath": "Вид/Зоны запрета/Отбрасывать опасные"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "compare.mark",
+    "title": "Отметить траекторию для сравнения",
+    "menuPath": "Вид/Сравнение траекторий/Отметить"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "compare.open",
+    "title": "Сравнение траекторий",
+    "menuPath": "Вид/Сравнение траекторий/Открыть панель"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "graph.open",
+    "title": "Графики углов суставов",
+    "menuPath": "Вид/Графики углов суставов"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "view.heatmap",
+    "title": "Тепловая карта достижимости",
+    "menuPath": "Вид/Тепловые карты/Достижимость"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "view.clearance",
+    "title": "Тепловая карта зазоров",
+    "menuPath": "Вид/Тепловые карты/Зазоры"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "gripper.toggle",
+    "title": "Захват: открыть / закрыть",
+    "menuPath": "Робот/Захват/Открыть-закрыть"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "demo.pickplace",
+    "title": "Pick-and-place демо",
+    "menuPath": "Сервис/Демонстрации/Pick-and-place"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "eta.toggle",
+    "title": "Панель ETA",
+    "menuPath": "Вид/Панели/Панель ETA"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "log.open",
+    "title": "Журнал действий",
+    "menuPath": "Сервис/Журнал действий"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "log.export",
+    "title": "Выгрузить журнал",
+    "menuPath": "Файл/Экспорт журнала"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "perf.open",
+    "title": "Замер производительности планировщика",
+    "menuPath": "Сервис/Производительность планировщика"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "edit.undo",
+    "title": "Отменить",
+    "menuPath": "Правка/Отменить"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "edit.redo",
+    "title": "Вернуть",
+    "menuPath": "Правка/Вернуть"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "scenarios.open",
+    "title": "Сценарии",
+    "menuPath": "Сервис/Сценарии"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "scenarios.run",
+    "title": "Запустить сценарий…",
+    "menuPath": "Сервис/Сценарии/Запустить"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "presentation.toggle",
+    "title": "Презентационный режим",
+    "menuPath": "Вид/Презентационный режим"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "session.save",
+    "title": "Сохранить сессию",
+    "menuPath": "Файл/Сессия/Сохранить сессию"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "session.load",
+    "title": "Загрузить сессию",
+    "menuPath": "Файл/Сессия/Загрузить последнюю сессию"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "session.panel",
+    "title": "Список сессий",
+    "menuPath": "Файл/Сессия/Список сессий"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "features.open",
+    "title": "Панель функций (этапы 1–20)",
+    "menuPath": "Вид/Панель функций"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "file.export",
+    "title": "Экспорт: папка данных",
+    "menuPath": "Файл/Папка данных"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "tool.measure",
+    "title": "Измерение",
+    "menuPath": "Сервис/Инструменты/Измерение"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "tool.measure.reset",
+    "title": "Измерение: сбросить",
+    "menuPath": "Сервис/Инструменты/Измерение: сбросить"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "tool.grid",
+    "title": "Сетка рабочей зоны",
+    "menuPath": "Сервис/Инструменты/Сетка рабочей зоны"
+  },
+  {
+    "file": "FeatureHub.cs",
+    "id": "tool.grid.clear",
+    "title": "Сетка: убрать",
+    "menuPath": "Сервис/Инструменты/Сетка: убрать"
+  },
+  {
+    "file": "KvStageHub.cs",
+    "id": "shot.screenshot",
+    "title": "Сделать скриншот",
+    "menuPath": "Файл/Экспорт демонстрации/Скриншот"
+  },
+  {
+    "file": "KvStageHub.cs",
+    "id": "video.toggle",
+    "title": "Начать / остановить запись",
+    "menuPath": "Файл/Экспорт демонстрации/Запись видео"
+  },
+  {
+    "file": "KvStageHub.cs",
+    "id": "shot.annotate",
+    "title": "Подпись на скриншоте",
+    "menuPath": "Файл/Экспорт демонстрации/Подпись на скриншоте"
+  },
+  {
+    "file": "KvStageHub.cs",
+    "id": "view.singularity",
+    "title": "Сингулярности",
+    "menuPath": "Вид/Сингулярности"
+  },
+  {
+    "file": "KvStageHub.cs",
+    "id": "waypoint.add",
+    "title": "Добавить waypoint",
+    "menuPath": "Робот/Промежуточные точки/Добавить waypoint"
+  },
+  {
+    "file": "KvStageHub.cs",
+    "id": "waypoint.move",
+    "title": "Переместить waypoint",
+    "menuPath": "Робот/Промежуточные точки/Переместить в точку прицела"
+  },
+  {
+    "file": "KvStageHub.cs",
+    "id": "waypoint.earlier",
+    "title": "Waypoint раньше",
+    "menuPath": "Робот/Промежуточные точки/Раньше"
+  },
+  {
+    "file": "KvStageHub.cs",
+    "id": "waypoint.later",
+    "title": "Waypoint позже",
+    "menuPath": "Робот/Промежуточные точки/Позже"
+  },
+  {
+    "file": "KvStageHub.cs",
+    "id": "waypoint.delete",
+    "title": "Удалить waypoint",
+    "menuPath": "Робот/Промежуточные точки/Удалить"
+  },
+  {
+    "file": "KvStageHub.cs",
+    "id": "waypoint.clear",
+    "title": "Очистить waypoints",
+    "menuPath": "Робот/Промежуточные точки/Очистить все"
+  },
+  {
+    "file": "KvStageHub.cs",
+    "id": "waypoint.build",
+    "title": "Перестроить маршрут",
+    "menuPath": "Робот/Промежуточные точки/Перестроить маршрут"
+  },
+  {
+    "file": "KvStageHub.cs",
+    "id": "waypoint.play",
+    "title": "Выполнить маршрут",
+    "menuPath": "Робот/Промежуточные точки/Выполнить маршрут"
+  },
+  {
+    "file": "KvStageHub.cs",
+    "id": "health.toggle",
+    "title": "Мониторинг состояния",
+    "menuPath": "Вид/Мониторинг состояния"
+  },
+  {
+    "file": "KvStageHub.cs",
+    "id": "obstacle.toggle",
+    "title": "Динамические препятствия",
+    "menuPath": "Вид/Динамические препятствия"
+  },
+  {
+    "file": "KvStageHub.cs",
+    "id": "obstacle.evaluate",
+    "title": "Проверить траектории на риск",
+    "menuPath": "Вид/Динамические препятствия/Проверить варианты"
+  },
+  {
+    "file": "KvStageHub.cs",
+    "id": "obstacle.discard",
+    "title": "Отбрасывать рискованные траектории",
+    "menuPath": "Вид/Динамические препятствия/Отбрасывать рискованные"
+  },
+  {
+    "file": "KvStageHub.cs",
+    "id": "pendant.toggle",
+    "title": "Виртуальный пульт",
+    "menuPath": "Сервис/Виртуальный пульт"
+  },
+  {
+    "file": "KvStageHub.cs",
+    "id": "pendant.variant",
+    "title": "Вариант пульта (A / B)",
+    "menuPath": "Сервис/Виртуальный пульт/Вариант A / B"
+  },
+  {
+    "file": "KvStageHub.cs",
+    "id": "pendant.attach",
+    "title": "Закрепление пульта",
+    "menuPath": "Сервис/Виртуальный пульт/Закрепление"
+  },
+  {
+    "file": "KvStageHub.cs",
+    "id": "pendant.jogmode",
+    "title": "Режим джойстика (JOINT / TCP)",
+    "menuPath": "Сервис/Виртуальный пульт/Режим джойстика"
+  },
+  {
+    "file": "KvStageHub2.cs",
+    "id": "startmenu.show",
+    "title": "Главное меню",
+    "menuPath": "Файл/Главное меню"
+  },
+  {
+    "file": "KvStageHub2.cs",
+    "id": "demo.quick",
+    "title": "Показать демо",
+    "menuPath": "Сервис/Показать демо"
+  },
+  {
+    "file": "KvStageHub2.cs",
+    "id": "tut.toggle",
+    "title": "Обучение",
+    "menuPath": "Справка/Обучение"
+  },
+  {
+    "file": "KvStageHub2.cs",
+    "id": "tut.restart",
+    "title": "Обучение заново",
+    "menuPath": "Справка/Обучение заново"
+  },
+  {
+    "file": "KvStageHub2.cs",
+    "id": "workbench.toggle",
+    "title": "Верстак постобработки",
+    "menuPath": "Вид/Верстак постобработки"
+  },
+  {
+    "file": "KvStageHub2.cs",
+    "id": "post.smooth",
+    "title": "Сглаживание траектории",
+    "menuPath": "Робот/Постобработка/Сглаживание траектории"
+  },
+  {
+    "file": "KvStageHub2.cs",
+    "id": "post.timeoptimal",
+    "title": "Время-оптимальная",
+    "menuPath": "Робот/Постобработка/Время-оптимальная"
+  },
+  {
+    "file": "KvStageHub2.cs",
+    "id": "post.energy",
+    "title": "Эко-профиль",
+    "menuPath": "Робот/Постобработка/Эко-профиль"
+  },
+  {
+    "file": "KvStageHub2.cs",
+    "id": "post.apply.smooth",
+    "title": "Сгладить выбранную траекторию",
+    "menuPath": "Робот/Постобработка/Сгладить выбранную"
+  },
+  {
+    "file": "KvStageHub2.cs",
+    "id": "post.apply.topt",
+    "title": "Переключиться на время-оптимальную",
+    "menuPath": "Робот/Постобработка/Переключиться на время-оптимальную"
+  },
+  {
+    "file": "KvStageHub2.cs",
+    "id": "post.apply.energy",
+    "title": "Переключиться на эко-профиль",
+    "menuPath": "Робот/Постобработка/Переключиться на эко-профиль"
+  },
+  {
+    "file": "KvStageHub2.cs",
+    "id": "post.auto",
+    "title": "Автосглаживание после планирования",
+    "menuPath": "Робот/Постобработка/Автосглаживание"
+  },
+  {
+    "file": "KvStageHub2.cs",
+    "id": "post.auto.selected",
+    "title": "Сглаживать только выбранный вариант",
+    "menuPath": "Робот/Постобработка/Сглаживать только выбранный"
+  },
+  {
+    "file": "KvStageHub3.cs",
+    "id": "wp.tab",
+    "title": "Ограничения точки",
+    "menuPath": "Робот/Промежуточные точки/Ограничения точки"
+  },
+  {
+    "file": "KvStageHub3.cs",
+    "id": "wp.orient",
+    "title": "Ориентация waypoint",
+    "menuPath": "Робот/Промежуточные точки/Ограничения/Ориентация (как сейчас)"
+  },
+  {
+    "file": "KvStageHub3.cs",
+    "id": "wp.speed",
+    "title": "Скорость waypoint",
+    "menuPath": "Робот/Промежуточные точки/Ограничения/Скорость в точке"
+  },
+  {
+    "file": "KvStageHub3.cs",
+    "id": "wp.detour",
+    "title": "Обход препятствия (waypoint)",
+    "menuPath": "Робот/Промежуточные точки/Ограничения/Обход препятствия"
+  },
+  {
+    "file": "KvStageHub3.cs",
+    "id": "wp.pause",
+    "title": "Пауза waypoint",
+    "menuPath": "Робот/Промежуточные точки/Ограничения/Пауза в точке"
+  },
+  {
+    "file": "KvStageHub3.cs",
+    "id": "wp.clear",
+    "title": "Снять ограничения waypoint",
+    "menuPath": "Робот/Промежуточные точки/Ограничения/Снять все ограничения"
+  },
+  {
+    "file": "KvStageHub3.cs",
+    "id": "constr.toggle",
+    "title": "Ограничения планирования",
+    "menuPath": "Робот/Ограничения планирования"
+  },
+  {
+    "file": "KvStageHub3.cs",
+    "id": "constr.tab",
+    "title": "Вкладка ограничений",
+    "menuPath": "Робот/Ограничения планирования (вкладка)"
+  },
+  {
+    "file": "KvStageHub3.cs",
+    "id": "calib.tab",
+    "title": "Калибровочный мастер",
+    "menuPath": "Сервис/Калибровочный мастер"
+  },
+  {
+    "file": "KvStageHub3.cs",
+    "id": "payload.tab",
+    "title": "Калькулятор нагрузки",
+    "menuPath": "Сервис/Калькулятор нагрузки"
+  },
+  {
+    "file": "KvStageHub3.cs",
+    "id": "export.robot",
+    "title": "Экспорт в язык робота",
+    "menuPath": "Файл/Экспорт в язык робота"
+  },
+  {
+    "file": "KvStageHub3.cs",
+    "id": "export.lang",
+    "title": "Язык экспорта (KRL / KAREL / RAPID)",
+    "menuPath": "Файл/Экспорт демонстрации/Язык робота"
+  },
+  {
+    "file": "KvStageHub3.cs",
+    "id": "export.tab",
+    "title": "Вкладка экспорта траектории",
+    "menuPath": "Файл/Экспорт в язык робота (вкладка)"
+  },
+  {
+    "file": "KvStageHub3.cs",
+    "id": "import.tab",
+    "title": "Импорт модели робота",
+    "menuPath": "Файл/Импорт модели робота"
+  },
+  {
+    "file": "KvStageHub3.cs",
+    "id": "import.scan",
+    "title": "Обновить список моделей",
+    "menuPath": "Файл/Импорт модели робота/Обновить список"
+  },
+  {
+    "file": "KvStageHub4.cs",
+    "id": "",
+    "title": "",
+    "menuPath": ""
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "point.select",
+    "title": "Выбор точки (красный лазер)",
+    "menuPath": "Робот/Инструменты/Выбор точки (красный лазер)"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "path.select",
+    "title": "Выбор траектории (зелёный лазер)",
+    "menuPath": "Робот/Инструменты/Выбор траектории (зелёный лазер)"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "robot.playpause",
+    "title": "Запуск / пауза",
+    "menuPath": "Робот/Движение/Запуск / пауза"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "robot.stop",
+    "title": "Остановка",
+    "menuPath": "Робот/Движение/Остановка"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "edit.reset",
+    "title": "Сброс сценария",
+    "menuPath": "Правка/Сброс сценария"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "robot.switch",
+    "title": "Переключение робота (робот / SCARA)",
+    "menuPath": "Робот/Переключить робота"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "view.workspace",
+    "title": "Зона достижимости",
+    "menuPath": "Вид/Визуализации/Зона достижимости"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "view.limits",
+    "title": "Лимиты суставов",
+    "menuPath": "Вид/Визуализации/Лимиты суставов"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "view.metrics",
+    "title": "Панель метрик траекторий",
+    "menuPath": "Вид/Визуализации/Метрики траекторий"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "tool.flashlight",
+    "title": "Фонарик",
+    "menuPath": "Вид/Фонарик"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "view.panel.tree",
+    "title": "Дерево моделей",
+    "menuPath": "Вид/Панели/Дерево моделей"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "view.panel.properties",
+    "title": "Свойства",
+    "menuPath": "Вид/Панели/Свойства"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "view.panel.settings",
+    "title": "Настройки и справка",
+    "menuPath": "Вид/Панели/Настройки и справка"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "view.theme",
+    "title": "Тема: тёмная / светлая / системная",
+    "menuPath": "Вид/Тема"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "lang.cycle",
+    "title": "Язык интерфейса",
+    "menuPath": "Сервис/Настройки/Язык интерфейса"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "ui.settings",
+    "title": "Настройки",
+    "menuPath": "Сервис/Настройки"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "help.open",
+    "title": "Помощь",
+    "menuPath": "Справка/Помощь"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "help.about",
+    "title": "О программе",
+    "menuPath": "Справка/О программе"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "ui.palette",
+    "title": "Палитра команд",
+    "menuPath": "Вид/Палитра команд"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "help.hotkeys",
+    "title": "Горячие клавиши",
+    "menuPath": "Справка/Горячие клавиши"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "ui.resetlayout",
+    "title": "Сбросить раскладку окон",
+    "menuPath": "Вид/Панели/Сбросить раскладку"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "ui.access",
+    "title": "Доступность",
+    "menuPath": "Сервис/Настройки/Доступность"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "ui.toggle",
+    "title": "Показать / скрыть интерфейс",
+    "menuPath": "Вид/Показать-скрыть интерфейс"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "gamepad.hud",
+    "title": "Виртуальный геймпад",
+    "menuPath": "Сервис/Настройки/Виртуальный геймпад"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "edit.undo",
+    "title": "Отменить",
+    "menuPath": "Правка/Отменить"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "edit.redo",
+    "title": "Вернуть",
+    "menuPath": "Правка/Вернуть"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "file.export",
+    "title": "Экспорт сценария",
+    "menuPath": "Файл/Экспорт сценария"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "file.import",
+    "title": "Импорт сценария",
+    "menuPath": "Файл/Импорт сценария"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "tool.measure",
+    "title": "Измерение",
+    "menuPath": "Сервис/Инструменты/Измерение"
+  },
+  {
+    "file": "KazistovVvUIManager.cs",
+    "id": "tool.grid",
+    "title": "Сетка рабочей зоны",
+    "menuPath": "Сервис/Инструменты/Сетка рабочей зоны"
+  }
+]

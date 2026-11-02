@@ -150,6 +150,19 @@ private Vector2[] currentOffsets = new Vector2[0];
 private Text label;
 private KvXrPanelLevel level = KvXrPanelLevel.Groups;
 private int openGroupIndex = -1;
+
+// ==================================================== СТРАНИЦЫ ВЕЕРА (часть 1, 02.11.2026)
+/// <summary>Сколько команд показывать на одной странице веера.</summary>
+public const int FanPageSize = 12;
+
+/// <summary>Текущая страница открытой группы (0-based).</summary>
+private int fanPage;
+
+/// <summary>Сколько страниц у открытой группы (1 — листать нечего).</summary>
+public int FanPageCount { get; private set; } = 1;
+
+/// <summary>Какая страница открыта сейчас (для журнала и тестов).</summary>
+public int FanPageIndex { get { return fanPage; } }
 private float labelDwell;
 private KvXrIconHover hovered;
 private bool builtOnce;
@@ -686,33 +699,81 @@ if (group.Commands != null)
 if (KvCommands.Get(id) == null) {
  skipped.Add(id); continue; }                    resolved.Add(id);
 }
-}            FanCommandCount = resolved.Count;
+}
+
+// ==================================================== СТРАНИЦЫ ВЕЕРА (часть 1, 02.11.2026)
+//
+// ЗАЧЕМ. Владелец: «добавить весь функционал к кнопкам на меню левой руки». После раскладки
+// ВСЕХ 110 команд в группы появились большие: «Визуализация» 22, «Постобработка» 17,
+// «Запись и экспорт» 17. А веер физически вмещает MaxFanIcons = 14 иконок: лишние МОЛЧА
+// отбрасывались (старый цикл обрывался на `i < hitOffsets.Length - 1`). Владелец видел бы
+// группу без половины кнопок и не понял бы, почему.
+//
+// ЧТО СДЕЛАНО. Веер листается страницами. На странице не больше FanPageSize команд, а когда
+// страниц больше одной — в веере появляются две стрелки: «предыдущая» и «следующая». Стрелки
+// занимают слоты иконок, поэтому размер страницы меньше предела: 12 команд + 2 стрелки = 14.
+//
+// ПОЧЕМУ НЕ «РАЗБИТЬ ГРУППЫ». `KvXrGroupPanelLayout.GroupCount = 8` — жёсткая константа круга
+// меню, и 9-я группа туда не встанет. Страницы не трогают геометрию: тот же круг, тот же веер.
+int pageCount = Mathf.Max(1, Mathf.CeilToInt((float)resolved.Count / FanPageSize));
+if (fanPage >= pageCount) fanPage = pageCount - 1;
+if (fanPage < 0) fanPage = 0;
+int pageStart = fanPage * FanPageSize;
+int pageEnd = Mathf.Min(resolved.Count, pageStart + FanPageSize);
+FanPageCount = pageCount;
+
+FanCommandCount = resolved.Count;
 
 // РАДИУС ВЕЕРА СЧИТАЕТСЯ ОТ РАДИУСА ГРУПП, но не даёт иконкам стать мельче читаемых:
 // 14 иконок «Визуализации» на 0.110 м дали бы 18 мм — это уже не попадается лучом.
 float radius = KvXrTuning.PanelRadiusMeters;
-float fanRadius = KvXrGroupPanelLayout.FanRadiusMeters(resolved.Count, radius);
+
+// РАЗМЕР СЧИТАЕТСЯ ПО ТОМУ, ЧТО РЕАЛЬНО НАРИСОВАНО НА СТРАНИЦЕ (часть 1, 02.11.2026):
+// команды страницы + стрелки листания. Раньше считали по всему списку — для 22 команд
+// иконки вышли бы мельче читаемых, хотя рисуется всего 14.
+int iconsOnPage = (pageEnd - pageStart) + (pageCount > 1 ? 2 : 0);
+float fanRadius = KvXrGroupPanelLayout.FanRadiusMeters(iconsOnPage, radius);
             RadiusMeters = radius;
             builtRadius = radius;
-builtIconSize = KvXrGroupPanelLayout.IconSizeForCount(resolved.Count,                KvXrGroupPanelLayout.FanSpanDegrees, fanRadius);
+builtIconSize = KvXrGroupPanelLayout.IconSizeForCount(iconsOnPage,                KvXrGroupPanelLayout.FanSpanDegrees, fanRadius);
 
 // В СПИСОК ПОПАДАНИЯ ВХОДИТ И ЦЕНТРАЛЬНАЯ ИКОНКА (исправлено 21.10.2026).
 // Владелец: «не работает кнопка перехода на первый слой». Причина: центральная иконка
 // («выход») рисуется в центре панели, но её смещения (0,0) НЕ было в списке попадания —
 // луч физически не мог в неё попасть, и выйти из веера нажатием было невозможно.
 // Раньше это маскировалось тем, что веер закрывался сам после любой команды.
-Vector2[] hitOffsets = KvXrGroupPanelLayout.FanHitOffsets(resolved.Count, hand, radius);
+Vector2[] hitOffsets = KvXrGroupPanelLayout.FanHitOffsets(iconsOnPage, hand, radius);
 
 // ПОСЛЕДНЕЕ СМЕЩЕНИЕ В СПИСКЕ — ЦЕНТР (0,0), это иконка «Закрыть», а не команда.
-// Поэтому команды раскладываются строго до последнего элемента: иначе при группе
-// длиннее MaxFanIcons одна команда встала бы в центр поверх «Закрыть».
-for (int i = 0; i < resolved.Count && i < hitOffsets.Length - 1; i++)
+// Раскладываем ТОЛЬКО текущую страницу: страницы нужны именно потому, что весь список
+// в предел веера не влезает.
+int slot = 0;
+for (int i = pageStart; i < pageEnd && slot < hitOffsets.Length - 1; i++, slot++)
 {
 string id = resolved[i];
                 KvCommand command = KvCommands.Get(id);
 string iconId = command != null && !string.IsNullOrEmpty(command.Icon) ? command.Icon : "info";
 string title = command != null ? command.LocalizedTitle : id;
-CreateIcon("Cmd_" + id, iconId, title, hitOffsets[i], delegate { InvokeCommand(id); });
+CreateIcon("Cmd_" + id, iconId, title, hitOffsets[slot], delegate { InvokeCommand(id); });
+}
+
+// СТРЕЛКИ ЛИСТАНИЯ (часть 1, 02.11.2026). Занимают следующие свободные слоты веера.
+// Пишем «страница 1 из 2» в подписи: иначе владелец не поймёт, почему в группе не все кнопки.
+if (pageCount > 1)
+{
+    if (fanPage > 0 && slot < hitOffsets.Length - 1)
+    {
+        int back = fanPage - 1;
+        CreateIcon("Fan_Prev", "chevron-right", "Страница " + fanPage + " из " + pageCount,
+            hitOffsets[slot], delegate { FanTurnPage(-1); });
+        slot++;
+    }
+    if (fanPage < pageCount - 1 && slot < hitOffsets.Length - 1)
+    {
+        CreateIcon("Fan_Next", "chevron-right", "Страница " + (fanPage + 2) + " из " + pageCount,
+            hitOffsets[slot], delegate { FanTurnPage(1); });
+        slot++;
+    }
 }
 
 // Центр веера — выход. Рисуется поверх, чтобы было видно, что он «главный».
@@ -723,7 +784,31 @@ CreateIcon("Fan_Close", group.Icon, "Закрыть «" + group.Title + "»", Ve
 labelDwell = 0f;
 hovered = null;
 labelLogged = false;
-Status = KvXrGroupPanelLayout.Describe(groups.Length, resolved.Count, group.Title, hand) +                     " · иконок в веере " + resolved.Count +                     " · " + KvXrGroupPanelLayout.DescribeSizes(resolved.Count,                         KvXrGroupPanelLayout.FanSpanDegrees, fanRadius) +                     " · радиус групп " + radius.ToString("0.000") + " м" +                     (skipped.Count > 0 ? " · не найдено в реестре команд: " + string.Join(", ", skipped.ToArray()) : "");
+Status = KvXrGroupPanelLayout.Describe(groups.Length, resolved.Count, group.Title, hand) +
+         " · иконок в веере " + (pageEnd - pageStart) +
+         (pageCount > 1 ? " (страница " + (fanPage + 1) + " из " + pageCount + ")" : "") +
+         " · " + KvXrGroupPanelLayout.DescribeSizes(iconsOnPage,
+             KvXrGroupPanelLayout.FanSpanDegrees, fanRadius) +
+         " · радиус групп " + radius.ToString("0.000") + " м" +
+         (skipped.Count > 0 ? " · не найдено в реестре команд: " + string.Join(", ", skipped.ToArray()) : "");
+}
+
+/// <summary>
+/// ЛИСТАТЬ ВЕЕР (часть 1, 02.11.2026). `delta` = −1 назад, +1 вперёд.
+///
+/// Нужно, потому что после раскладки ВСЕХ команд появились группы больше предела веера
+/// (`MaxFanIcons = 14`): «Визуализация» 22, «Постобработка» 17, «Запись и экспорт» 17.
+/// Без листания лишние команды молча отбрасывались бы, и владелец их просто не видел.
+/// </summary>
+public void FanTurnPage(int delta)
+{
+    int next = fanPage + delta;
+    if (next < 0) next = 0;
+    if (next > FanPageCount - 1) next = FanPageCount - 1;
+    if (next == fanPage) return;
+    fanPage = next;
+    Rebuild();
+    Debug.Log("[KvXr] ВЕЕР: страница " + (fanPage + 1) + " из " + FanPageCount);
 }
 
 // ==================================================== ЭКРАНЫ (§40)
@@ -2019,6 +2104,12 @@ public void OpenGroup(int index)
 // группу «Визуализация». Строка-доказательство обязана называть то, что нажали.
 string groupTitle = TitleAt(index);
 openGroupIndex = index;
+
+            // КАЖДАЯ ГРУППА ОТКРЫВАЕТСЯ С ПЕРВОЙ СТРАНИЦЫ (часть 1, 02.11.2026).
+            // Иначе после листания в «Визуализации» владелец открыл бы «Робота» и увидел бы
+            // не начало списка, а середину — и решил бы, что команды пропали.
+            fanPage = 0;
+
 level = KvXrPanelLevel.GroupFan;
             Rebuild();
 
