@@ -1911,17 +1911,54 @@ RefreshStartLists();
 Debug.Log("[KvXr] МЕНЮ: создан стол «" + table.name + "» · столов " + startTables.Count +                      " · роботов " + startRobots.Count);
 }
 
-/// <summary>СОЗДАТЬ РОБОТА ИЗ МЕНЮ (§42): копия сценного эталона на столешнице перед оператором.</summary>
-private void CreateStartRobot(bool scara)
-{
-            Vector3 spot = KvXrObjectFactory.SpotInFrontOf(headCamera, KvXrObjectFactory.SpawnDistanceMeters);
-            spot.y = KvXrTableKinds.TopHeight;
+        /// <summary>
+        /// СОЗДАТЬ РОБОТА ИЗ МЕНЮ (§42): копия сценного эталона на столешнице перед оператором.
+        ///
+        /// ИСПРАВЛЕНО 02.11.2026 (ПУНКТ 3 ВЛАДЕЛЬЦА: «после достижения роботом последнего
+        /// положения начальный робот не пропадает (может я добавлял по 2-3 робота и из-за этого
+        /// он не пропадал — не исключено)»).
+        ///
+        /// ВЛАДЕЛЕЦ ОКАЗАЛСЯ ПРАВ, и это была не догадка: метод ДОБАВЛЯЛ робота, а не заменял.
+        /// Три нажатия «Добавить робота» давали ТРИ модели на столе. Дальше оператор запускал
+        /// движение — ехал ОДИН робот, а два других оставались стоять в начальных позах.
+        /// Для глаза это выглядело ровно как «начальный робот не пропал»: исчезать было нечему,
+        /// это были ДРУГИЕ роботы, а не фантомы.
+        ///
+        /// ЧТО ТЕПЕРЬ. Новый робот ставится ВМЕСТО существующего, а не в дополнение. Совпадает
+        /// с выбором владельца для части 3: «один активный».
+        /// </summary>
+        private void CreateStartRobot(bool scara)
+        {
+            // --- ЗАМЕНА, А НЕ ДОБАВЛЕНИЕ (пункт 3 владельца)
+            // startRobots хранит Transform, а не RobotController: список общий для меню,
+            // где нужны только позиции. Компонент берём отдельно.
+            RobotController existing = null;
+            for (int i = 0; i < startRobots.Count && existing == null; i++)
+                if (startRobots[i] != null)
+                    existing = startRobots[i].GetComponent<RobotController>();
+
+            Vector3 spot;
+            if (existing != null)
+            {
+                spot = existing.transform.position;
+                spot.y = KvXrTableKinds.TopHeight;
+                Debug.Log("[KvXr] МЕНЮ: замена робота «" + existing.robotName + "» на " +
+                          (scara ? "SCARA" : "6-осевого") + " (второй робот не добавляется)");
+                UnityEngine.Object.Destroy(existing.gameObject);
+            }
+            else
+            {
+                spot = KvXrObjectFactory.SpotInFrontOf(headCamera, KvXrObjectFactory.SpawnDistanceMeters);
+                spot.y = KvXrTableKinds.TopHeight;
+            }
+
             RobotController robot = KvXrObjectFactory.CreateRobot(scara, spot, 0f);
-if (robot == null) return;
-RefreshStartLists();
+            if (robot == null) return;
+            RefreshStartLists();
             Rebuild();
-Debug.Log("[KvXr] МЕНЮ: создан робот «" + robot.robotName + "» · столов " + startTables.Count +                      " · роботов " + startRobots.Count);
-}
+            Debug.Log("[KvXr] МЕНЮ: создан робот «" + robot.robotName + "» · столов " +
+                      startTables.Count + " · роботов " + startRobots.Count);
+        }
 private void InvokeMenuCommand(string id, string title)
 {
             KvCommand command = KvCommands.Get(id);
@@ -2609,7 +2646,12 @@ float heightPx = Mathf.Max(0.0001f, height) / unit;
             rect.anchoredPosition = offsetMeters / unit;
 var bg = go.GetComponent<Image>();
 ApplyRounded(bg, rounded);
-            bg.color = center                ? new Color(0.20f, 0.55f, 0.95f, 0.92f)                : new Color(0.16f, 0.16f, 0.18f, 0.88f);
+            // ЧАСТЬ 11 (02.11.2026): УБРАНА СИНЯЯ ПЛАШКА центральной кнопки. Владелец: «что у меня
+            // за синие пятна вверху экрана?! их надо убрать!». Причина доказана измерениями
+            // с шлема: синее только в верхних 40 % кадра, цвет плоский, пятно неподвижно
+            // относительно головы. Первая кнопка «бублика» стоит строго сверху и была
+            // единственной синей — остальные почти чёрные и на тёмном фоне не видны.
+            bg.color = new Color(0.16f, 0.16f, 0.18f, 0.88f);
             bg.raycastTarget = true;
 if (!string.IsNullOrEmpty(text))
 {

@@ -65,6 +65,8 @@ namespace KazistovVvXr
 
         private TrajectoryFlowController flow;
         private bool leftTriggerWasDown;
+        /// <summary>Клик правого стика в прошлом кадре — для фронта входа в режим точки (п.9).</summary>
+        private bool stickClickWasDown;
         private bool rightTriggerWasDown;
         private bool bindLogged;
         private float nextZoneLog;
@@ -224,8 +226,54 @@ namespace KazistovVvXr
             // и оба обрываются на первом попадании (`KvXrLaserRay`). Поэтому «включить лазеры
             // потока» = передать потоку настоящее состояние курков и не рисовать второй комплект
             // линий поверх принятых: иначе в шлеме было бы четыре луча вместо двух.
+            // ============================================ ПЕРЕМЕЩЕНИЕ ТОЧКИ В ШЛЕМЕ (пункт 9, 02.11.2026)
+            //
+            // СЛОВА ВЛАДЕЛЬЦА: «нельзя перемещать шарик, который выбран крайней точкой».
+            //
+            // ПРИЧИНА. Режим перемещения точки в проекте БЫЛ — FlowState.PointMoveMode с
+            // UpdatePointMoveMode, который двигает точку и онлайн проверяет достижимость.
+            // Но в шлем он был НЕДОСТУПЕН: мост вызывал восьмиаргументную перегрузку
+            // UpdateAim, а она жёстко передаёт moveToggle = false, moveAxis = Vector3.zero.
+            // То есть на компьютере режим работает (Q/E, W/S, A/D), а в шлеме войти в него
+            // нельзя и двигать нечем.
+            //
+            // ЧТО ТЕПЕРЬ. Стик управляет точкой:
+            //   • НАЖАТИЕ ПРАВОГО СТИКА — войти в режим и выйти из него (подтвердить);
+            //   • ЛЕВЫЙ СТИК — двигать точку в горизонтальной плоскости оператора;
+            //   • ПРАВЫЙ СТИК (вертикаль) — двигать точку вверх/вниз;
+            //   • ПРАВЫЙ КУРОК — ускорение (как Shift на компьютере).
+            //
+            // ПОЧЕМУ ЛЕВЫЙ СТИК, А НЕ ВЗГЛЯД. Пока оператор двигает точку, он СТОИТ: ходьба
+            // в этом режиме отключена (см. KvXrLocomotion). Иначе точка «уезжала» бы вместе
+            // с оператором, и попасть в неё повторно было бы невозможно.
+            bool stickClick = KvXrInputSource.RightStickClick;
+            bool moveToggle = feedAim && stickClick && !stickClickWasDown;
+            stickClickWasDown = stickClick;
+
+            bool fastMove = rightDown;      // правый курок = ускорение перемещения точки
+
+            Vector3 moveAxis = Vector3.zero;
+            if (flow != null && flow.IsPointMoveMode)
+            {
+                Vector2 left = KvXrInputSource.LeftStick;
+                Vector2 right = KvXrInputSource.RightStick;
+
+                // Направления — по оператору, а не по мировым осям: «вперёд» = туда, куда он смотрит.
+                Transform basis = headCamera != null ? headCamera.transform : transform;
+                Vector3 forward = basis.forward; forward.y = 0f;
+                if (forward.sqrMagnitude < 0.0001f) forward = Vector3.forward;
+                forward.Normalize();
+                Vector3 side = Vector3.Cross(Vector3.up, forward).normalized;
+
+                moveAxis = forward * left.y + side * left.x + Vector3.up * right.y;
+
+                // Мёртвая зона: дребезг стика не должен «шевелить» точку на доли миллиметра.
+                if (moveAxis.magnitude < 0.15f) moveAxis = Vector3.zero;
+            }
+
             flow.UpdateAim(aimPoint, aimHit && !overInterface, confirm, false,
-                           redOn, greenOn, normal, aimHit);
+                           redOn, greenOn, normal, aimHit,
+                           moveToggle, moveAxis, fastMove);
 
             LogBindOnce();
             LogZones();

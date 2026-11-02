@@ -178,6 +178,11 @@ namespace KazistovVvXr
             // выбор символа ещё и разворачивал бы оператора — стик в шлеме это поворот и ход.
             if (StickOwnedByInput()) return;
 
+            // РЕЖИМ ПЕРЕМЕЩЕНИЯ ТОЧКИ (п.9, 02.11.2026): пока оператор двигает точку стиком,
+            // он СТОИТ. Иначе точка уезжала бы вместе с ним — цель и наблюдатель двигались бы
+            // одновременно, и попасть в точку повторно было бы невозможно.
+            if (IsPointMoveActive()) return;
+
             Quaternion rigYaw = Quaternion.Euler(0f, rigRoot.eulerAngles.y, 0f);
 
             HandleTurn();
@@ -575,5 +580,20 @@ namespace KazistovVvXr
                 TurnModeLabel(), TeleportCount, SnapTurnCount, SmoothMovingSeconds,
                 SmoothTurnSeconds, KvXrInputSource.Describe());
         }
+
+        /// <summary>
+        /// ИДЁТ ЛИ СЕЙЧАС ПЕРЕМЕЩЕНИЕ ТОЧКИ (п.9, 02.11.2026).
+        ///
+        /// Спрашивается у потока через мост, а не хранится копией: состояние режима — один
+        /// источник правды (TrajectoryFlowController.state.phase). Копия в локомоции
+        /// разошлась бы с ним при первом же сбросе.
+        /// </summary>
+        private static bool IsPointMoveActive()
+        {
+            KvXrFlowBridge bridge = KvXrFlowBridge.Active;
+            return bridge != null && bridge.Flow != null && bridge.Flow.IsPointMoveMode;
+        }
     }
+
+
 }
