@@ -102,8 +102,21 @@ public class RobotSelfCollision : MonoBehaviour
             return;
         }
 
+        // ГЛАВНОЕ ОГРАНИЧЕНИЕ (исправлено 02.11.2026 после зависания шлема).
+        //
+        // ПЕРВАЯ ВЕРСИЯ этого метода создавала по `BoxCollider` + `Rigidbody` на КАЖДЫЙ крупный
+        // меш робота. У робота десятки мешей, у двух роботов — сотни кинематических тел. Шлем
+        // завис на инициализации PICO: журнал бесконечно повторял
+        // «seethroughsetting------Seethrough Setting---is running», Unity-поток умирал.
+        //
+        // ПОЧЕМУ ТАК ВЫШЛО: физическое тело на каждый меш — это сотни записей в физическом мире,
+        // которые пересчитываются каждый кадр. Для попадания ЛУЧА ни одно из них не нужно:
+        // `Physics.Raycast` видит `Collider` и БЕЗ `Rigidbody`.
+        //
+        // ТЕПЕРЬ: только `BoxCollider`, без `Rigidbody`, и не больше `MaxFallbackBoxes` боксов —
+        // берём САМЫЕ КРУПНЫЕ меши (они и формируют силуэт).
         int made = 0;
-        for (int i = 0; i < renderers.Length; i++)
+        for (int i = 0; i < renderers.Length && made < MaxFallbackBoxes; i++)
         {
             Renderer r = renderers[i];
             if (r == null) continue;
@@ -111,7 +124,7 @@ public class RobotSelfCollision : MonoBehaviour
             Bounds b = r.bounds;
             Vector3 size = b.size;
             // Мелкие детали пропускаем: их десятки, а силуэт они не формируют.
-            if (size.x < 0.03f && size.y < 0.03f && size.z < 0.03f) continue;
+            if (size.x < 0.05f && size.y < 0.05f && size.z < 0.05f) continue;
 
             string holderName = "RayCollider_" + r.name;
             if (transform.Find(holderName) != null) continue;   // идемпотентность
@@ -127,8 +140,7 @@ public class RobotSelfCollision : MonoBehaviour
             box.size = size;
             box.isTrigger = false;
 
-            Rigidbody rb = holder.AddComponent<Rigidbody>();
-            rb.isKinematic = true;
+            // RIGIDBODY НЕ ДОБАВЛЯЕМ. Лучу он не нужен, а сотни кинематических тел вешали шлем.
 
             spawnedColliders.Add(holder);
             made++;
@@ -137,6 +149,9 @@ public class RobotSelfCollision : MonoBehaviour
         Debug.Log("[RobotSelfCollision] коллайдеры по габаритам построены: " + made + " шт" +
                   (made == 0 ? "  ⚠ НИ ОДНОГО (луч пройдёт сквозь)" : " · слой " + robotColliderLayer));
     }
+
+    /// <summary>Сколько боксов максимум строить запасным путём (силуэт, не точность).</summary>
+    private const int MaxFallbackBoxes = 12;
 
     private void Start()
     {
