@@ -69,6 +69,37 @@ namespace KazistovVvXr
         public static string Reason { get; private set; }
 
         /// <summary>
+        /// РЕЖИМ УЖЕ ОПРЕДЕЛЁН (добавлено 02.11.2026, S45).
+        ///
+        /// ЗАЧЕМ ФЛАГ. Режим определяется в `KvXrRig.Start`, а читается из ДРУГИХ компонентов
+        /// (`KvXrMrRoom.Start`). Порядок `Start` между объектами Unity НЕ ГАРАНТИРУЕТ: если
+        /// `KvXrMrRoom` стартует первым, `Current` ещё равен значению по умолчанию (Vr), и MR
+        /// не включится — при том, что шлем его умеет.
+        /// </summary>
+        public static bool Applied { get; private set; }
+
+        /// <summary>
+        /// ГАРАНТИРОВАТЬ, ЧТО РЕЖИМ ОПРЕДЕЛЁН. Идемпотентно: если `KvXrRig.Start` уже вызвал
+        /// `Apply`, повторной работы не будет. Если ещё нет (порядок `Start` не гарантирован) —
+        /// проба и выбор выполняются здесь, теми же функциями, а не второй копией логики.
+        /// </summary>
+        public static void EnsureApplied()
+        {
+            if (Applied) return;
+
+            KvXrCapabilities.Answer passthrough = KvXrCapabilities.Passthrough();
+            KvXrCapabilities.Answer anchors = KvXrCapabilities.SpatialAnchors();
+            KvXrCapabilities.Answer camera = KvXrCapabilities.Camera();
+
+            Apply(
+                passthroughAvailable: KvXrCapabilities.IsYes(passthrough),
+                spatialAnchorsAvailable: KvXrCapabilities.IsYes(anchors),
+                cameraAvailable: KvXrCapabilities.IsYes(camera));
+
+            Debug.Log("[KvXr] " + KvXrCapabilities.Describe(passthrough, anchors, camera));
+        }
+
+        /// <summary>
         /// ВЫБРАТЬ РЕЖИМ ПО ВОЗМОЖНОСТЯМ.
         ///
         /// ПОРЯДОК РЕШЕНИЯ (важен, проверяется таблицей в тесте):
@@ -100,6 +131,7 @@ namespace KazistovVvXr
             bool cameraAvailable, float worldScale = DefaultWorldScale)
         {
             Current = Choose(passthroughAvailable, spatialAnchorsAvailable, cameraAvailable);
+            Applied = true;
             // Масштаб не может быть нулевым или отрицательным — это не «настройка», а ошибка,
             // при которой геометрия схлопывается в точку.
             WorldScale = worldScale > 0.0001f ? worldScale : DefaultWorldScale;

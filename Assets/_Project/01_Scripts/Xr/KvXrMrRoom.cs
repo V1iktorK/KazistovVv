@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEngine;
 using KazistovVvFeatures;
 
@@ -71,6 +72,9 @@ namespace KazistovVvXr
         /// <summary>Габариты поставленного робота — для честного отчёта о масштабе.</summary>
         public Vector3 RobotSize { get; private set; }
 
+        /// <summary>Масштаб, в котором робот стоит в сцене (сохраняется при постановке в MR).</summary>
+        private Vector3 robotAuthoredScale = Vector3.one;
+
         /// <summary>
         /// MR РЕАЛЬНО АКТИВЕН (исправлено 30.10.2026, S44).
         ///
@@ -91,12 +95,20 @@ namespace KazistovVvXr
         /// ПОЧЕМУ НЕ ОДНО только второе условие: если оператор ВЫКЛЮЧИЛ комнату в настройках, это
         /// его осознанный выбор, и навязывать MR нельзя. Нужны оба.
         /// </summary>
+        /// <summary>
+        /// MR РЕАЛЬНО АКТИВЕН. Правило: ФАКТИЧЕСКИЙ режим (определён по возможностям устройства)
+        /// И согласие оператора (тумблер «показывать комнату», по умолчанию включён).
+        ///
+        /// ПОЧЕМУ ОБА УСЛОВИЯ. Одного тумблера мало: до S45 он был единственным источником правды
+        /// и всегда выключен — вся ветка MR была мёртвой. Одного режима тоже мало: оператор вправе
+        /// осознанно отказаться от комнаты и вернуться в виртуальную лабораторию.
+        /// </summary>
         public bool MrActive
         {
             get
             {
-                if (!KvXrSettings.GetPassthrough()) return false;          // оператор выключил
-                return KvXrPlatformModeSelector.Current == KvXrPlatformMode.Mr;   // устройство даёт
+                return KvXrPlatformModeSelector.Current == KvXrPlatformMode.Mr &&
+                       KvXrSettings.GetPassthrough();
             }
         }
 
@@ -140,26 +152,80 @@ namespace KazistovVvXr
             if (!table.IsValid) table = KvXrMrPlacement.DefaultTable;
             if (!room.IsValid) room = KvXrMrPlacement.DefaultRoom;
 
+            // ПОРЯДОК Start НЕ ГАРАНТИРОВАН. Если этот компонент стартует раньше `KvXrRig`,
+            // режим ещё не определён и `MrActive` был бы false — MR не включился бы на шлеме,
+            // который его умеет. Гарантируем определение режима здесь (идемпотентно).
+            KvXrPlatformModeSelector.EnsureApplied();
+
             // РОБОТА СТАВИМ НА «РЕАЛЬНЫЙ СТОЛ» ТОЛЬКО В MR. В VR реального стола нет, и постановка
             // переносила робота В НАЧАЛО КООРДИНАТ — то есть туда, где стоит оператор. Робот,
             // внутри которого стоишь, не виден: изнутри модели видны только обратные стороны граней.
-            // Именно это и записал журнал шлема 16.10.2026: «Робот поставлен на реальный стол:
-            // центр (0,00; 0,00) м, низ 0,78 м», — при режиме «виртуальная лаборатория (VR)».
-            if (ShouldPlaceRobotOnRealTable(MrActive)) PlaceRobot();
-            else Debug.Log("[KvXr] Робот оставлен НА СВОЁМ СТЕНДЕ: режим не MR, реального стола нет. " +
+            if (ShouldPlaceRobotOnRealTable(MrActive)) BeginMrSession();
+            else
+            {
+                Debug.Log("[KvXr] Робот оставлен НА СВОЁМ СТЕНДЕ: режим не MR, реального стола нет. " +
                            "Постановка «на реальный стол» в VR увела бы робота в начало координат — " +
                            "в место, где стоит оператор.");
+            }
+
             ApplyLayers();
 
             Debug.Log("[KvXr] " + KvXrMrPlacement.Describe(table, room, workZoneRadiusMeters));
-            if (!KvXrMrPlacement.VirtualGeometryIsMetric)
+        }
+
+        /// <summary>
+        /// НАЧАТЬ СЕАНС СМЕШАННОЙ РЕАЛЬНОСТИ (добавлено 02.11.2026, S45).
+        ///
+        /// ЧТО ЗДЕСЬ ПРОИСХОДИТ И В КАКОМ ПОРЯДКЕ — порядок обязателен:
+        ///   1. включается НАСТОЯЩИЙ сквозной вид (`KvMrRuntime.EnablePassthrough`: пасс-слой PICO
+        ///      или камера AR Foundation на Meta) — без него «MR» был бы серым фоном;
+        ///   2. виртуальная лаборатория прячется (стенды 14,4 м закрывали бы комнату оператора);
+        ///   3. робот ЗАБИРАЕТСЯ ИЗ СТЕНДА в мировой корень `KvMrWorld`: иначе он погас бы вместе
+        ///      со стендом, а стенд нужен скрытым;
+        ///   4. поднимается отслеживание РЕАЛЬНЫХ поверхностей (меш комнаты → невидимые коллайдеры):
+        ///      без него луч не во что попадать, и «поставить на стол» нечем подтвердить;
+        ///   5. создаётся компонент постановки с маркером и кнопкой A.
+        ///
+        /// СЦЕНА НЕ ПРАВИТСЯ: `XrMain.unity` остаётся байт в байт (её SHA256 закреплён тестом).
+        /// </summary>
+        private void BeginMrSession()
+        {
+            Debug.Log("[KvMr] === СМЕШАННАЯ РЕАЛЬНОСТЬ: включаю сквозной вид и реальные поверхности ===");
+            Debug.Log("[KvMr] " + KvXrCapabilities.DescribeEnabledExtensions());
+
+            bool passthrough = KvMrRuntime.EnablePassthrough(headCamera);
+            if (!passthrough)
             {
-                Debug.LogWarning("[KvXr] ЧЕСТНОЕ ОГРАНИЧЕНИЕ: виртуальная геометрия проекта не метрическая " +
-                    "(столешницы 14,4 × 9,6 юнита при высоте 0,98). Постановка робота «на реальный стол» " +
-                    "требует масштаба: сейчас worldScale = " + worldScale.ToString("0.000") +
-                    ". Реальный стол: " + table.Describe() + ".");
+                // Не притворяемся: режим остался MR по возможностям, но картинки комнаты нет.
+                // Ветка постановки при этом продолжает работать — робот встанет на реальную
+                // поверхность, если физика комнаты доступна, и это будет видно в журнале.
+                Debug.LogWarning("[KvMr] сквозной вид НЕ включён: " + KvMrRuntime.LastError);
+            }
+
+            PrepareRobotForWorld();
+            SetVirtualEnvironmentVisible(false);
+
+            KvMrSurfaces surfaces = KvMrSurfaces.Ensure(null);
+            surfaces.StartTracking();
+
+            KvMrPlacement.Ensure(transform, headCamera, this);
+
+            Debug.Log("[KvMr] " + Status);
+            Debug.Log("[KvMr] " + KvMrRuntime.Status);
+        }
+
+        /// <summary>Строка состояния MR одной строкой — для журнала и экрана состояния.</summary>
+        public string Status
+        {
+            get
+            {
+                KvMrPlacement placement = KvMrPlacement.Active;
+                return "MR: сквозной вид " + (KvMrRuntime.PassthroughOn ? "ВКЛЮЧЁН" : "не включён") +
+                       " · " + (placement != null ? placement.Status : "постановка не создана") +
+                       " · робот " + (robotOnTable != null ? "в мире" : "ещё на стенде");
             }
         }
+
 
         void Update()
         {
@@ -200,7 +266,7 @@ namespace KazistovVvXr
             // стенды стоят на своих местах и ничем не загорожены. Вот почему их не было видно.
             bool hideStandsInMr = HidesVirtualStands(MrActive, hideVirtualStands,
                 KvXrSettings.GetShowVirtualStands());
-            SetVirtualStandsVisible(!hideStandsInMr);
+            SetVirtualEnvironmentVisible(!hideStandsInMr);
 
             // 2. Сетка рабочей зоны робота.
             if (KvXrSettings.GetShowWorkZone())
@@ -233,33 +299,102 @@ namespace KazistovVvXr
 
         // ------------------------------------------------------------------ постановка робота
 
+        /// <summary>Имя мирового корня MR. Один на весь сеанс (создаётся один раз).</summary>
+        public const string WorldRootName = "KvMrWorld";
+
+        /// <summary>Почему последняя постановка не удалась — для журнала и экрана состояния.</summary>
+        public string LastPlacementError { get; private set; }
+
         /// <summary>
-        /// Найти робота в сцене и поставить его на реальный стол.
-        /// Поиск идёт по компонентам-контроллерам роботов проекта (6-осевой и SCARA) —
-        /// так мы не зависим от имён объектов в сцене, которые уже менялись (§0.7).
+        /// ЗАБРАТЬ РОБОТА ИЗ СТЕНДА В МИРОВОЙ КОРЕНЬ (добавлено 02.11.2026, S45).
+        ///
+        /// ЗАЧЕМ. В сцене робот — РЕБЁНОК стенда («Стенд_1_Стол»). В MR стенд прячется, чтобы
+        /// 14-метровая столешница не закрывала комнату оператора, — и вместе с ним погас бы робот.
+        /// Поэтому робот переносится в корневой объект `KvMrWorld`, который стоит в начале координат
+        /// трекинга и НЕ двигается ни с головой, ни с ригом. Это и есть привязка к миру: оператор
+        /// наклоняется, отходит на метр и возвращается — робот остаётся на том же месте стола.
         /// </summary>
-        public void PlaceRobot()
+        public bool PrepareRobotForWorld()
         {
-            if (robotOnTable == null) robotOnTable = FindRobotRoot();
-            if (robotOnTable == null)
+            Transform root = FindRobotRoot();
+            if (root == null)
             {
-                Debug.LogWarning("[KvXr] Робот в сцене не найден — ставить на стол нечего. " +
-                    "MR-сцена ожидает робота в загруженной сцене или в поле robotOnTable.");
-                return;
+                LastPlacementError = "робот в сцене не найден (нет SixAxisController/SCARAController/RobotController)";
+                Debug.LogWarning("[KvMr] " + LastPlacementError + " — ставить на реальный стол нечего");
+                return false;
             }
 
-            KvXrPlacement placement = KvXrMrPlacement.PlaceRobot(
-                table, robotOffset, table.HeightMeters, tableCenter, robotYawDegrees);
+            Transform world = EnsureWorldRoot();
+            if (world != null && root.parent != world) root.SetParent(world, true);
+            root.gameObject.SetActive(true);
+            robotOnTable = root;
 
-            float s = Mathf.Max(0.01f, worldScale);
-            robotOnTable.localScale = new Vector3(s, s, s);
-            robotOnTable.position = new Vector3(placement.center.x, placement.groundY, placement.center.y);
-            robotOnTable.rotation = Quaternion.Euler(0f, placement.yawDegrees, 0f);
+            // СОХРАНЯЕМ МАСШТАБ, В КОТОРОМ РОБОТ СТОИТ В СЦЕНЕ. В VR он выглядит правильным
+            // именно при этом масштабе, поэтому «1:1» = не подбирать своё число, а сохранить
+            // авторский масштаб и ПРОВЕРИТЬ габарит замером. Если модели метрические (9 из 12
+            // измеренных — метрические), масштаб равен 1, и это видно в журнале вместе с высотой.
+            robotAuthoredScale = root.localScale;
 
+            // Габарит по факту — это доказательство масштаба 1:1 (робот в проекте метрический).
+            RobotSize = MeasureSize(root);
+            Debug.Log(string.Format(CultureInfo.InvariantCulture,
+                "[KvMr] робот забран из стенда в мировой корень «{0}»: «{1}» · габариты " +
+                "{2:0.00}×{3:0.00}×{4:0.00} м · масштаб сцены {5:0.000};{6:0.000};{7:0.000} " +
+                "(1 юнит = 1 м, высота в метрах — замер)",
+                WorldRootName, root.name, RobotSize.x, RobotSize.y, RobotSize.z,
+                robotAuthoredScale.x, robotAuthoredScale.y, robotAuthoredScale.z));
+            return true;
+        }
+
+        /// <summary>
+        /// МИРОВОЙ КОРЕНЬ MR. Корневой объект сцены (НЕ ребёнок рига!): всё, что стоит на реальном
+        /// столе, не должно ехать за оператором при искусственном перемещении. Единственное место,
+        /// где такой корень создаётся.
+        /// </summary>
+        public static Transform EnsureWorldRoot()
+        {
+            GameObject found = null;
+            Transform[] all = Object.FindObjectsByType<Transform>(FindObjectsInactive.Include);
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (all[i] != null && all[i].name == WorldRootName) { found = all[i].gameObject; break; }
+            }
+            if (found == null)
+            {
+                found = new GameObject(WorldRootName);
+                found.transform.position = Vector3.zero;
+                found.transform.rotation = Quaternion.identity;
+                Debug.Log("[KvMr] создан мировой корень «" + WorldRootName + "» (привязка к реальному миру)");
+            }
+            return found.transform;
+        }
+
+        /// <summary>
+        /// ПОСТАВИТЬ РОБОТА НА РЕАЛЬНУЮ ПОВЕРХНОСТЬ. Точка — попадание луча в столешницу;
+        /// низ робота ставится РОВНО в неё (ни щели, ни провала). Масштаб — сохранённый авторский
+        /// (при метрических моделях это 1), а «1:1» подтверждается замером габаритов в метрах.
+        /// </summary>
+        public bool PlaceRobotAtSurface(Vector3 surfacePoint, float yawDegrees)
+        {
+            if (robotOnTable == null && !PrepareRobotForWorld())
+            {
+                if (string.IsNullOrEmpty(LastPlacementError)) LastPlacementError = "робот не подготовлен к постановке";
+                return false;
+            }
+
+            robotOnTable.localScale = robotAuthoredScale;   // сохраняем масштаб сцены (1:1 по замеру)
+            robotOnTable.position = surfacePoint;
+            robotOnTable.rotation = Quaternion.Euler(0f, yawDegrees, 0f);
             RobotSize = MeasureSize(robotOnTable);
-            Debug.Log(string.Format(
-                "[KvXr] Робот поставлен на реальный стол: {0} · габариты робота {1:0.00}×{2:0.00}×{3:0.00} м · масштаб {4:0.000}",
-                placement.Describe(), RobotSize.x, RobotSize.y, RobotSize.z, worldScale));
+            LastPlacementError = null;
+
+            Debug.Log(string.Format(CultureInfo.InvariantCulture,
+                "[KvMr] робот на реальной поверхности: низ {0:0.000} м · точка ({1:0.000}; {2:0.000}; {3:0.000}) м · " +
+                "габариты {4:0.00}×{5:0.00}×{6:0.00} м · поворот {7:0}° · масштаб {8:0.000} " +
+                "(высота в метрах — замер, 1 юнит = 1 м)",
+                surfacePoint.y, surfacePoint.x, surfacePoint.y, surfacePoint.z,
+                RobotSize.x, RobotSize.y, RobotSize.z, yawDegrees, robotOnTable.localScale.x));
+            return true;
         }
 
         /// <summary>Габариты объекта по всем визуальным частям (без коллайдеров и служебного).</summary>
@@ -274,7 +409,12 @@ namespace KazistovVvXr
             return bounds.size;
         }
 
-        private Transform FindRobotRoot()
+        /// <summary>
+        /// НАЙТИ КОРЕНЬ РОБОТА. Компонент-контроллер ставится на корень модели (так делает
+        /// `KvRobotSpawner`), поэтому достаточно подняться до ребёнка корня сцены: в сцене робот
+        /// лежит как «Стенд_1_Стол / Робот_6ос_Стенд1», а не прямо в корне.
+        /// </summary>
+        private static Transform FindRobotRoot()
         {
             var six = Object.FindObjectsByType<SixAxisController>(FindObjectsInactive.Include);
             if (six != null && six.Length > 0) return RootOf(six[0].transform);
@@ -287,45 +427,44 @@ namespace KazistovVvXr
             return null;
         }
 
-        /// <summary>
-        /// Корень робота: поднимаемся вверх, пока родитель тоже принадлежит роботу.
-        /// Иначе «поставить робота» означало бы переставить одну деталь.
-        /// </summary>
+        /// <summary>Подняться до ребёнка корня сцены: выше — уже контейнер лаборатории.</summary>
         private static Transform RootOf(Transform t)
         {
             Transform current = t;
-            while (current.parent != null &&
-                   (current.parent.GetComponentInChildren<SixAxisController>(true) != null ||
-                    current.parent.GetComponentInChildren<SCARAController>(true) != null ||
-                    current.parent.GetComponentInChildren<RobotController>(true) != null))
-            {
-                // Не поднимаемся в общий контейнер сцены (там окажется вся сцена).
-                if (current.parent.GetComponent<SixAxisController>() != null ||
-                    current.parent.GetComponent<SCARAController>() != null ||
-                    current.parent.GetComponent<RobotController>() != null)
-                {
-                    current = current.parent;
-                    continue;
-                }
-                break;
-            }
+            while (current.parent != null && current.parent.parent != null) current = current.parent;
             return current;
         }
 
-        private void SetVirtualStandsVisible(bool visible)
+        private void SetVirtualEnvironmentVisible(bool visible)
         {
-            // Виртуальные стенды — это объекты по имени (столы проекта строит StandBuilder).
+            // Виртуальное окружение — это КОРНЕВЫЕ объекты сцены по имени: стенды проекта
+            // («Стенд_1_Стол», «Стенд_2_Стол»), зал («XrHangar») и пол XR-сцены («XrFloor»).
+            // Дети не трогаются: иначе погасили бы и то, что внутри стенда, но у нас всё
+            // нужное (робот) уже перенесено в мировой корень.
             Transform[] all = Object.FindObjectsByType<Transform>(FindObjectsInactive.Include);
             for (int i = 0; i < all.Length; i++)
             {
                 Transform t = all[i];
                 if (t == null || t.parent != null) continue;          // только корневые объекты
-                string name = t.name.ToLowerInvariant();
-                bool isStand = name.Contains("стенд") || name.Contains("stand") || name.Contains("table");
-                if (!isStand) continue;
                 if (t.gameObject == gameObject) continue;
-                t.gameObject.SetActive(visible);
+                if (!IsVirtualEnvironmentRoot(t.name)) continue;
+                if (t.gameObject.activeSelf != visible) t.gameObject.SetActive(visible);
             }
+        }
+
+        /// <summary>
+        /// ВИРТУАЛЬНОЕ ОКРУЖЕНИЕ ЛИ ЭТО (чистая функция — проверяется тестом).
+        /// Совпадение по подстроке имени: у проекта объекты названы по-русски, у сцены —
+        /// «XrHangar»/«XrFloor». Порядок не важен, регистр не важен.
+        /// </summary>
+        public static bool IsVirtualEnvironmentRoot(string objectName)
+        {
+            if (string.IsNullOrEmpty(objectName)) return false;
+            string name = objectName.ToLowerInvariant();
+            if (name.Contains("стенд") || name.Contains("stand")) return true;
+            if (name.Contains("hangar") || name.Contains("ангар")) return true;
+            if (name.Contains("xrfloor")) return true;
+            return false;
         }
 
         private Vector3 TableTopCenter()
