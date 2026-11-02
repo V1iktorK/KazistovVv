@@ -1070,6 +1070,21 @@ namespace KazistovVvXrEditor
                 c.r, c.g, c.b, metallic, smoothness, hasMap ? "есть" : "нет");
         }
 
+        /// <summary>
+        /// ЗАВОДСКОЙ СЕРЫЙ ЦВЕТ РОБОТА (добавлено 02.11.2026 по замечанию владельца).
+        ///
+        /// СЛОВА ВЛАДЕЛЬЦА: «робот какой-то бирюзовый, хотя должен быть серым как с завода
+        /// (из блендера), а фантом бирюзового».
+        ///
+        /// ПРИЧИНА. `CopySurface` брал цвет из ОБРАЗЦА — материала внутри `ScaraRobot.fbx`.
+        /// У SCARA он голубой (0,45 / 0,78 / 1,00), и этот голубой переезжал на робота.
+        /// То есть робот никогда не был серым: он наследовал цвет другого робота.
+        ///
+        /// ТЕПЕРЬ цвет робота задаётся ЯВНО и не зависит от того, что лежит в модели SCARA.
+        /// Значение 0,66 — тот же серый, что у `Gray.mat` в ангаре (там 0,66 / 0,66 / 0,66).
+        /// </summary>
+        private static readonly Color RobotFactoryGray = new Color(0.66f, 0.66f, 0.66f, 1f);
+
         private static Material CreateRobotMaterial(KvPipelineKind kind, Material sample, StringBuilder sb)
         {
             EnsureFolder(RobotMaterialFolder);
@@ -1080,6 +1095,7 @@ namespace KazistovVvXrEditor
             if (existing != null)
             {
                 CopySurface(sample, existing);
+                ApplyFactoryGray(existing, sb);        // ← цвет робота, а не цвет SCARA
                 EditorUtility.SetDirty(existing);
                 AssetDatabase.SaveAssets();
                 sb.AppendLine("  материал " + kind + ": «" + existing.name + "» обновлён по образцу");
@@ -1090,11 +1106,27 @@ namespace KazistovVvXrEditor
             if (material == null) return null;
 
             CopySurface(sample, material);
+            ApplyFactoryGray(material, sb);            // ← то же: робот серый, не голубой
             material.hideFlags = HideFlags.None;
             AssetDatabase.CreateAsset(material, path);
             AssetDatabase.SaveAssets();
             sb.AppendLine("  материал " + kind + ": «" + material.name + "» создан (" + path + ")");
             return material;
+        }
+
+        /// <summary>
+        /// ПОСТАВИТЬ РОБОТУ ЗАВОДСКОЙ СЕРЫЙ, поверх скопированной поверхности.
+        ///
+        /// Вынесено отдельным методом, чтобы правило было в ОДНОМ месте: и для существующего
+        /// материала, и для только что созданного. Иначе через месяц кто-то поправит одну ветку
+        /// и забудет другую — ровно так этот дефект и появился.
+        /// </summary>
+        private static void ApplyFactoryGray(Material material, StringBuilder sb)
+        {
+            if (material == null) return;
+            KazistovVvFeatures.KvRenderPipelineShaders.ApplyColor(material, RobotFactoryGray, false);
+            sb.AppendLine("  цвет робота: заводской серый " + RobotFactoryGray.r.ToString("0.00") +
+                          " (образец SCARA голубой — его цвет НЕ наследуется)");
         }
 
         /// <summary>Назначить материал ВСЕМ рендерерам робота в сцене (и сохранить сцену).</summary>
