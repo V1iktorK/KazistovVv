@@ -2342,7 +2342,19 @@ public class TrajectoryFlowController : MonoBehaviour
 
         if (robot != null && state.phase != FlowState.Idle) return robot;
 
-        RobotController[] robots = Object.FindObjectsByType<RobotController>(FindObjectsInactive.Exclude);
+        // ИЩЕМ И ВЫКЛЮЧЕННЫХ РОБОТОВ (исправлено 02.11.2026, ПУНКТ 4 владельца:
+        // «не все траектории корректно включаются»).
+        //
+        // ПРИЧИНА. Здесь стояло Exclude — только АКТИВНЫЕ. В шлеме при запуске сценные
+        // роботы ВЫКЛЮЧЕНЫ (эталоны, которые включает меню при создании), поэтому поиск
+        // возвращал ПУСТОЙ список, robot оставался null, и в журнале бесконечно писалась
+        // строка «ЗОНЫ: причина скрытия «робот не привязан»». Без привязки робота не
+        // работают ни зоны, ни проверка зазора, ни запуск траекторий — то есть часть
+        // траекторий просто не включалась, как владелец и говорил.
+        //
+        // ЧТО СТАЛО. Выключенные тоже находятся. Фантомы при этом НЕ попадают в список:
+        // у них HideInHierarchy, и проверка ниже их отбрасывает (строка с hideFlags).
+        RobotController[] robots = Object.FindObjectsByType<RobotController>(FindObjectsInactive.Include);
         RobotController best = null;
         float bestScore = float.MaxValue;
         foreach (RobotController rc in robots)
