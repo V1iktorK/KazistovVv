@@ -69,12 +69,46 @@ namespace KazistovVv.Core
             if (parent != null) go.transform.SetParent(parent, true);
 
             // --- контроллер нужного типа
+            //
+            // ТРИ РАЗНЫХ КОНТРОЛЛЕРА, А НЕ ДВА. Двурукий робот НЕ МОЖЕТ использовать
+            // SixAxisController: у того один массив суставов и один TCP, поэтому вторая рука
+            // осталась бы мёртвой геометрией — ровно та проблема, на которую владелец и жаловался
+            // («запрограммируй правильно наконец уже двурукого»). Поэтому для двурукого ставится
+            // KvDualArmController с двумя независимыми цепочками.
             RobotController robot = go.GetComponent<RobotController>();
             if (robot == null)
             {
-                robot = model.IsScara
-                    ? (RobotController)go.AddComponent<SCARAController>()
-                    : (RobotController)go.AddComponent<SixAxisController>();
+                if (model.IsDualArm)
+                    robot = (RobotController)go.AddComponent<KvDualArmController>();
+                else if (model.IsScara)
+                    robot = (RobotController)go.AddComponent<SCARAController>();
+                else
+                    robot = (RobotController)go.AddComponent<SixAxisController>();
+            }
+
+            // Двурукий сам находит свои цепочки по именам — общий список суставов ему не нужен.
+            if (model.IsDualArm)
+            {
+                KvDualArmController dual = robot as KvDualArmController;
+                if (dual != null)
+                {
+                    dual.robotName = model.Title;
+                    dual.ResolveChains();
+                    if (!dual.ChainsReady)
+                    {
+                        Debug.LogWarning("[KvRobot] двурукий «" + model.Title + "»: цепочки не найдены " +
+                                         "— руки не будут двигаться");
+                    }
+                    else
+                    {
+                        Debug.Log("[KvRobot] " + dual.DescribeDual());
+                    }
+                }
+
+                if (go.GetComponent<RegisteredObject>() == null)
+                    go.AddComponent<RegisteredObject>();
+
+                return robot;
             }
 
             // --- суставы по именам
