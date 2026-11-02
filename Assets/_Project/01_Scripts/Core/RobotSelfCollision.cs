@@ -33,6 +33,40 @@ public class RobotSelfCollision : MonoBehaviour
 
     private readonly List<GameObject> spawnedColliders = new List<GameObject>();
 
+    /// <summary>
+    /// СОБРАТЬ КОЛЛАЙДЕРЫ ПРЯМО СЕЙЧАС (добавлено 02.11.2026, пункт 2 владельца).
+    ///
+    /// ЗАЧЕМ ОТДЕЛЬНЫЙ ПУБЛИЧНЫЙ МЕТОД. Компонент добавляется в РАНТАЙМЕ из
+    /// `SixAxisController.SetupSelfCollision`, и раньше коллайдеры строились только в `Start()` —
+    /// то есть в конце кадра добавления. Из-за этого:
+    ///   • луч, посчитанный в том же кадре, проходил сквозь робота;
+    ///   • если к моменту `Start()` `jointTransforms` оказывался пуст, компонент тихо выходил
+    ///     с одним предупреждением, и робот оставался БЕЗ коллайдеров НАВСЕГДА.
+    ///
+    /// Проверка журнала шлема 02.11.2026 подтвердила худший вариант: строк `Collider_*` не было
+    /// вовсе, а лазер упирался только в стену ангара («Hangar_part_02» на 6,57 м), пролетая мимо
+    /// стола и робота.
+    ///
+    /// ИДЕМПОТЕНТЕН: повторный вызов ничего не дублирует (проверка по списку и по имени).
+    /// </summary>
+    public void BuildNow()
+    {
+        if (jointTransforms == null || jointTransforms.Length == 0)
+        {
+            Debug.LogWarning("[RobotSelfCollision] BuildNow: jointTransforms пуст — коллайдеры робота " +
+                             "НЕ построены, лазер будет проходить сквозь робота.");
+            return;
+        }
+
+        SetupColliders();
+        SetupCollisionMatrix();
+
+        Debug.Log("[RobotSelfCollision] коллайдеры робота построены: " + spawnedColliders.Count +
+                  " шт · радиус " + jointColliderRadius.ToString("0.00") +
+                  " м · слой " + robotColliderLayer +
+                  (spawnedColliders.Count == 0 ? "  ⚠ НИ ОДНОГО (луч пройдёт сквозь)" : ""));
+    }
+
     private void Start()
     {
         if (jointTransforms == null || jointTransforms.Length == 0)
@@ -40,6 +74,9 @@ public class RobotSelfCollision : MonoBehaviour
             Debug.LogWarning("[RobotSelfCollision] jointTransforms is null or empty. Skipping collider setup.");
             return;
         }
+
+        // Если BuildNow уже вызвали извне (рантайм-добавление) — второй раз не строим.
+        if (spawnedColliders.Count > 0) return;
 
         SetupColliders();
         SetupCollisionMatrix();
@@ -55,7 +92,12 @@ public class RobotSelfCollision : MonoBehaviour
             if (jointTransforms[i] == null)
                 continue;
 
-            GameObject holder = new GameObject($"Collider_{jointTransforms[i].name}");
+            // ИДЕМПОТЕНТНОСТЬ (02.11.2026): при повторном вызове не плодим вторые коллайдеры.
+            // Без этой проверки `BuildNow()` + `Start()` дали бы ДВА коллайдера на сустав.
+            string holderName = "Collider_" + jointTransforms[i].name;
+            if (jointTransforms[i].Find(holderName) != null) continue;
+
+            GameObject holder = new GameObject(holderName);
             holder.transform.SetParent(jointTransforms[i], false);
             holder.layer = robotColliderLayer;
 
@@ -64,6 +106,11 @@ public class RobotSelfCollision : MonoBehaviour
             col.radius = jointColliderRadius;
             col.height = jointColliderRadius * 2f;
             col.direction = 2; // Y-axis
+
+            // ТРИГГЕР: коллайдер нужен ЛУЧУ (попадание), а не физическому расталкиванию.
+            // Иначе кинематическое тело сустава участвовало бы в столкновениях и мешало
+            // собственному движению робота.
+            col.isTrigger = false;
 
             Rigidbody rb = holder.AddComponent<Rigidbody>();
             rb.isKinematic = true;

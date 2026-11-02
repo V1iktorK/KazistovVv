@@ -136,8 +136,25 @@ public class SixAxisController : RobotController
 
         collision.jointTransforms = jointTransforms;
         collision.disableSelfCollisions = true;
-        collision.jointColliderRadius = 0.08f;
+        collision.jointColliderRadius = 0.12f;   // было 0.08: луч проскакивал между суставами
         selfCollisionSetup = true;
+
+        // ПРИНУДИТЕЛЬНО ПОСТРОИТЬ КОЛЛАЙДЕРЫ ПРЯМО СЕЙЧАС (исправлено 02.11.2026,
+        // пункт 2 владельца: «лазеры … не упираются в роботов»).
+        //
+        // ЧТО БЫЛО. `RobotSelfCollision` строит коллайдеры в своём `Start()`. Компонент
+        // добавляется в РАНТАЙМЕ из этого метода. `Start()` у только что добавленного компонента
+        // выполняется в конце кадра — то есть уже ПОСЛЕ того, как луч за этот кадр пройдёт
+        // сквозь робота. А если у компонента к моменту `Start()` оказывался пустой
+        // `jointTransforms`, он вообще тихо выходил с предупреждением.
+        //
+        // Проверка журнала шлема 02.11.2026: строк `[RobotSelfCollision]` и `Collider_*` НЕТ
+        // ВООБЩЕ, а лазер упирался только в стену ангара («Hangar_part_02») — значит коллайдеры
+        // робота не появлялись.
+        //
+        // ТЕПЕРЬ коллайдеры строятся сразу, в этом же кадре, с уже заполненным `jointTransforms`.
+        // `BuildNow()` идемпотентен: повторный вызов ничего не дублирует.
+        collision.BuildNow();
     }
 
     private void ResolveRobotReferences()

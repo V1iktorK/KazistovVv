@@ -80,7 +80,7 @@ namespace KazistovVvUI
         }
 
         /// <summary>Значение по умолчанию: 0,45 — уменьшение примерно в 2,2 раза.</summary>
-        public const float DefaultTextScale = 0.45f;
+        public const float DefaultTextScale = 0.55f;
 
         /// <summary>Нижняя граница коэффициента: 0,15 — уменьшение в 6,7 раза, дальше не читается.</summary>
         public const float MinTextScale = 0.15f;
