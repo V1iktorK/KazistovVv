@@ -251,6 +251,47 @@ namespace KazistovVvTests
             StringAssert.Contains("KvRobotCatalog", source, "замер обязан идти по каталогу моделей проекта");
         }
 
+        /// <summary>
+        /// ЗАПАСНОЙ ИСТОЧНИК СТОЛА — РАЗМЕЧЕННАЯ КОМНАТА PICO, С ТАЙМ-АУТОМ И КОНВЕРСИЕЙ КООРДИНАТ.
+        ///
+        /// ЗАЧЕМ. Меш комнаты требует надетого шлема и разметки; семантическая сцена даёт стол
+        /// параллелепипедом. Две тонкости, которые легко потерять при правке: (1) у пакета PICO
+        /// поза БОКСА не переводится в Unity (нужна инверсия Z), (2) нативные запросы могут не
+        /// ответить вовсе — без тайм-аута ожидание станет вечным, и робот не встанет на стол.
+        /// </summary>
+        [Test]
+        public void SurfaceFallback_UsesSceneAnchorsWithTimeoutAndZConversion()
+        {
+            string source = ReadScript("KvMrSurfaces.cs");
+
+            StringAssert.Contains("QuerySceneAnchorAsync", source,
+                "нет запроса размеченных объектов комнаты (стол из семантической сцены)");
+            StringAssert.Contains("StartSenseDataProvider", source,
+                "не запускается провайдер сцены PICO — запрос стола не сработает");
+            StringAssert.Contains("Task.WhenAny", source,
+                "нет тайм-аута: нативный запрос PICO может не ответить, и ожидание станет вечным");
+            StringAssert.Contains("-boxPos.z", source,
+                "не выполнена конверсия координат бокса (у пакета PICO поза Box3D не переводится)");
+            StringAssert.Contains("BoxCollider", source,
+                "из габаритов стола не строится коллайдер — луч постановки не увидит стол");
+        }
+
+        /// <summary>
+        /// ДЛЯ QUEST СПИСОК ФИЧ ВКЛЮЧАЕТ ОБЯЗАТЕЛЬНУЮ SESSION. Без неё сборка падает на
+        /// валидации OpenXR (`error = true`): камера/плоскости/якоря Meta зависят от Session.
+        /// </summary>
+        [Test]
+        public void FeatureSetup_MetaListHasSessionDependency()
+        {
+            string joined = string.Join(" ", KvMrSetupTools.MetaMrFeatureTypeNames);
+
+            StringAssert.Contains("ARSessionFeature", joined,
+                "нет обязательной зависимости Meta Quest: Session — сборка под Quest упадёт на валидации");
+            StringAssert.Contains("ARCameraFeature", joined,
+                "нет фичи камеры Meta — сквозной вид на Quest не включится");
+            StringAssert.Contains("MetaQuestFeature", joined, "нет поддержки Meta Quest");
+        }
+
         // ==================================================== Г. АВТООПРЕДЕЛЕНИЕ РЕЖИМА
 
         /// <summary>

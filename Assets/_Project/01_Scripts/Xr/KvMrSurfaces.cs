@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.XR;
+using Unity.XR.PXR;
 
 namespace KazistovVvXr
 {
@@ -42,6 +44,16 @@ namespace KazistovVvXr
         /// <summary>Сколько ждать подсистему меша, прежде чем честно сказать «её нет» (секунды).</summary>
         public float waitForSubsystemSeconds = 10f;
 
+        /// <summary>
+        /// ЗАПАСНОЙ ИСТОЧНИК ПОВЕРХНОСТИ — СЕМАНТИЧЕСКАЯ СЦЕНА PICO, секунды (S45).
+        ///
+        /// ЗАЧЕМ. Меш комнаты на PICO 4 Ultra отдаёт полигоны не всегда: он требует надетого шлема
+        /// и разметки помещения. У PICO есть ВТОРОЙ источник — размеченные объекты комнаты
+        /// (семантическая сцена), где стол приходит как параллелепипед с габаритами. Если меш
+        /// молчит, этот источник позволяет поставить робота на РЕАЛЬНЫЙ стол, а не на пол.
+        /// </summary>
+        public float sceneAnchorDelaySeconds = 8f;
+
         /// <summary>Готово ли принимать лучи: есть хотя бы один коллайдер реального мира.</summary>
         public bool Ready { get; private set; }
 
@@ -78,6 +90,9 @@ namespace KazistovVvXr
         private string noSubsystemReason = "ещё не искали";
         private int builtMeshes;
         private int failedMeshes;
+        private bool sceneAnchorRequested;
+        private bool sceneAnchorRunning;
+        private int tableColliders;
 
         /// <summary>Текущий экземпляр. Один на приложение: иначе два компонента построят по копии
         /// коллайдеров, и луч будет видеть комнату дважды (и память уйдёт вдвое).</summary>
@@ -141,7 +156,7 @@ namespace KazistovVvXr
 
         void Update()
         {
-            if (gaveUp) return;
+            if (gaveUp && (Ready || sceneAnchorRunning)) return;
 
             // Подсистему ищем не каждый кадр, а раз в секунду: она появляется только после
             // создания OpenXR-сессии, и опрос каждый кадр ничего не ускорит, но стоит времени.
@@ -152,11 +167,22 @@ namespace KazistovVvXr
             }
 
             PumpSubsystem();
+
+            // ЗАПАСНОЙ ИСТОЧНИК: меш не дал полигонов за отведённое время — спросить у PICO
+            // размеченные объекты комнаты (стол приходит параллелепипедом с габаритами).
+            if (!Ready && !sceneAnchorRequested && !sceneAnchorRunning &&
+                Time.unscaledTime - startedAt >= sceneAnchorDelaySeconds)
+            {
+                sceneAnchorRequested = true;
+                RequestSceneAnchors();
+            }
         }
 
         /// <summary>Поиск подсистемы, разрешение, старт и чтение мешей — по шагам, идемпотентно.</summary>
         private void PumpSubsystem()
         {
+            if (gaveUp) return;          // уже сказали «меша нет» — не спамим одним и тем же предупреждением
+
             if (subsystem == null)
             {
                 if (Time.unscaledTime - startedAt > waitForSubsystemSeconds)
@@ -403,6 +429,144 @@ namespace KazistovVvXr
         {
             return !float.IsNaN(v.x) && !float.IsNaN(v.y) && !float.IsNaN(v.z) &&
                    !float.IsInfinity(v.x) && !float.IsInfinity(v.y) && !float.IsInfinity(v.z);
+        }
+
+        // ---------------------------------------------------------------- запасной источник: сцена PICO
+
+        /// <summary>
+        /// СПРОСИТЬ У PICO РАЗМЕЧЕННЫЕ ОБЪЕКТЫ КОМНАТЫ (семантическая сцена) — запасной путь,
+        /// когда меш комнаты не дал полигонов.
+        ///
+        /// ЗАЧЕМ. Меш требует надетого шлема и разметки помещения, а у PICO есть второй источник:
+        /// размеченные объекты комнаты, где СТОЛ приходит параллелепипедом с габаритами в метрах.
+        /// Для задачи «поставить робота на свой стол» этого достаточно: строим невидимый
+        /// BoxCollider по габаритам стола, и луч постановки начинает в него попадать.
+        ///
+        /// КОНВЕРСИЯ КООРДИНАТ — ТОНКОЕ МЕСТО (проверено по исходникам пакета PICO 1.4.1):
+        /// поза СУЩНОСТИ пакет переводит в Unity сам (инверсия Z), а позу БОКСА — НЕТ. Поэтому
+        /// бокс переводится здесь: позиция с -z, кватернион с -z/-w, затем накладывается поза
+        /// сущности. Иначе стол оказался бы зеркально отражён относительно оператора.
+        /// </summary>
+        private async void RequestSceneAnchors()
+        {
+            if (Application.platform != RuntimePlatform.Android)
+            {
+                Debug.Log("[KvMr] реальные поверхности: семантическая сцена доступна только на Android");
+                return;
+            }
+            if (KvMrRuntime.Backend != KvMrBackend.Pico)
+            {
+                Debug.Log("[KvMr] реальные поверхности: семантическая сцена PICO не применима к бэкенду " +
+                          KvMrRuntime.Backend);
+                return;
+            }
+
+            sceneAnchorRunning = true;
+            try
+            {
+                Debug.Log("[KvMr] реальные поверхности: меша нет — спрашиваю размеченные объекты комнаты (стол)");
+
+                PxrResult start = await WithTimeout(
+                    PXR_MixedReality.StartSenseDataProvider(PxrSenseDataProviderType.SceneCapture), 8000);
+                if (start != PxrResult.SUCCESS)
+                {
+                    Debug.LogWarning("[KvMr] реальные поверхности: провайдер сцены не запустился, код " + start +
+                                     " — вероятно, разметка комнаты не выполнялась");
+                    return;
+                }
+
+                var query = await WithTimeout(
+                    PXR_MixedReality.QuerySceneAnchorAsync(new[] { PxrSemanticLabel.Table }), 12000);
+                if (query.result != PxrResult.SUCCESS)
+                {
+                    Debug.LogWarning("[KvMr] реальные поверхности: запрос стола вернул " + query.result);
+                    return;
+                }
+
+                int created = 0;
+                for (int i = 0; i < query.anchorHandleList.Count; i++)
+                {
+                    ulong handle = query.anchorHandleList[i];
+
+                    PxrSceneComponentType[] types;
+                    if (PXR_MixedReality.GetSceneAnchorComponentTypes(handle, out types) != PxrResult.SUCCESS) continue;
+
+                    bool hasBox = false;
+                    for (int k = 0; k < types.Length; k++)
+                        if (types[k] == PxrSceneComponentType.Box3D) hasBox = true;
+                    if (!hasBox) continue;
+
+                    Vector3 boxPos, boxExtent;
+                    Quaternion boxRot;
+                    Vector3 entityPos;
+                    Quaternion entityRot;
+                    if (PXR_MixedReality.GetSceneBox3DData(handle, out boxPos, out boxRot, out boxExtent) != PxrResult.SUCCESS)
+                        continue;
+                    if (PXR_MixedReality.LocateAnchor(handle, out entityPos, out entityRot) != PxrResult.SUCCESS)
+                        continue;
+
+                    CreateTableCollider(entityPos, entityRot, boxPos, boxRot, boxExtent);
+                    created++;
+                }
+
+                tableColliders = created;
+                if (created > 0)
+                {
+                    Ready = true;
+                    Debug.Log("[KvMr] реальные поверхности: из размеченной комнаты получено столов " + created);
+                    Debug.Log("[KvMr] " + Status);
+                }
+                else
+                {
+                    Debug.LogWarning("[KvMr] реальные поверхности: размеченная комната не дала ни одного стола — " +
+                                     "нужна разметка помещения (настройки PICO → сквозной вид → разметка)");
+                }
+            }
+            catch (TimeoutException)
+            {
+                Debug.LogWarning("[KvMr] реальные поверхности: запрос семантической сцены не ответил за отведённое время");
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[KvMr] реальные поверхности: ошибка запроса сцены: " + e.GetType().Name + ": " + e.Message);
+            }
+            finally
+            {
+                sceneAnchorRunning = false;
+            }
+        }
+
+        /// <summary>Построить невидимый коллайдер стола по данным семантической сцены.</summary>
+        private void CreateTableCollider(Vector3 entityPos, Quaternion entityRot, Vector3 boxPos,
+            Quaternion boxRot, Vector3 extent)
+        {
+            Vector3 localPos = new Vector3(boxPos.x, boxPos.y, -boxPos.z);
+            Quaternion localRot = new Quaternion(boxRot.x, boxRot.y, -boxRot.z, -boxRot.w);
+            Vector3 worldPos = entityPos + entityRot * localPos;
+            Quaternion worldRot = entityRot * localRot;
+
+            var go = new GameObject("KvMrRealTable_" + tableColliders);
+            go.transform.SetParent(container, false);
+            go.transform.position = worldPos;
+            go.transform.rotation = worldRot;
+
+            BoxCollider box = go.AddComponent<BoxCollider>();
+            box.size = extent;
+            realWorldColliders.Add(box);
+
+            var c = System.Globalization.CultureInfo.InvariantCulture;
+            Debug.Log(string.Format(c,
+                "[KvMr] реальный стол из разметки: центр ({0:0.00}; {1:0.00}; {2:0.00}) м · " +
+                "размеры {3:0.00}×{4:0.00}×{5:0.00} м",
+                worldPos.x, worldPos.y, worldPos.z, extent.x, extent.y, extent.z));
+        }
+
+        /// <summary>Ждать задачу не дольше тайм-аута: нативные запросы PICO могут не ответить вовсе.</summary>
+        private static async Task<T> WithTimeout<T>(Task<T> task, int timeoutMs)
+        {
+            Task completed = await Task.WhenAny(task, Task.Delay(timeoutMs));
+            if (completed != task) throw new TimeoutException();
+            return await task;
         }
 
         /// <summary>Габарит комнаты по построенным мешам — для честной строки журнала.</summary>

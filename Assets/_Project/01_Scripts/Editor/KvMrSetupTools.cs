@@ -62,7 +62,17 @@ namespace KazistovVvXrEditor
             "ARCameraFeature",            // сквозной вид Quest (создаёт passthrough-слой)
             "ARMeshFeature",              // реальные поверхности Quest
             "ARAnchorFeature",            // якоря Quest
-            "OculusTouchControllerProfile", // контроллеры Quest для Android (сейчас выключен)
+
+            // ПРОФИЛЬ КОНТРОЛЛЕРОВ QUEST СЮДА НЕ ВХОДИТ — И ЭТО НЕ ЗАБЫТО (найдено сборкой
+            // 02.11.2026). Валидация PICO содержит правило-ОШИБКУ: «Only the PICO Touch Interaction
+            // Profile is supported right now» — рядом с профилями PICO запрещены ЛЮБЫЕ другие
+            // профили. При включении `OculusTouchControllerProfile` для Android сборка ПАДАЕТ
+            // (`BuildFailedException: OpenXR Build Failed`), хотя PICO-часть полностью исправна.
+            //
+            // ЧТО ЗА ЭТО ПЛАТИМ. Уже включённый `OculusTouchControllerProximityProfile` (Meta,
+            // Android) и `KHRSimpleControllerProfile` остаются: на Quest они дают ввод. Отдельный
+            // профиль Oculus Touch из этой сборки исключён осознанно: PICO — основной шлем, а
+            // сборка под Quest при необходимости делается с профилем (тогда без PICO-фич).
         };
 
         // ==================================================== ГЛАВНЫЙ ВХОД ДЛЯ BATCHMODE
@@ -92,6 +102,48 @@ namespace KazistovVvXrEditor
         public static void EnableMetaMrFeatures()
         {
             EnableFeatures(BuildTargetGroup.Android, MetaMrFeatureTypeNames, "Meta");
+            DisableQuestControllerProfileForAndroid();
+        }
+
+        /// <summary>
+        /// ВЫКЛЮЧИТЬ ЧУЖОЙ ПРОФИЛЬ КОНТРОЛЛЕРОВ ДЛЯ ANDROID.
+        ///
+        /// ПОЧЕМУ ЭТО ОТДЕЛЬНЫЙ ШАГ. Валидация PICO выдаёт ОШИБКУ сборки «Only the PICO Touch
+        /// Interaction Profile is supported right now», если рядом с профилями PICO включён любой
+        /// другой профиль (Oculus Touch). Это проверено сборкой 02.11.2026: с профилем Quest
+        /// сборка падала с `BuildFailedException: OpenXR Build Failed`. Поэтому профиль Oculus
+        /// Touch выключается, а не просто «не включается» — он мог остаться включённым с прошлого
+        /// раза, и тогда сборка снова упадёт.
+        /// </summary>
+        [MenuItem(MenuRoot + "2б. Выключить профиль Oculus Touch для Android (правило PICO)", false, 81)]
+        public static void DisableQuestControllerProfileForAndroid()
+        {
+            OpenXRSettings settings = OpenXRSettings.GetSettingsForBuildTargetGroup(BuildTargetGroup.Android);
+            if (settings == null) return;
+
+            OpenXRFeature[] features = settings.GetFeatures<OpenXRFeature>();
+            if (features == null) return;
+
+            int disabled = 0;
+            foreach (OpenXRFeature feature in features)
+            {
+                if (feature == null || !feature.enabled) continue;
+                string typeName = feature.GetType().Name;
+                bool isOculusTouch = typeName.IndexOf("OculusTouchControllerProfile", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (!isOculusTouch) continue;
+                feature.enabled = false;
+                EditorUtility.SetDirty(feature);
+                disabled++;
+                Debug.Log("[KvMrSetup] ВЫКЛЮЧЕН профиль контроллеров Quest для Android: " + feature.name +
+                          " (правило PICO: рядом с профилями PICO чужих профилей быть не должно)");
+            }
+
+            if (disabled > 0)
+            {
+                EditorUtility.SetDirty(settings);
+                AssetDatabase.SaveAssets();
+            }
+            Debug.Log("[KvMrSetup] профиль Oculus Touch для Android: выключено " + disabled);
         }
 
         /// <summary>Отчёт: какие фичи включены для Android сейчас.</summary>
