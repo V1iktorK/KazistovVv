@@ -207,11 +207,41 @@ namespace KazistovVv.Core
             }
         }
 
+        /// <summary>
+        /// ОДНА ЦЕЛЬ ОТ СТАРОЙ СИСТЕМЫ (исправлено 02.11.2026).
+        ///
+        /// ЧТО БЫЛО НЕ ТАК. Первая версия отправляла ОБЕ руки в одну и ту же точку. Для
+        /// двурукого это прямой дефект: руки сходятся в одну точку, инструменты сталкиваются,
+        /// и выглядит это как одна рука вместо двух. Владелец просил «правильно», а не
+        /// «формально работает».
+        ///
+        /// ЧТО СТАЛО. Параметр `armSpreadMeters` разводит цели в стороны от заданной точки
+        /// вдоль оси X основания: левая идёт в −spread, правая в +spread. Так одинаковый вызов
+        /// «руки к точке» даёт две РАЗНЫЕ цели — руки не сталкиваются.
+        ///
+        /// ПОЧЕМУ ИМЕННО X. В `openarm` руки разнесены по X основания (левая и правая цепочки
+        /// симметричны относительно плоскости YZ). Разводить их в другой плоскости значило бы
+        /// толкать одну руку в тело робота.
+        /// </summary>
+        public float armSpreadMeters = 0.25f;
+
         public override void SetTarget(Vector3 position)
         {
-            // Базовая система знает ОДНУ цель. Для двурукого это означает «обе руки в эту точку»
-            // — так ведут себя вызовы, которые ещё не знают про двурукость.
-            SetTargetBoth(position, position);
+            if (armSpreadMeters <= 0.0001f)
+            {
+                // Разводка выключена — обе руки честно в одну точку (нужно для тестов
+                // и для случая, когда оператор сам сводит инструменты).
+                SetTargetBoth(position, position);
+                return;
+            }
+
+            Vector3 axis = transform.right;          // X основания двурукого
+            if (axis.sqrMagnitude < 0.0001f) axis = Vector3.right;
+            axis.Normalize();
+
+            Vector3 leftSpot = position - axis * armSpreadMeters;
+            Vector3 rightSpot = position + axis * armSpreadMeters;
+            SetTargetBoth(leftSpot, rightSpot);
         }
 
         public override void ClearTarget()

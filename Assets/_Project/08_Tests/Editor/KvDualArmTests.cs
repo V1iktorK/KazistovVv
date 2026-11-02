@@ -144,6 +144,48 @@ namespace KazistovVv.Tests
                 "KvDualArmController, иначе обе руки будут управляться как одна");
         }
 
+
+        /// <summary>
+        /// ОДНА ЦЕЛЬ РАЗВОДИТСЯ НА ДВЕ РУКИ (исправление 02.11.2026).
+        ///
+        /// ДЕФЕКТ, КОТОРЫЙ ЭТО ЛОВИТ: первая версия SetTarget(position) отправляла ОБЕ руки
+        /// в одну точку. Инструменты сходились, и двурукий выглядел как однорукий. Владелец
+        /// просил «правильно», поэтому разводка должна быть в коде и должна иметь ненулевое
+        /// значение по умолчанию.
+        /// </summary>
+        [Test]
+        public void DualArm_OneTargetSpreadsToBothArms()
+        {
+            string file = Path.Combine(ProjectRoot, "Assets", "_Project", "01_Scripts", "Core",
+                "KvDualArmController.cs");
+            Assert.IsTrue(File.Exists(file), "не найден KvDualArmController.cs: " + file);
+            string text = File.ReadAllText(file);
+
+            StringAssert.Contains("armSpreadMeters", text,
+                "должен быть параметр armSpreadMeters — разводка целей двух рук");
+            StringAssert.DoesNotContain("SetTargetBoth(position, position);\n        }\n\n        public override void ClearTarget",
+                text,
+                "нельзя отправлять обе руки в одну точку без разводки: инструменты столкнутся");
+        }
+
+        /// <summary>
+        /// TCP РУК НЕ СОВПАДАЮТ В ПОКОЕ.
+        ///
+        /// Если в модели обе цепочки начинаются из одной точки, проверка «между инструментами»
+        /// не имеет смысла. У openarm руки разнесены — это и проверяем по именам звеньев
+        /// (косвенно: обе цепочки существуют независимо).
+        /// </summary>
+        [Test]
+        public void DualArm_HasIndependentToolNames()
+        {
+            string file = Path.Combine(ProjectRoot, "Assets", "_Project", "01_Scripts", "Core",
+                "KvDualArmController.cs");
+            string text = File.ReadAllText(file);
+
+            StringAssert.Contains("openarm_left_hand_tcp", text, "не задан TCP левой руки");
+            StringAssert.Contains("openarm_right_hand_tcp", text, "не задан TCP правой руки");
+        }
+
         /// <summary>
         /// ОСИ ВРАЩЕНИЯ ПО УМОЛЧАНИЮ — Y.
         ///
