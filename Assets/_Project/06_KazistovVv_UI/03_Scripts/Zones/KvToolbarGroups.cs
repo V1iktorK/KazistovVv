@@ -74,7 +74,19 @@ namespace KazistovVvUI
                 new KvToolbarGroup("robot", "Робот", "robot",
                     "robot.switch", "robot.playpause", "robot.stop", "estop",
                     "edit.reset", "joints.panel", "pose.save", "pose.goto",
-                    "gripper.toggle"),
+                    "gripper.toggle",
+
+                    // ЧАСТЬ 3 (02.11.2026): МОДЕЛИ РОБОТОВ в конце группы. Владелец:
+                    // «роботов всех перенеси», вариант «выбор из списка — один активный».
+                    // Эти команды регистрируются ДИНАМИЧЕСКИ в KvRobotCommands (по одной
+                    // на модель каталога), поэтому статический парсинг реестра их не видит —
+                    // тест-сторож знает про префикс robot.model. и не считает их «мёртвыми».
+                    "robot.model.stand_6axis", "robot.model.scara_ls10b702s",
+                    "robot.model.ur5", "robot.model.kuka_iiwa7",
+                    "robot.model.kuka_iiwa14", "robot.model.abb_irb6640",
+                    "robot.model.fanuc_m20ib", "robot.model.franka_fr3",
+                    "robot.model.franka_fr3_v2", "robot.model.kinova_gen3",
+                    "robot.model.comau_edo", "robot.model.openarm"),
 
                 new KvToolbarGroup("path", "Точка и траектория", "point",
                     "point.select", "path.select", "waypoint.add", "waypoint.move",

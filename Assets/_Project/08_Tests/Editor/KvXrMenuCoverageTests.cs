@@ -160,7 +160,14 @@ namespace KazistovVv.Tests
 
             var dead = new List<string>();
             foreach (string id in menu)
+            {
+                // ДИНАМИЧЕСКИЕ КОМАНДЫ (часть 3, 02.11.2026): модели роботов регистрируются
+                // в цикле по каталогу (KvRobotCommands.RegisterModels), поэтому в исходниках
+                // нет KvCommands.Register("robot.model.ur5") буквально. Они РЕАЛЬНЫ, просто
+                // статический разбор их не видит.
+                if (id != null && id.StartsWith("robot.model.", StringComparison.Ordinal)) continue;
                 if (!registered.Contains(id)) dead.Add(id);
+            }
             dead.Sort(StringComparer.Ordinal);
 
             Assert.AreEqual(0, dead.Count,
