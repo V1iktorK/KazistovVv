@@ -86,29 +86,34 @@ namespace KazistovVv.Core
                     robot = (RobotController)go.AddComponent<SixAxisController>();
             }
 
-            // Двурукий сам находит свои цепочки по именам — общий список суставов ему не нужен.
+            // ДВУРУКИЙ: ДВЕ РУКИ КАК ДВА РОБОТА (решение владельца 02.11.2026).
+            //
+            // Владелец: «при добавлении робота на сцену формально получится что добавлены стали
+            // два робота и управление будет как-будто двумя, а не одним». Это лучше отдельного
+            // двурукого контроллера: вся система (IK, фантомы, траектории, коллизии) уже умеет
+            // работать с одной цепочкой, и ничего переписывать не надо.
+            //
+            // Здесь возвращаем ПЕРВУЮ руку (левую): вызывающий код ждёт один контроллер.
+            // Обе руки лежат под общим кронштейном и находятся поиском по сцене.
             if (model.IsDualArm)
             {
-                KvDualArmController dual = robot as KvDualArmController;
-                if (dual != null)
+                // Убираем одиночную копию: пару создаём отдельно, чтобы не было трёх рук.
+                UnityEngine.Object.Destroy(go);
+
+                RobotController[] pair = KvDualArm.SpawnFromOnePrefab(model, position, yawDegrees);
+                if (pair.Length == 0)
                 {
-                    dual.robotName = model.Title;
-                    dual.ResolveChains();
-                    if (!dual.ChainsReady)
-                    {
-                        Debug.LogWarning("[KvRobot] двурукий «" + model.Title + "»: цепочки не найдены " +
-                                         "— руки не будут двигаться");
-                    }
-                    else
-                    {
-                        Debug.Log("[KvRobot] " + dual.DescribeDual());
-                    }
+                    Debug.LogWarning("[KvRobot] двурукий «" + model.Title + "» не создан — " +
+                                     "смотрите причину строкой выше");
+                    return null;
                 }
 
-                if (go.GetComponent<RegisteredObject>() == null)
-                    go.AddComponent<RegisteredObject>();
-
-                return robot;
+                if (!KvDualArm.IsPairReady(pair))
+                {
+                    Debug.LogWarning("[KvRobot] пара рук создана, но НЕ готова к движению: " +
+                                     "у одной из рук меньше трёх суставов");
+                }
+                return pair[0];
             }
 
             // --- суставы по именам
