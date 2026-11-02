@@ -26,7 +26,7 @@ namespace KazistovVvFeatures
         /// <summary>Поворот (эйлеры, град) — для куба и цилиндра.</summary>
         public float[] euler = new float[3];
         /// <summary>Показывать ли зону в сцене.</summary>
-        public bool visible = true;
+        public bool visible = false;
 
         [NonSerialized] public string filePath = "";
 

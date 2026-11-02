@@ -42,7 +42,7 @@ public class WorkspaceVisualizer : MonoBehaviour
     [Header("Зона достижимости (ЗАДАЧА 3)")]
     [Tooltip("Показывать зону достижимости. Публичный флаг: правится в инспекторе в PlayMode " +
              "или методом SetWorkspaceVisible(bool)/ToggleWorkspace(). Биндов нет.")]
-    public bool showWorkspace = true;
+    public bool showWorkspace = false;
     [Tooltip("Показывать зону для ОБОИХ роботов сцены (робот и SCARA) — иначе только для активного.")]
     public bool workspaceAllRobots = true;
     [Tooltip("Голубой цвет зоны. Специально НЕ бирюзовый: бирюзовые — фантомы, " +
@@ -58,7 +58,7 @@ public class WorkspaceVisualizer : MonoBehaviour
              "считается недостижимой. Поток синхронизирует значение с самим оракулом.")]
     public float oracleZoneRadius = 1.6f;
     [Tooltip("Показывать границу рабочей зоны оракула.")]
-    public bool showOracleZone = true;
+    public bool showOracleZone = false;
     [Tooltip("Показывать заливку оболочки. Выключено — остаётся только сетка (совсем не мешает обзору).")]
     public bool workspaceSurface = true;
     [Tooltip("Сегментов по кругу у зоны (больше — глаже; 48–72 достаточно).")]
@@ -69,9 +69,9 @@ public class WorkspaceVisualizer : MonoBehaviour
     [Header("Лимиты суставов (ЗАДАЧА 4)")]
     [Tooltip("Показывать индикаторы лимитов (кольца у суставов + панель). Публичный флаг: " +
              "правится в инспекторе в PlayMode или методом SetJointLimitsVisible(bool)/ToggleJointLimits().")]
-    public bool showJointLimits = true;
+    public bool showJointLimits = false;
     [Tooltip("Показывать панель с углами/лимитами/запасом по каждому суставу (текст).")]
-    public bool showJointPanel = true;
+    public bool showJointPanel = false;
     [Tooltip("Внешний радиус кольца-индикатора, юниты (внутренний = 0.55 от внешнего).")]
     public float jointRingRadius = 0.11f;
     [Tooltip("Прозрачность заливки кольца сустава (кольцо не перекрывает робот).")]

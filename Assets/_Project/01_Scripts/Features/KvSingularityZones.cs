@@ -52,7 +52,7 @@ namespace KazistovVvFeatures
         public event Action<string> Message;
 
         // ------------------------------------------------------------------ параметры
-        public bool Enabled;
+        public bool Enabled = false;
 
         [Tooltip("Интервал пересчёта, с.")]
         public float interval = 0.1f;

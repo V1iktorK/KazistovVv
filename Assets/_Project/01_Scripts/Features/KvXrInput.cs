@@ -785,7 +785,7 @@ namespace KazistovVvFeatures
         private KvWaypointManager waypoints;
 
         private bool enabled;
-        private bool dwellEnabled = true;
+        private bool dwellEnabled = false;   // ЧАСТЬ 2: по умолчанию выключено (визуализация «точек фиксации» = «шары»)
         private float dwellSeconds = 0.9f;
         private bool maskEnabled;
 
@@ -963,6 +963,8 @@ namespace KazistovVvFeatures
 
             // Точки фиксации — это показ: если графики нет (или объекты ещё не созданы),
             // просто накапливаем координаты для статистики и не трогаем сцену.
+            // ЧАСТЬ 2 (02.11.2026): пока dwell выключен — шары фиксации НЕ создаются.
+            if (!dwellEnabled) return;
             EnsureFixationVisuals();
             if (fixationRoot == null) return;
 
