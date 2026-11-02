@@ -64,6 +64,7 @@ public class SixAxisController : RobotController
     private Vector3 smoothedTargetPosition;
     private bool smoothingInitialized;
     private bool selfCollisionSetup;
+    private bool collisionSkipLogged;   // предупреждение «коллайдеры не построены» — только один раз
     private bool jointLimitsInitialized;
     // TCP-прокси: у CAD-мешей пивот часто в начале координат модели, поэтому
     // реальная точка инструмента берётся как центр меша фланца.
@@ -128,7 +129,24 @@ public class SixAxisController : RobotController
             return;
 
         if (jointTransforms == null || jointTransforms.Length == 0)
+        {
+            // ДИАГНОСТИКА (02.11.2026): раньше здесь стоял «тихий» `return`, и по журналу нельзя
+            // было понять, почему луч проходит сквозь робота. Теперь причина видна.
+            if (!collisionSkipLogged)
+            {
+                collisionSkipLogged = true;
+                Debug.LogWarning("[SixAxisController] jointTransforms пуст — строю коллайдеры " +
+                                 "ПО ГАБАРИТАМ модели, чтобы луч всё равно упирался в робота");
+            }
+
+            // ЗАПАСНОЙ ПУТЬ (02.11.2026, пункт 2 владельца: «лазеры … не упираются в роботов»).
+            // Даже без суставов робот обязан ловить луч: ставим боксы по габаритам геометрии.
+            var gap = GetComponent<RobotSelfCollision>();
+            if (gap == null) gap = gameObject.AddComponent<RobotSelfCollision>();
+            gap.BuildFromRenderers();
+            if (gap.ColliderCount > 0) selfCollisionSetup = true;
             return;
+        }
 
         var collision = GetComponent<RobotSelfCollision>();
         if (collision == null)

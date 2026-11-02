@@ -33,6 +33,9 @@ public class RobotSelfCollision : MonoBehaviour
 
     private readonly List<GameObject> spawnedColliders = new List<GameObject>();
 
+    /// <summary>Сколько коллайдеров уже построено (для диагностики и проверки «луч упрётся»).</summary>
+    public int ColliderCount { get { return spawnedColliders.Count; } }
+
     /// <summary>
     /// СОБРАТЬ КОЛЛАЙДЕРЫ ПРЯМО СЕЙЧАС (добавлено 02.11.2026, пункт 2 владельца).
     ///
@@ -53,8 +56,10 @@ public class RobotSelfCollision : MonoBehaviour
     {
         if (jointTransforms == null || jointTransforms.Length == 0)
         {
-            Debug.LogWarning("[RobotSelfCollision] BuildNow: jointTransforms пуст — коллайдеры робота " +
-                             "НЕ построены, лазер будет проходить сквозь робота.");
+            // ЗАПАСНОЙ ПУТЬ (02.11.2026): даже без суставов робот обязан ловить луч.
+            // Собираем коллайдеры по ГАБАРИТАМ ГЕОМЕТРИИ — так луч упрётся в модель,
+            // даже если `jointTransforms` не заполнен.
+            BuildFromRenderers();
             return;
         }
 
@@ -65,6 +70,72 @@ public class RobotSelfCollision : MonoBehaviour
                   " шт · радиус " + jointColliderRadius.ToString("0.00") +
                   " м · слой " + robotColliderLayer +
                   (spawnedColliders.Count == 0 ? "  ⚠ НИ ОДНОГО (луч пройдёт сквозь)" : ""));
+
+        // Если по суставам ничего не вышло (все null) — всё равно ловим луч габаритами.
+        if (spawnedColliders.Count == 0) BuildFromRenderers();
+    }
+
+    /// <summary>
+    /// КОЛЛАЙДЕРЫ ПО ГАБАРИТАМ ГЕОМЕТРИИ — запасной путь, когда суставы недоступны
+    /// (добавлено 02.11.2026, пункт 2 владельца: «лазеры … не упираются в роботов»).
+    ///
+    /// ПОЧЕМУ ПОНАДОБИЛОСЬ. Коллайдеры по суставам — точные, но зависят от заполнения
+    /// `jointTransforms`. В шлеме 02.11.2026 журнал показал, что коллайдеров НЕТ вовсе: луч
+    /// пролетал мимо робота и упирался только в стену ангара на 6,57 м.
+    ///
+    /// ЧТО ДЕЛАЕТ. Обходит все `Renderer` робота, берёт их мировые габариты и ставит на каждое
+    /// звено ОРИЕНТИРОВАННЫЙ BoxCollider. Луч по нему попадает всегда — это то, что нужно глазу
+    /// оператора. Для физики расталкивания эти боксы не используются (они кинематические).
+    ///
+    /// СКОЛЬКО СТАВИТЬ. По одному на каждый видимый меш — дорого (у робота десятки мешей).
+    /// Поэтому берём КРУПНЫЕ меши (объём больше порога), они и формируют силуэт.
+    /// </summary>
+    public void BuildFromRenderers()
+    {
+        if (spawnedColliders.Count > 0) return;
+
+        var renderers = GetComponentsInChildren<Renderer>(true);
+        if (renderers == null || renderers.Length == 0)
+        {
+            Debug.LogWarning("[RobotSelfCollision] BuildFromRenderers: у робота нет Renderer — " +
+                             "коллайдеров не будет, луч пройдёт сквозь.");
+            return;
+        }
+
+        int made = 0;
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Renderer r = renderers[i];
+            if (r == null) continue;
+
+            Bounds b = r.bounds;
+            Vector3 size = b.size;
+            // Мелкие детали пропускаем: их десятки, а силуэт они не формируют.
+            if (size.x < 0.03f && size.y < 0.03f && size.z < 0.03f) continue;
+
+            string holderName = "RayCollider_" + r.name;
+            if (transform.Find(holderName) != null) continue;   // идемпотентность
+
+            var holder = new GameObject(holderName);
+            holder.transform.SetParent(transform, false);
+            holder.layer = robotColliderLayer;
+
+            BoxCollider box = holder.AddComponent<BoxCollider>();
+            // Габариты меша заданы в МИРОВЫХ осях — переводим в локальные оси держателя.
+            holder.transform.position = b.center;
+            holder.transform.rotation = Quaternion.identity;
+            box.size = size;
+            box.isTrigger = false;
+
+            Rigidbody rb = holder.AddComponent<Rigidbody>();
+            rb.isKinematic = true;
+
+            spawnedColliders.Add(holder);
+            made++;
+        }
+
+        Debug.Log("[RobotSelfCollision] коллайдеры по габаритам построены: " + made + " шт" +
+                  (made == 0 ? "  ⚠ НИ ОДНОГО (луч пройдёт сквозь)" : " · слой " + robotColliderLayer));
     }
 
     private void Start()
