@@ -104,12 +104,18 @@ namespace KazistovVvTests
         }
 
         /// <summary>
-        /// АКТИВНЫЙ ЛОАДЕР ДЛЯ ANDROID — ТОЛЬКО OpenXR. Mock HMD (заглушка для отладки без
-        /// устройства) в сборке под шлем подменяет реальный трекинг — этот дефект уже находили
-        /// в §28; тест не даёт ему вернуться.
+        /// АКТИВНЫЕ ЛОАДЕРЫ ДЛЯ ANDROID: OpenXR (шлем) первым, ARCore (телефон/планшет) вторым.
+        ///
+        /// ПОЧЕМУ ИЗМЕНЕНО 03.11.2026 (задача AR). Раньше приложение было только для шлема, и
+        /// второй лоадер запрещался. Теперь приложение ОДНО на два устройства: XR Management
+        /// берёт первый УСПЕШНЫЙ лоадер, поэтому на шлеме поднимается OpenXR (он первый), а на
+        /// планшете OpenXR не поднимается и поднимается ARCore. Перестановка порядка сломала бы
+        /// VR на шлеме — поэтому порядок проверяется, а не только состав.
+        /// Заглушка `MockHMD` (отладка в редакторе, на устройстве не работает — дефект §28)
+        /// по-прежнему запрещена.
         /// </summary>
         [Test]
-        public void Android_XrLoaderIsOpenXrOnly()
+        public void Android_XrLoaders_OpenXrFirstThenArCore()
         {
             var perTarget = AssetDatabase.LoadAssetAtPath<XRGeneralSettingsPerBuildTarget>(
                 "Assets/XR/XRGeneralSettingsPerBuildTarget.asset");
@@ -124,13 +130,23 @@ namespace KazistovVvTests
             // `activeLoaders` объявлено только для чтения (ошибка CS0266 ловится гейтом проекта).
             IReadOnlyList<XRLoader> loaders = settings.Manager.activeLoaders;
             Assert.IsNotNull(loaders, "список активных XR-лоадеров пуст");
-            Assert.AreEqual(1, loaders.Count,
-                "активный XR-лоадер для Android должен быть РОВНО один (OpenXR); сейчас: " +
+            Assert.AreEqual(2, loaders.Count,
+                "активных XR-лоадера для Android должно быть РОВНО два (OpenXR + ARCore); сейчас: " +
                 loaders.Count);
 
-            string loaderName = loaders[0] != null ? loaders[0].GetType().Name : "null";
-            StringAssert.Contains("OpenXR", loaderName,
-                "активный лоадер для Android — не OpenXR, а " + loaderName);
+            string firstName = loaders[0] != null ? loaders[0].GetType().Name : "null";
+            string secondName = loaders[1] != null ? loaders[1].GetType().Name : "null";
+            StringAssert.Contains("OpenXR", firstName,
+                "ПЕРВЫЙ лоадер для Android — не OpenXR, а " + firstName + ": на шлеме поднимется не тот провайдер");
+            StringAssert.Contains("ARCore", secondName,
+                "ВТОРОЙ лоадер для Android — не ARCore, а " + secondName + ": на планшете не будет камеры и плоскостей");
+
+            foreach (XRLoader loader in loaders)
+            {
+                if (loader == null) continue;
+                StringAssert.DoesNotContain("MockHMD", loader.GetType().Name,
+                    "активна отладочная заглушка MockHMD — на устройстве XR не поднимется");
+            }
         }
 
         /// <summary>

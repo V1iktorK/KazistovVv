@@ -123,9 +123,43 @@ namespace KazistovVvXr
             return ReachOf(RobotForAutoTable(selected));
         }
 
+        // ==================================================== ХУКИ AR (по умолчанию выключены)
+        //
+        // ЗАЧЕМ. В AR «пол» — это найденная камерой плоскость, а не мировой y = 0: на планшете
+        // y = 0 находится там, где устройство запустили (обычно на высоте груди). Меню шлема
+        // создаёт столы и роботов в мировых координатах, поэтому в AR ему нужно подставить
+        // точку на найденной плоскости и высоту якоря.
+        //
+        // ПОЧЕМУ ХУКИ, А НЕ ПРАВКА ВЫЗЫВАЮЩЕГО КОДА. Вызывающий код — меню шлема
+        // (`KvXrGroupPanel`), трогать его нельзя: VR обязан остаться прежним. Здесь три
+        // статических поля, по умолчанию `null`: в шлеме и на компьютере ветки не исполняются
+        // ни разу, поведение совпадает с прежним. Хуки снимаются при выходе из AR-сцены
+        // (`KvArRuntime.ClearObjectFactoryHooks`).
+        //
+        // Что подменяет каждый хук:
+        //   SpotOverride        — «точка перед оператором на полу» → точка на найденной плоскости;
+        //   TableFloorFixup     — высота стола (низ) → высота плоскости якоря;
+        //   RobotPositionFixup  — основание робота на высоте стола (0,98 м) → + высота якоря.
+
+        /// <summary>AR: замена точки «перед оператором». null — обычное поведение VR/ПК.</summary>
+        public static System.Func<Camera, float, Vector3?> SpotOverride;
+
+        /// <summary>AR: поправка высоты пола создаваемого стола. null — без поправки.</summary>
+        public static System.Func<Vector3, Vector3> TableFloorFixup;
+
+        /// <summary>AR: поправка позиции создаваемого робота. null — без поправки.</summary>
+        public static System.Func<Vector3, Vector3> RobotPositionFixup;
+
         /// <summary>ТОЧКА ПЕРЕД ОПЕРАТОРОМ на полу (для создаваемого стола).</summary>
         public static Vector3 SpotInFrontOf(Camera camera, float distanceMeters)
         {
+            // AR-хук: если он задан и вернул точку — используем её (VR/ПК этой ветки не видят).
+            if (SpotOverride != null)
+            {
+                Vector3? arPoint = SpotOverride(camera, distanceMeters);
+                if (arPoint.HasValue) return arPoint.Value;
+            }
+
             Transform source = camera != null ? camera.transform : null;
             Vector3 position = source != null ? source.position : Vector3.zero;
             Vector3 forward = source != null ? source.forward : Vector3.forward;
@@ -151,6 +185,9 @@ namespace KazistovVvXr
         public static GameObject CreateTable(KvXrTableKind kind, Vector3 floorPoint, float yawDegrees,
                                              float robotReachMeters)
         {
+            // AR-хук: высота пола — найденная плоскость, а не мировой y = 0 (VR/ПК не видят).
+            if (TableFloorFixup != null) floorPoint = TableFloorFixup(floorPoint);
+
             string name = kind == KvXrTableKind.Square ? "Стол_квадрат" : "Стол_авто";
             name = name + "_" + System.DateTime.Now.ToString("HHmmss");
 
@@ -195,6 +232,9 @@ namespace KazistovVvXr
                                  ") — копировать нечего");
                 return null;
             }
+
+            // AR-хук: основание робота считается от найденной плоскости, а не от мирового нуля.
+            if (RobotPositionFixup != null) position = RobotPositionFixup(position);
 
             RegisteredObject copy = spawner.SpawnRobot(position, yawDegrees, template);
             if (copy == null) return null;

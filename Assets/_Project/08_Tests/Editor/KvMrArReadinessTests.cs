@@ -96,18 +96,20 @@ namespace KazistovVvTests
         }
 
         /// <summary>
-        /// АКТИВНЫЙ ЛОАДЕР — РОВНО ОДИН, И ЭТО OPENXR.
+        /// АКТИВНЫХ ЛОАДЕРА ДВА, ПОРЯДОК: СНАЧАЛА OPENXR, ПОТОМ ARCORE.
         ///
-        /// ПОЧЕМУ ЭТО КРИТИЧНО ДЛЯ MR/AR. Два активных лоадера конфликтуют за подсистему XR:
-        /// именно так проект уже получил «в шлеме всё чёрное» (§28, карточка Б16). А заглушка
-        /// `MockHMDLoader` выглядит рабочей в редакторе и НЕ РАБОТАЕТ на устройстве — она
-        /// была активной вместе с ARCore, пока пакета OpenXR не было вовсе (дефект A1).
+        /// ПОЧЕМУ ДВА, А НЕ ОДИН (изменено 03.11.2026, задача AR). Приложение ОДНО и ставится
+        /// и на шлем, и на планшет. XR Management берёт ПЕРВЫЙ УСПЕШНЫЙ лоадер
+        /// (`XRManagerSettings.cs:163-186`): на шлеме это OpenXR, на планшете OpenXR не
+        /// поднимается — успешным становится ARCore. Порядок поэтому часть контракта:
+        /// переставишь ARCore первым — шлем уйдёт в AR-режим и сломается VR.
         ///
-        /// OpenXR — единственная основа, на которой PICO даёт и VR, и MR (passthrough),
-        /// и AR-якоря. ARCoreLoader для PICO не нужен и не должен быть активным.
+        /// ЧТО ОСТАЛОСЬ ОТ ПРЕЖНЕГО ЗАПРЕТА. `MockHMDLoader` по-прежнему не должен быть активен
+        /// (заглушка выглядит рабочей в редакторе и не работает на устройстве — дефект A1);
+        /// проверка ниже осталась без ослабления.
         /// </summary>
         [Test]
-        public void AndroidBuild_HasExactlyOneActiveLoader_AndItIsOpenXr()
+        public void AndroidBuild_HasOpenXrFirstAndArCoreSecond()
         {
             string settingsPath = Path.Combine(ProjectRoot, "Assets", "XR", "XRGeneralSettingsPerBuildTarget.asset");
             Assert.IsTrue(File.Exists(settingsPath),
@@ -126,31 +128,33 @@ namespace KazistovVvTests
                 names.Add(name ?? ("неизвестный лоадер " + guid));
             }
 
-            Assert.AreEqual(1, guids.Count,
+            Assert.AreEqual(2, guids.Count,
                 "активных лоадеров " + guids.Count + " (" + string.Join(", ", names.ToArray()) +
-                "). Должен быть РОВНО ОДИН: два лоадера конфликтуют за подсистему XR " +
-                "(§28, «в шлеме всё чёрное»)");
+                "). Нужно РОВНО ДВА: OpenXR (шлем) и ARCore (телефон/планшет), и именно в таком порядке");
 
             StringAssert.Contains("OpenXR", names[0],
-                "активный лоадер — «" + names[0] + "», а не OpenXR. На заглушке MockHMD в редакторе " +
-                "всё работает, а на устройстве — нет; ARCore для PICO не нужен");
+                "ПЕРВЫЙ лоадер — «" + names[0] + "», а не OpenXR. На шлеме поднимется не тот провайдер " +
+                "и VR сломается; на заглушке MockHMD в редакторе всё работает, а на устройстве — нет");
+
+            StringAssert.Contains("ARCore", names[1],
+                "ВТОРОЙ лоадер — «" + names[1] + "», а не ARCore. Без него на планшете/телефоне не " +
+                "будет ни камеры, ни плоскостей: AR-режим не запустится");
         }
 
         /// <summary>
-        /// ЗАГЛУШКА И ARCore НЕ ДОЛЖНЫ БЫТЬ АКТИВНЫМИ. Отдельно от предыдущего теста, потому
-        /// что этот называет причину по имени: `MockHMD` — отладочная заглушка, `ARCore` —
-        /// мобильный AR для телефонов; ни тот, ни другой не дают MR на PICO.
+        /// ЗАГЛУШКА НЕ АКТИВНА. `MockHMD` выглядит рабочей в редакторе и НЕ РАБОТАЕТ на
+        /// устройстве — этот дефект уже был (A1). ARCore активен ОСОЗНАННО (задача AR,
+        /// 03.11.2026): он второй в списке и на шлеме не поднимается вовсе, потому что
+        /// OpenXR успешен первым. Поэтому запрет на ARCore снят, запрет на заглушку — нет.
         /// </summary>
         [Test]
-        public void NoMockHmdOrArCoreLoaderIsActive()
+        public void NoMockHmdLoaderIsActive()
         {
             foreach (string guid in ActiveLoaderGuids())
             {
                 string name = LoaderName(guid) ?? "";
                 Assert.IsFalse(name.Contains("MockHMD"),
                     "активна отладочная заглушка MockHMDLoader — на устройстве XR не поднимется (дефект A1)");
-                Assert.IsFalse(name.Contains("ARCore"),
-                    "активен ARCoreLoader — это AR для телефона, для шлема PICO он не нужен и мешает OpenXR");
             }
         }
 
