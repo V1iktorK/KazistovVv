@@ -625,9 +625,22 @@ namespace KazistovVvXrEditor
                     urpForAndroid.name + ".");
             }
 
+            // СПИСОК СЦЕН APK — ИЗ BUILD SETTINGS, А НЕ ОДНА XrMain.
+            //
+            // ПОЧЕМУ ИЗМЕНЕНО 03.11.2026 (задача AR). Раньше здесь в поле сцен стояла ОДНА сцена
+            // (жёсткое присваивание одной XrMain): в APK попадала только VR-сцена шлема.
+            // Для приложения «VR + AR» этого мало: на телефоне/планшете запускается та же
+            // нулевая сцена, то есть XrMain, а AR-сцена ArMain в сборку не попадала вовсе
+            // (и BootAr, которая выбирает режим, тоже). Вторая ловушка того же места:
+            // ошибок сборки при этом НЕТ — APK собирается, просто урезанный.
+            // Первая сборка AR это и показала.
+            var buildScenes = EnabledBuildScenes();
+            Debug.Log("[KvXr] Сцены в APK (" + buildScenes.Length + "): " + string.Join(" → ", buildScenes) +
+                      " · нулевая сцена решает режим (BootAr), затем VR/MR (XrMain) или AR (ArMain)");
+
             var options = new BuildPlayerOptions
             {
-                scenes = new[] { XrScenePath },
+                scenes = buildScenes,
                 locationPathName = apkPath,
                 target = BuildTarget.Android,
                 options = BuildOptions.None
@@ -930,6 +943,13 @@ namespace KazistovVvXrEditor
                 " (Vulkan обязателен для HDRP — решение [R2]; OpenGLES3 убран намеренно).");
         }
 
+        /// <summary>ПК-сцена (HDRP, мышь): в APK не попадает. Одно место — один список.</summary>
+        public static bool IsPcOnlyScene(string path)
+        {
+            return !string.IsNullOrEmpty(path) &&
+                   path.EndsWith("/MainScene.unity", System.StringComparison.OrdinalIgnoreCase);
+        }
+
         private static void AddXrSceneToBuildSilent()
         {
             var scenes = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
@@ -938,6 +958,41 @@ namespace KazistovVvXrEditor
                 scenes.Add(new EditorBuildSettingsScene(XrScenePath, true));
                 EditorBuildSettings.scenes = scenes.ToArray();
             }
+        }
+
+        /// <summary>
+        /// СЦЕНЫ APK — ВКЛЮЧЁННЫЕ В BUILD SETTINGS, В ТОМ ЖЕ ПОРЯДКЕ.
+        ///
+        /// ПОЧЕМУ НЕ КОНСТАНТА. В APK должны попасть BootAr (нулевая, решает режим), XrMain (шлем)
+        /// и ArMain (планшет). Раньше здесь был жёсткий `new[] { XrScenePath }` — APK собирался
+        /// только с VR-сценой, и AR-режим не мог загрузиться В ПРИНЦИПЕ (и это не ошибка сборки:
+        /// APK собирается нормально, просто без AR-сцены). Берём ровно то, что видит владелец
+        /// в File → Build Settings; если список пуст — честный откат на XrMain.
+        /// </summary>
+        public static string[] EnabledBuildScenes()
+        {
+            var paths = new List<string>();
+            int skippedPc = 0;
+            foreach (EditorBuildSettingsScene scene in EditorBuildSettings.scenes)
+            {
+                if (scene == null || !scene.enabled) continue;
+                if (string.IsNullOrEmpty(scene.path)) continue;
+                // ПК-СЦЕНА В APK НЕ НУЖНА. MainScene — авторская HDRP-сцена компьютера
+                // (мышь, 1920×1080, HDRP-тома); на устройстве она не исполняется, зато тянет
+                // в сборку компоненты конвейера, которого на Android нет. В списке Build Settings
+                // она остаётся (владелец запускает её в редакторе), а в APK не попадает.
+                if (IsPcOnlyScene(scene.path)) { skippedPc++; continue; }
+                paths.Add(scene.path);
+            }
+            if (skippedPc > 0)
+                Debug.Log("[KvXr] Сцены APK: ПК-сцена MainScene исключена (HDRP для компьютера, не для устройства)");
+            if (paths.Count == 0)
+            {
+                Debug.LogWarning("[KvXr] Build Settings пуст — в APK попадёт только " + XrScenePath +
+                                 ". Добавьте BootAr/XrMain/ArMain в список сборки!");
+                paths.Add(XrScenePath);
+            }
+            return paths.ToArray();
         }
 
         // ================================================================== парковка тестов

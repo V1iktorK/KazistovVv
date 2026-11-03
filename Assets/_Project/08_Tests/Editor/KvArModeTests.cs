@@ -364,6 +364,37 @@ namespace KazistovVvTests
                 "в сборщике нет разделения платформ: OpenXR+ARCore должны ставиться только для Android");
             StringAssert.DoesNotContain("TrySetLoaders(new List<XRLoader> { openXr })", source,
                 "сборщик снова оставляет ОДИН лоадер (OpenXR) — ARCore выключен, планшет без AR");
+
+            // ВТОРАЯ ЛОВУШКА ТОГО ЖЕ МЕСТА (найдена 03.11.2026): сцена в APK была ОДНА — XrMain.
+            StringAssert.Contains("EnabledBuildScenes", source,
+                "сборщик не берёт список сцен из Build Settings — ArMain/BootAr могут не попасть в APK");
+            StringAssert.DoesNotContain("scenes = new[] { XrScenePath }", source,
+                "сборщик снова жёстко берёт одну XrMain — AR-сцена и BootAr в APK не попадут");
+        }
+
+        /// <summary>
+        /// В APK ПОПАДАЮТ СЦЕНЫ УСТРОЙСТВА, ПЕРВАЯ — BootAr; ПК-сцена MainScene в APK НЕ ИДЁТ.
+        /// Проверяется вызовом настоящей функции сборщика (не разбором исходника): если порядок
+        /// сцен в Build Settings сломается, APK начнёт запускаться сразу в VR/AR-сцене в обход
+        /// определения режима, и на телефоне это будет чёрный экран вместо AR. ПК-сцена в APK
+        /// не нужна: она HDRP/мышь и тянет в устройство компоненты конвейера, которого там нет.
+        /// </summary>
+        [Test]
+        public void ApkBuilder_IncludesBootArFirstAndArScene()
+        {
+            string[] scenes = KazistovVvXrEditor.KvXrTools.EnabledBuildScenes();
+            Assert.GreaterOrEqual(scenes.Length, 3,
+                "в APK должно попасть минимум 3 сцены (BootAr, XrMain, ArMain), сейчас: " +
+                string.Join(", ", scenes));
+            Assert.AreEqual(KvArMode.BootScenePath, scenes[0],
+                "первой сценой APK обязана быть BootAr: она решает, какую сцену грузить");
+            CollectionAssert.Contains(scenes, KvArMode.VrScenePath, "в APK нет VR-сцены XrMain");
+            CollectionAssert.Contains(scenes, KvArMode.ArScenePath, "в APK нет AR-сцены ArMain");
+            CollectionAssert.DoesNotContain(scenes, "Assets/_Project/00_Scenes/MainScene.unity",
+                "ПК-сцена MainScene (HDRP, мышь) попала в APK — на устройстве она не исполняется " +
+                "и тянет компоненты конвейера, которого на Android нет");
+            Assert.IsTrue(KazistovVvXrEditor.KvXrTools.IsPcOnlyScene("Assets/_Project/00_Scenes/MainScene.unity"));
+            Assert.IsFalse(KazistovVvXrEditor.KvXrTools.IsPcOnlyScene(KvArMode.ArScenePath));
         }
     }
 }
