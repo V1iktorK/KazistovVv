@@ -46,13 +46,21 @@ namespace KazistovVvXrEditor
         // ================================================================== лоадеры XR
 
         /// <summary>
-        /// Включить OpenXR и выключить Mock HMD на всех целевых платформах.
+        /// СОБРАТЬ СПИСОК XR-ЛОАДЕРОВ ДЛЯ СБОРКИ: Standalone — OpenXR, Android — OpenXR ПЕРВЫМ
+        /// и ARCore ВТОРЫМ.
         ///
-        /// Проверяемые условия: ровно один активный лоадер — OpenXR; Mock HMD, Simulation
-        /// и ARCore выключены. Simulation (XR Device Simulator) — инструмент отладки,
-        /// его включение в сборку под шлем даёт «симулятор вместо трекинга».
+        /// ПОЧЕМУ ИЗМЕНЕНО 03.11.2026 (задача AR). Раньше приложение было только для шлема, и здесь
+        /// оставался ровно один лоадер — OpenXR. Теперь ОДИН APK ставится и на шлем, и на планшет:
+        /// XR Management берёт ПЕРВЫЙ УСПЕШНЫЙ лоадер (`XRManagerSettings.cs:163-186`), поэтому
+        /// OpenXR обязан быть первым (шлем), а ARCore — вторым (на телефоне OpenXR не поднимается
+        /// и успешным становится ARCore). Если убрать ARCore из сборки, на планшете не будет
+        /// ни камеры, ни плоскостей — AR-режим не запустится вообще (этот дефект уже был пойман
+        /// в первой сборке AR: сборщик молча выключал ARCore).
+        ///
+        /// Mock HMD и Simulation остаются выключенными: это инструменты отладки без устройства,
+        /// в сборке они подменяют реальный трекинг.
         /// </summary>
-        [MenuItem(MenuRoot + "1. Включить OpenXR (выключить Mock HMD)", false, 10)]
+        [MenuItem(MenuRoot + "1. Включить OpenXR (+ ARCore для Android)", false, 10)]
         public static void ConfigureXrLoaders()
         {
             XRGeneralSettingsPerBuildTarget perTarget =
@@ -71,6 +79,11 @@ namespace KazistovVvXrEditor
                 Debug.LogError("[KvXr] Не найден OpenXRLoader.asset — пакет OpenXR не установлен?");
                 return;
             }
+
+            XRLoader arCore = FindArCoreLoader();
+            if (arCore == null)
+                Debug.LogWarning("[KvXr] Не найден ARCoreLoader.asset — на планшете AR-режим " +
+                                 "не запустится (сборка останется только для шлема)");
 
             // Группы платформ, а не отдельные платформы: настройки XR Management хранятся
             // именно по группам (Standalone, Android), и `SettingsForBuildTarget` принимает
@@ -94,22 +107,44 @@ namespace KazistovVvXrEditor
                     continue;
                 }
 
-                // Пересобираем список лоадеров: OpenXR — единственный рабочий, остальные
-                // (Mock HMD, Simulation, ARCore) убираются.
+                // ПОРЯДОК ВАЖЕН: OpenXR первым (шлем), ARCore вторым (планшет).
+                var wanted = new List<XRLoader> { openXr };
+                if (target == BuildTargetGroup.Android && arCore != null) wanted.Add(arCore);
+
                 // ЧЕРЕЗ `TrySetLoaders`, А НЕ `loaders`: устаревшее свойство `loaders`
                 // компилятор помечает как obsolete (уровень CS0618 ловится гейтом проекта),
                 // а прямая правка списка в рантайме вообще объявлена неопределённым поведением.
-                manager.TrySetLoaders(new List<XRLoader> { openXr });
+                manager.TrySetLoaders(wanted);
                 EditorUtility.SetDirty(manager);
                 EditorUtility.SetDirty(settings);
 
-                report.Add(string.Format("{0}: лоадеров {1}", target, manager.activeLoaders.Count));
+                var names = new List<string>();
+                foreach (XRLoader loader in manager.activeLoaders)
+                    names.Add(loader != null ? loader.name : "null");
+                report.Add(string.Format("{0}: лоадеров {1} [{2}]", target, manager.activeLoaders.Count,
+                    string.Join(", ", names.ToArray())));
             }
 
             AssetDatabase.SaveAssets();
-            Debug.Log("[KvXr] Лоадеры XR пересобраны на активный OpenXR: " + string.Join(" · ", report) +
-                      ". Mock HMD/Simulation/ARCore отключены: они нужны для отладки без устройства, " +
-                      "а в сборке под PICO 4 Ultra подменяли бы реальный трекинг.");
+            Debug.Log("[KvXr] Лоадеры XR для сборки: " + string.Join(" · ", report) +
+                      ". Android: OpenXR ПЕРВЫМ (шлем), ARCore ВТОРЫМ (планшет, если OpenXR не поднялся). " +
+                      "Mock HMD/Simulation выключены: в сборке они подменяли бы реальный трекинг.");
+        }
+
+        /// <summary>
+        /// Найти ассет лоадера ARCore (для второго места в списке Android).
+        /// Тот же приём, что у OpenXR: ассет читается как ScriptableObject, тип проверяется
+        /// во время выполнения (загрузчик ассетов не видит `XRLoader` напрямую).
+        /// </summary>
+        public static XRLoader FindArCoreLoader()
+        {
+            const string path = "Assets/XR/Loaders/ARCoreLoader.asset";
+            var asset = AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
+            if (asset == null) return null;
+
+            XRLoader loader = asset as XRLoader;
+            if (loader != null) return loader;
+            return null;
         }
 
         /// <summary>
@@ -166,9 +201,21 @@ namespace KazistovVvXrEditor
                 foreach (XRLoader loader in settings.Manager.activeLoaders)
                     names.Add(loader != null ? loader.name : "null");
 
-                bool hasOpenXr = names.Exists(n => n != null && n.Contains("OpenXR"));
+                bool hasOpenXr = names.Count > 0 && names[0] != null && names[0].Contains("OpenXR");
                 bool hasMock = names.Exists(n => n != null && n.Contains("MockHMD"));
-                if (!hasOpenXr || hasMock) ok = false;
+
+                // ANDROID: OpenXR первым, ARCore вторым. Первый успешный лоадер — это и есть
+                // разделение «шлем / планшет»; если порядок другой, шлем уйдёт в AR-режим.
+                if (target == BuildTargetGroup.Android)
+                {
+                    bool hasArCore = names.Exists(n => n != null && n.Contains("ARCore"));
+                    if (!hasOpenXr || !hasArCore || hasMock) ok = false;
+                }
+                else if (!hasOpenXr || hasMock)
+                {
+                    ok = false;
+                }
+
                 lines.Add(string.Format("{0}: [{1}]", target, string.Join(", ", names)));
             }
 

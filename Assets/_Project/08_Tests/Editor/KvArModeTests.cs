@@ -343,5 +343,27 @@ namespace KazistovVvTests
                 "Assets", "_Project", "01_Scripts", "Ar", "ArPlaneVisual.prefab")),
                 "нет префаба визуализации плоскости — A2 «появился маркер/сетка» проверять нечем");
         }
+
+        /// <summary>
+        /// СБОРЩИК APK НЕ ДОЛЖЕН ВЫКЛЮЧАТЬ ARCORE. Это настоящий дефект, пойманный первой
+        /// сборкой AR 03.11.2026: `KvXrTools.ConfigureXrLoaders()` пересобирал список лоадеров
+        /// на «только OpenXR» перед сборкой. В результате APK уходил без ARCore-провайдера,
+        /// и на планшете AR-режим не мог запуститься ВООБЩЕ, при этом ни одной ошибки сборки
+        /// не было. Тест держит контракт: в сборщике есть ARCore и оба лоадера для Android,
+        /// а старого «оставить только OpenXR» — нет.
+        /// </summary>
+        [Test]
+        public void ApkBuilder_KeepsArCoreLoaderForAndroid()
+        {
+            string source = ReadAsset("Assets", "_Project", "01_Scripts", "Editor", "KvXrTools.cs");
+            StringAssert.Contains("FindArCoreLoader", source,
+                "сборщик не ищет ARCoreLoader — на планшете не будет провайдера ARCore");
+            StringAssert.Contains("wanted.Add(arCore)", source,
+                "сборщик не добавляет ARCore в список лоадеров Android — AR-режим не запустится");
+            StringAssert.Contains("BuildTargetGroup.Android", source,
+                "в сборщике нет разделения платформ: OpenXR+ARCore должны ставиться только для Android");
+            StringAssert.DoesNotContain("TrySetLoaders(new List<XRLoader> { openXr })", source,
+                "сборщик снова оставляет ОДИН лоадер (OpenXR) — ARCore выключен, планшет без AR");
+        }
     }
 }
