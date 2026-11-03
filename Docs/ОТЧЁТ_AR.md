@@ -97,9 +97,58 @@ XR-лоадеру: OpenXR → `XrMain` (VR/MR как раньше), ARCore → `
 в неисполняемой ветке» из прошлых сессий, только зеркальный: сборка исполняла ветку,
 которая молча ломала новый режим.
 
-### 2.5. Сборка APK и проверка на устройстве
+### 2.5. Сборка APK (успешная) и что в ней
 
-_Заполняется после сборки и `adb logcat`._
+Прогон перед сборкой: `Logs/editmode-ar8-2026-11-03_0843.xml` — **1113 из 1113** зелёные,
+0 упало, 0 пропущено. Сборка (`Logs/ar-build5-console.log`):
+
+```
+[KvXr] Лоадеры XR для сборки: Standalone: 1 [OpenXRLoader] · Android: 2 [OpenXRLoader, ARCoreLoader]
+[KvXr] Тесты убраны из сборки APK: 212 файлов (тестов .cs 105), конфликтов 0
+[KvXr] Сцены APK: ПК-сцена MainScene исключена
+[KvXr] Сцены в APK (3): BootAr → XrMain → ArMain
+[KvXr] APK собран: C:\KazistovVv_Build\KazistovVv.apk · Android · ошибок 0
+```
+
+Файл: `Builds\KazistovVv.apk` — **198 582 452 байт (189,4 МБ)**, 03.11.2026 08:53.
+В итоговом манифесте (`launcher/.../merged_manifest/AndroidManifest.xml`) есть:
+`android.permission.CAMERA`, `android.hardware.camera.ar`, `com.google.ar.core`,
+`com.google.ar.core.depth`, `com.google.ar.core.InstallActivity`, `unityplayer.SkipPermissionsDialog`;
+активные лоадеры Android в сборке — `OpenXRLoader`, `ARCoreLoader` (порядок сохранён).
+
+### 2.5.1. ПРОВЕРКА НА PICO 4 ULTRA (VR/MR НЕ СЛОМАНЫ) — ФАКТЫ `adb logcat`
+
+Первый собранный APK поставлен на живой PICO 4 Ultra (`PA921DMGK4120784G`), запущен, журнал снят:
+
+```
+[KvAr] РЕЖИМ: ВИРТУАЛЬНАЯ РЕАЛЬНОСТЬ — загружается прежняя сцена шлема XrMain (провайдер: OpenXRLoader)
+[KvAr] XR: инициализация завершена · ожидание 0,0 с
+[KvAr] ЗАГРУЗКА: сцена «XrMain»
+[KvXr] РЕЖИМ: СМЕШАННАЯ РЕАЛЬНОСТЬ — комната оператора видна, мир ставится в неё (масштаб 1:1)
+       (сквозной вид есть · якоря есть · камера есть) · масштаб мира 1.000
+[KvXr] возможности MR/AR: сквозной вид есть · якоря есть · камера есть
+[KvXr] режим определён после готовности XR: XR активен
+[KvMr] PICO: расширение выдано, рантайм сообщил поддержку, пасс-слой включён (EnableVideoSeeThrough = true)
+[KvMr] MR-бэкенд: PICO · сквозной вид: включён
+```
+
+**Вывод:** на шлеме `BootAr` корректно определила режим по OpenXRLoader, загрузила прежнюю
+`XrMain`, MR-режим и пасс-слой PICO работают как до AR — регрессии VR/MR нет.
+Исключений и падений за прогон: **0** (процесс жив, `pidof` отвечает). Визуальную проверку
+«видно комнату» делает владелец в надетом шлеме (агент шлем не надевает).
+
+### 2.6. ДЕФЕКТ, НАЙДЕННЫЙ СБОРКОЙ (исправлен): ARCore «Required» вместо «Optional»
+
+**Симптом:** собранный манифест получил `com.google.ar.core = required` и
+`android.hardware.camera.ar required = true`.
+**Причина:** в `Assets/XR/Settings/ARCoreSettings.asset` стояло `m_Requirement: 0`, а в пакете
+`ARCoreSettings.Requirement` **`Required = 0`, `Optional = 1`** (проверено по исходникам
+`com.unity.xr.arcore@6.5.0/Editor/ARCoreSettings.cs`, а не по догадке — первая версия теста
+считала наоборот). Required означает «магазин отдаёт приложение только ARCore-устройствам» —
+для общего APK «шлем + планшет» это неверно.
+**Исправление:** `m_Requirement: 1`, `m_Depth: 1` (Optional), тест
+`ArCoreSettings_AreOptional_SoPicoStillInstalls` переписан на **проверенную** кодировку enum
+и проверяет оба поля. Далее — пересборка APK с Optional.
 
 ---
 

@@ -202,10 +202,19 @@ namespace KazistovVvTests
             string settings = ReadAsset("Assets", "XR", "Settings", "ARCoreSettings.asset");
             Match requirement = Regex.Match(settings, @"m_Requirement:\s*(\d+)");
             Assert.IsTrue(requirement.Success, "в ARCoreSettings.asset нет m_Requirement");
-            // 0 — Optional: приложение ставится и на устройства без ARCore (шлем PICO),
-            // 1 — Required: установка на PICO была бы отфильтрована/сломана.
-            Assert.AreEqual("0", requirement.Groups[1].Value,
-                "ARCore Requirement обязан быть Optional (0): иначе общий APK не встанет на шлем");
+            // ЗНАЧЕНИЯ ENUM ПРОВЕРЕНЫ ПО ИСХОДНИКАМ ПАКЕТА (ARCoreSettings.cs):
+            //   Requirement.Required = 0 (первый элемент enum), Requirement.Optional = 1.
+            // Поэтому «Optional» — это 1. Первая версия этого теста считала наоборот и пропустила
+            // дефект: собранный манифест получил com.google.ar.core=required и
+            // android.hardware.camera.ar required=true — такой APK магазин отдал бы только
+            // владельцам ARCore-устройств, а нам нужен один APK и на шлем.
+            Assert.AreEqual("1", requirement.Groups[1].Value,
+                "ARCore Requirement обязан быть Optional (1): иначе общий APK отфильтрован для шлема");
+
+            Match depth = Regex.Match(settings, @"m_Depth:\s*(\d+)");
+            Assert.IsTrue(depth.Success, "в ARCoreSettings.asset нет m_Depth");
+            Assert.AreEqual("1", depth.Groups[1].Value,
+                "Depth обязан быть Optional (1): иначе APK отфильтрован для телефонов без датчика глубины");
         }
 
         [Test]
