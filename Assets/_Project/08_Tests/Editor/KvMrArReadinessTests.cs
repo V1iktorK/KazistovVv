@@ -96,20 +96,21 @@ namespace KazistovVvTests
         }
 
         /// <summary>
-        /// АКТИВНЫХ ЛОАДЕРА ДВА, ПОРЯДОК: СНАЧАЛА OPENXR, ПОТОМ ARCORE.
+        /// АКТИВНЫХ ЛОАДЕРА ДВА, ПОРЯДОК: СНАЧАЛА ARCORE, ПОТОМ OPENXR (перевёрнут 04.11.2026).
         ///
-        /// ПОЧЕМУ ДВА, А НЕ ОДИН (изменено 03.11.2026, задача AR). Приложение ОДНО и ставится
-        /// и на шлем, и на планшет. XR Management берёт ПЕРВЫЙ УСПЕШНЫЙ лоадер
-        /// (`XRManagerSettings.cs:163-186`): на шлеме это OpenXR, на планшете OpenXR не
-        /// поднимается — успешным становится ARCore. Порядок поэтому часть контракта:
-        /// переставишь ARCore первым — шлем уйдёт в AR-режим и сломается VR.
+        /// ПОЧЕМУ ДВА, А НЕ ОДИН. Приложение ОДНО и ставится и на шлем, и на планшет.
+        /// XR Management берёт ПЕРВЫЙ УСПЕШНЫЙ лоадер (`XRManagerSettings.cs:163-186`).
+        /// На планшете первым обязан идти ARCore: с OpenXR первым PICO-реализация лоадера
+        /// ЗАВИСАЛА в инициализации (XR не завершался за 30 с, ARCore не пробовался, приложение
+        /// показывало «нет AR»). На шлеме ARCoreLoader падает быстро, и OpenXR вторым поднимает
+        /// VR/MR как раньше — проверено на PICO.
         ///
         /// ЧТО ОСТАЛОСЬ ОТ ПРЕЖНЕГО ЗАПРЕТА. `MockHMDLoader` по-прежнему не должен быть активен
         /// (заглушка выглядит рабочей в редакторе и не работает на устройстве — дефект A1);
         /// проверка ниже осталась без ослабления.
         /// </summary>
         [Test]
-        public void AndroidBuild_HasOpenXrFirstAndArCoreSecond()
+        public void AndroidBuild_HasArCoreFirstAndOpenXrSecond()
         {
             string settingsPath = Path.Combine(ProjectRoot, "Assets", "XR", "XRGeneralSettingsPerBuildTarget.asset");
             Assert.IsTrue(File.Exists(settingsPath),
@@ -130,15 +131,14 @@ namespace KazistovVvTests
 
             Assert.AreEqual(2, guids.Count,
                 "активных лоадеров " + guids.Count + " (" + string.Join(", ", names.ToArray()) +
-                "). Нужно РОВНО ДВА: OpenXR (шлем) и ARCore (телефон/планшет), и именно в таком порядке");
+                "). Нужно РОВНО ДВА: ARCore (планшет/телефон) и OpenXR (шлем), и именно в таком порядке");
 
-            StringAssert.Contains("OpenXR", names[0],
-                "ПЕРВЫЙ лоадер — «" + names[0] + "», а не OpenXR. На шлеме поднимется не тот провайдер " +
-                "и VR сломается; на заглушке MockHMD в редакторе всё работает, а на устройстве — нет");
+            StringAssert.Contains("ARCore", names[0],
+                "ПЕРВЫЙ лоадер — «" + names[0] + "», а не ARCore. С OpenXR первым планшет зависает " +
+                "в XR-инициализации и AR-режим не запускается");
 
-            StringAssert.Contains("ARCore", names[1],
-                "ВТОРОЙ лоадер — «" + names[1] + "», а не ARCore. Без него на планшете/телефоне не " +
-                "будет ни камеры, ни плоскостей: AR-режим не запустится");
+            StringAssert.Contains("OpenXR", names[1],
+                "ВТОРОЙ лоадер — «" + names[1] + "», а не OpenXR. Без него на шлеме не будет VR/MR");
         }
 
         /// <summary>

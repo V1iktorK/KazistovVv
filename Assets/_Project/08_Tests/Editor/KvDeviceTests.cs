@@ -104,18 +104,19 @@ namespace KazistovVvTests
         }
 
         /// <summary>
-        /// АКТИВНЫЕ ЛОАДЕРЫ ДЛЯ ANDROID: OpenXR (шлем) первым, ARCore (телефон/планшет) вторым.
+        /// АКТИВНЫЕ ЛОАДЕРЫ ДЛЯ ANDROID: ARCore (телефон/планшет) ПЕРВЫМ, OpenXR (шлем) ВТОРЫМ.
         ///
-        /// ПОЧЕМУ ИЗМЕНЕНО 03.11.2026 (задача AR). Раньше приложение было только для шлема, и
-        /// второй лоадер запрещался. Теперь приложение ОДНО на два устройства: XR Management
-        /// берёт первый УСПЕШНЫЙ лоадер, поэтому на шлеме поднимается OpenXR (он первый), а на
-        /// планшете OpenXR не поднимается и поднимается ARCore. Перестановка порядка сломала бы
-        /// VR на шлеме — поэтому порядок проверяется, а не только состав.
+        /// ПОЧЕМУ ПЕРЕВЁРНУТО 04.11.2026 (после живой проверки на планшете). Раньше первым шёл
+        /// OpenXR, и на планшете его PICO-реализация ЗАВИСАЛА в инициализации: XR-инициализация
+        /// не завершалась за 30 с, ARCore до второго места не доходил, приложение показывало
+        /// «устройство не поддерживает AR» — хотя ARCore установлен. С ARCore первым AR
+        /// поднимается сразу. На шлеме ARCoreLoader падает быстро (ARCore-сервиса нет), и
+        /// OpenXR вторым поднимает VR/MR как раньше.
         /// Заглушка `MockHMD` (отладка в редакторе, на устройстве не работает — дефект §28)
         /// по-прежнему запрещена.
         /// </summary>
         [Test]
-        public void Android_XrLoaders_OpenXrFirstThenArCore()
+        public void Android_XrLoaders_ArCoreFirstThenOpenXr()
         {
             var perTarget = AssetDatabase.LoadAssetAtPath<XRGeneralSettingsPerBuildTarget>(
                 "Assets/XR/XRGeneralSettingsPerBuildTarget.asset");
@@ -136,10 +137,10 @@ namespace KazistovVvTests
 
             string firstName = loaders[0] != null ? loaders[0].GetType().Name : "null";
             string secondName = loaders[1] != null ? loaders[1].GetType().Name : "null";
-            StringAssert.Contains("OpenXR", firstName,
-                "ПЕРВЫЙ лоадер для Android — не OpenXR, а " + firstName + ": на шлеме поднимется не тот провайдер");
-            StringAssert.Contains("ARCore", secondName,
-                "ВТОРОЙ лоадер для Android — не ARCore, а " + secondName + ": на планшете не будет камеры и плоскостей");
+            StringAssert.Contains("ARCore", firstName,
+                "ПЕРВЫЙ лоадер для Android — не ARCore, а " + firstName + ": планшет зависнет в XR-инициализации");
+            StringAssert.Contains("OpenXR", secondName,
+                "ВТОРОЙ лоадер для Android — не OpenXR, а " + secondName + ": на шлеме не будет VR/MR");
 
             foreach (XRLoader loader in loaders)
             {

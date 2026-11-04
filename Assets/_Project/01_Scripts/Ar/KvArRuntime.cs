@@ -128,8 +128,56 @@ namespace KazistovVvAr
         void Start()
         {
             if (installObjectFactoryHooks) InstallObjectFactoryHooks();
+            EnsureArUiSupport();
             if (ui != null) BuildScreenButtons();
             if (logOnStart) StartCoroutine(LogReadyWhenSessionStarts());
+        }
+
+        /// <summary>
+        /// ПОДНЯТЬ ИНТЕРФЕЙС БЕЗ VR-РИГА. `KvXrRig` в ArMain выключен (он создаёт руки/жесты/
+        /// облёт камеры — в AR они ломают ARCore), поэтому меню, окна, мост потока, указатель и
+        /// гашение виртуальных стендов поднимаются здесь — теми же функциями, что звал риг.
+        /// </summary>
+        public void EnsureArUiSupport()
+        {
+            Camera head = logicalHead != null ? logicalHead : arCamera;
+            if (head == null)
+            {
+                Debug.LogWarning("[KvAr] ИНТЕРФЕЙС: нет логической головы — меню и поток не подняты");
+                return;
+            }
+
+            // 1) ВИРТУАЛЬНЫЕ СТЕНДЫ 14,4 м НЕ ДОЛЖНЫ БЫТЬ ВИДНЫ: в AR стол реальный.
+            if (UnityEngine.Object.FindAnyObjectByType<KvXrSceneEmpty>() == null)
+            {
+                GameObject emptyGo = new GameObject("ArSceneEmpty");
+                emptyGo.AddComponent<KvXrSceneEmpty>();
+                Debug.Log("[KvAr] СЦЕНА: виртуальные стенды 14,4 м гасятся (в AR стол реальный)");
+            }
+
+            // 2) СТАРТОВОЕ МЕНЮ (110 команд) и окна — как в шлеме.
+            KvXrStartMenu.Ensure(head.transform, head);
+            KvXrWindowHost.Ensure(head);
+
+            // 3) МОСТ ПОТОКА: прицел подаёт палец, поэтому авто-прицел моста выключен.
+            KvXrFlowBridge flowBridge = UnityEngine.Object.FindAnyObjectByType<KvXrFlowBridge>();
+            if (flowBridge == null)
+            {
+                GameObject bridgeGo = new GameObject("KvXrFlowBridge");
+                flowBridge = bridgeGo.AddComponent<KvXrFlowBridge>();
+            }
+            flowBridge.headCamera = head;
+            flowBridge.feedAim = false;       // прицел подаёт KvArTouchInput
+            flowBridge.feedConfirm = false;
+
+            // 4) УКАЗАТЕЛЬ: камера головы (в AR это логическая копия AR-камеры).
+            KvXrUiPointer[] pointers = UnityEngine.Object.FindObjectsByType<KvXrUiPointer>(
+                FindObjectsInactive.Include, FindObjectsSortMode.None);
+            for (int i = 0; i < pointers.Length; i++)
+                if (pointers[i] != null) pointers[i].headCamera = head;
+
+            Debug.Log("[KvAr] ИНТЕРФЕЙС AR: меню, окна и поток подняты без VR-рига " +
+                      "(руки/жесты/облёт камеры не работают)");
         }
 
         void OnDestroy()

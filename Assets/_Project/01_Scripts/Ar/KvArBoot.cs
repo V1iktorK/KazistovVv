@@ -27,7 +27,10 @@ namespace KazistovVvAr
     public class KvArBoot : MonoBehaviour
     {
         /// <summary>Сколько ждать инициализацию XR, секунды. Хватает на диалог разрешений.</summary>
-        public float xrInitTimeoutSeconds = 30f;
+        // 90, а НЕ 30 (04.11.2026). На планшете первый по порядку OpenXR-лоадер PICO мог
+        // занять десятки секунд, и 30-секундный запас истекал раньше, чем XR Management
+        // успевал перейти к ARCore: приложение показывало «нет AR», хотя ARCore есть.
+        public float xrInitTimeoutSeconds = 90f;
 
         /// <summary>Писать в журнал строки о принятом решении.</summary>
         public bool logOnStart = true;

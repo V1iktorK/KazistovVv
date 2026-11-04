@@ -12,7 +12,7 @@ namespace KazistovVvTests
     ///
     /// ЗАЧЕМ. В задаче AR самое дорогое — «на устройстве не запустилось, а в редакторе всё
     /// зелёное». Поэтому проверяется НЕ «код написан», а ФАЙЛЫ ПРОЕКТА, от которых запуск
-    /// зависит: порядок XR-лоадеров (OpenXR первый, ARCore второй), пакет провайдера ARCore,
+    /// зависит: порядок XR-лоадеров (ARCore первый, OpenXR второй), пакет провайдера ARCore,
     /// манифест, состав `ArMain.unity`, порядок сцен в Build Settings, рендер-фича для Vulkan.
     ///
     /// СТИЛЬ — КАК В ПРОЕКТЕ: чтение настоящих файлов и поиск GUID скриптов. Сцену при этом
@@ -171,17 +171,26 @@ namespace KazistovVvTests
 
         // ================================================================ 2. XR-ЛОАДЕРЫ
 
+        /// <summary>
+        /// ПОРЯДОК ЛОАДЕРОВ ANDROID: СНАЧАЛА ARCORE, ПОТОМ OPENXR (перевёрнут 04.11.2026).
+        ///
+        /// ПОЧЕМУ. На планшете первым шёл OpenXRLoader, и его PICO-реализация на не-PICO
+        /// устройстве зависала: XR-инициализация не завершалась за 30 с, ARCore до второго
+        /// места не доходил, приложение показывало «нет AR». С ARCore первым AR поднимается
+        /// сразу. На шлеме ARCore-лоадер падает быстро (ARCore-сервиса нет), и OpenXR вторым
+        /// поднимает VR/MR как раньше — проверено на PICO.
+        /// </summary>
         [Test]
-        public void AndroidLoaders_AreOpenXrThenArCore()
+        public void AndroidLoaders_AreArCoreThenOpenXr()
         {
             List<string> names = AndroidLoaderNames();
             Assert.AreEqual(2, names.Count,
-                "лоадеров Android должно быть ровно два (OpenXR + ARCore), сейчас: " +
+                "лоадеров Android должно быть ровно два (ARCore + OpenXR), сейчас: " +
                 string.Join(", ", names.ToArray()));
-            StringAssert.Contains("OpenXR", names[0],
-                "ПЕРВЫЙ лоадер обязан быть OpenXR: иначе шлем уйдёт в AR-режим и VR сломается");
-            StringAssert.Contains("ARCore", names[1],
-                "ВТОРЫМ обязан быть ARCore: без него на планшете нет ни камеры, ни плоскостей");
+            StringAssert.Contains("ARCore", names[0],
+                "ПЕРВЫЙ лоадер обязан быть ARCore: с OpenXR первым планшет зависает в XR-инициализации");
+            StringAssert.Contains("OpenXR", names[1],
+                "ВТОРЫМ обязан быть OpenXR: без него не будет VR/MR на шлеме");
         }
 
         [Test]
@@ -404,6 +413,58 @@ namespace KazistovVvTests
                 "и тянет компоненты конвейера, которого на Android нет");
             Assert.IsTrue(KazistovVvXrEditor.KvXrTools.IsPcOnlyScene("Assets/_Project/00_Scenes/MainScene.unity"));
             Assert.IsFalse(KazistovVvXrEditor.KvXrTools.IsPcOnlyScene(KvArMode.ArScenePath));
+        }
+
+        /// <summary>
+        /// VR-РИГ В ArMain ВЫКЛЮЧЕН. Это не косметика: его `Start` создаёт в рантайме руки
+        /// OpenXR (`KvXrHands`), жесты и облёт простоя камеры. На планшете 04.11.2026 именно это
+        /// ломало ARCore: сессия застревала в «инициализируется», камера не открывалась,
+        /// плоскостей 0. Тест не даёт вернуть риг в AR-сцену.
+        /// </summary>
+        [Test]
+        public void ArScene_VrRigIsDisabled()
+        {
+            string scene = File.ReadAllText(Path.Combine(ProjectRoot, KvArMode.ArScenePath));
+            string guid = ScriptGuid("Assets/_Project/01_Scripts/Xr/KvXrRig.cs");
+            int index = scene.IndexOf("guid: " + guid, System.StringComparison.Ordinal);
+            Assert.GreaterOrEqual(index, 0, "в ArMain нет KvXrRig — проверить его выключение невозможно");
+            int enabledIndex = scene.LastIndexOf("m_Enabled:", index, System.StringComparison.Ordinal);
+            Assert.Greater(enabledIndex, 0, "не найден m_Enabled перед KvXrRig");
+            StringAssert.Contains("m_Enabled: 0", scene.Substring(enabledIndex, 24),
+                "KvXrRig ВКЛЮЧЁН в ArMain: он создаст руки OpenXR/жесты/облёт камеры и сломает ARCore");
+            StringAssert.Contains("DisableInScene<KvXrRig>", ReadAsset("Assets", "_Project", "01_Scripts",
+                "Editor", "KvArSceneBuilder.cs"), "сборщик AR-сцены больше не выключает VR-риг");
+        }
+
+        /// <summary>
+        /// ИНТЕРФЕЙС AR ПОДНИМАЕТСЯ БЕЗ РИГА: меню, окна, мост потока, гашение стендов 14,4 м.
+        /// Без этих вызовов при выключенном риге в AR не будет меню 110 команд и точек.
+        /// </summary>
+        [Test]
+        public void ArRuntime_RaisesUiWithoutVrRig()
+        {
+            string source = ReadAsset("Assets", "_Project", "01_Scripts", "Ar", "KvArRuntime.cs");
+            StringAssert.Contains("EnsureArUiSupport", source);
+            StringAssert.Contains("KvXrStartMenu.Ensure", source);
+            StringAssert.Contains("KvXrWindowHost.Ensure", source);
+            StringAssert.Contains("KvXrSceneEmpty", source,
+                "виртуальные стенды 14,4 м не гасятся — в AR они будут видны поверх реального стола");
+            StringAssert.Contains("feedAim = false", source,
+                "авто-прицел моста должен быть выключен: прицел подаёт палец");
+        }
+
+        /// <summary>
+        /// СТОРОЖ ЗАСТРЯВШЕЙ СЕССИИ: сброс ARSession.Reset, если инициализация идёт слишком долго.
+        /// На планшете это спасает от «чёрного фона без плоскостей» (проверено, что такое бывает).
+        /// </summary>
+        [Test]
+        public void SessionController_ResetsStuckInitialization()
+        {
+            string source = ReadAsset("Assets", "_Project", "01_Scripts", "Ar", "KvArSessionController.cs");
+            StringAssert.Contains("session.Reset()", source,
+                "нет сброса застрявшей ARCore-сессии — чёрный фон останется без лечения");
+            StringAssert.Contains("инициализация дольше", source);
+            StringAssert.Contains("stuckResetSeconds", source);
         }
     }
 }

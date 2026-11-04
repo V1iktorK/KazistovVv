@@ -113,7 +113,18 @@ namespace KazistovVvArEditor
             count += DisableInScene<KvXrMrRoom>();
             count += DisableInScene<KvXrHangarAnchor>();
             count += DisableInScene<KvXrSceneContent>();
-            Debug.Log("[KvArBuilder] ArMain: выключено VR-компонентов " + count);
+            // VR-РИГ ЦЕЛИКОМ. Его `Start` создаёт в рантайме руки OpenXR (`KvXrHands`),
+            // жесты, модели контроллеров, подачу взгляда и облёт простоя камеры. На планшете
+            // `KvXrHands` каждые 2 секунды дёргает подсистему рук OpenXR, и это ломает
+            // ARCore-сессию: она застревает в «инициализируется», камера не открывается,
+            // плоскостей 0 (проверено на планшете 04.11.2026).
+            // Меню, окна и мост потока AR-сцена поднимает сама (`KvArRuntime.EnsureArUiSupport`).
+            count += DisableInScene<KvXrRig>();
+            // Новые VR-компоненты, которые MR-агент добавил 04.11 (облёт камеры и т.п.):
+            // в AR камера должна стоять на трекинге устройства, а не «летать».
+            count += DisableInScene<KvXrIdleOrbit>();
+            Debug.Log("[KvArBuilder] ArMain: выключено VR-компонентов " + count +
+                      " (включая KvXrRig: руки/жесты/облёт камеры не должны работать в AR)");
         }
 
         private static int DisableInScene<T>() where T : Behaviour

@@ -40,6 +40,19 @@ namespace KazistovVvAr
         /// <summary>Писать в журнал переходы состояний.</summary>
         public bool logOnChange = true;
 
+        /// <summary>
+        /// СКОЛЬКО ЖДАТЬ «ИНИЦИАЛИЗАЦИЮ» ПЕРЕД СБРОСОМ СЕССИИ, секунды.
+        ///
+        /// ЗАЧЕМ. На планшете 04.11.2026 ARCore-сессия застряла в `SessionInitializing`:
+        /// камера не открывалась, плоскостей 0, а приложение работало. Сброс сессии — штатный
+        /// API AR Foundation (`ARSession.Reset`), который перезапускает подсистему. Без него
+        /// оператор видит чёрный фон и не понимает, что делать.
+        /// </summary>
+        public float stuckResetSeconds = 8f;
+
+        /// <summary>Сколько автоматических сбросов допустимо (потом — только сообщение).</summary>
+        public int maxAutomaticResets = 3;
+
         /// <summary>Текущее состояние сессии (для журнала и строки состояния).</summary>
         public ARSessionState State { get; private set; }
 
@@ -84,7 +97,41 @@ namespace KazistovVvAr
             nextPoll = Time.unscaledTime + Mathf.Max(0.25f, notTrackingPollSeconds);
             PollOnce();
             ApplyCameraPermission();
+            CheckStuckInitialization();
         }
+
+        /// <summary>
+        /// СТОРОЖ «ЗАСТРЯВШЕЙ» ИНИЦИАЛИЗАЦИИ. Если сессия дольше `stuckResetSeconds` остаётся
+        /// в `SessionInitializing` — сбрасываем её (`ARSession.Reset`). Это лечит случай, когда
+        /// подсистема стартовала, но камера/трекинг не поднялись: без сброса приложение
+        /// показывает чёрный фон и не находит плоскостей.
+        /// </summary>
+        private void CheckStuckInitialization()
+        {
+            if (State == ARSessionState.SessionInitializing)
+            {
+                if (initializingSince < 0f) initializingSince = Time.unscaledTime;
+                else if (Time.unscaledTime - initializingSince >= Mathf.Max(2f, stuckResetSeconds))
+                {
+                    initializingSince = -1f;
+                    if (automaticResets < Mathf.Max(1, maxAutomaticResets))
+                    {
+                        automaticResets++;
+                        Debug.LogWarning("[KvAr] СЕССИЯ: инициализация дольше " +
+                                         stuckResetSeconds.ToString("0") + " с — сброс сессии " +
+                                         "(попытка " + automaticResets + " из " + maxAutomaticResets + ")");
+                        if (session != null) session.Reset();
+                    }
+                }
+                return;
+            }
+
+            initializingSince = -1f;
+            if (State == ARSessionState.SessionTracking) automaticResets = 0;
+        }
+
+        private float initializingSince = -1f;
+        private int automaticResets;
 
         /// <summary>ПЕРЕЧИТАТЬ ФАКТЫ: состояние сессии и разрешение камеры.</summary>
         public void PollOnce()

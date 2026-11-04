@@ -107,9 +107,19 @@ namespace KazistovVvXrEditor
                     continue;
                 }
 
-                // ПОРЯДОК ВАЖЕН: OpenXR первым (шлем), ARCore вторым (планшет).
-                var wanted = new List<XRLoader> { openXr };
+                // ПОРЯДОК ВАЖЕН, И ОН ПЕРЕВЁРНУТ 04.11.2026: на Android — ARCore ПЕРВЫМ,
+                // OpenXR ВТОРЫМ.
+                //
+                // ПОЧЕМУ. На планшете первым шёл OpenXRLoader, и его PICO-реализация на
+                // не-PICO устройстве не просто падала, а ЗАВИСАЛА в инициализации:
+                // `XR: инициализация НЕ завершилась за 30 с`, ARCore до второго места не
+                // доходил, приложение показывало «устройство не поддерживает AR» — хотя
+                // ARCore на планшете установлен (проверено на Redmi Pad 2 Pro 04.11.2026).
+                // С ARCore первым режим AR поднимается сразу. На шлеме ARCoreLoader падает
+                // быстро (ARCore-сервиса там нет), и OpenXR вторым поднимает VR/MR как раньше.
+                var wanted = new List<XRLoader>();
                 if (target == BuildTargetGroup.Android && arCore != null) wanted.Add(arCore);
+                wanted.Add(openXr);
 
                 // ЧЕРЕЗ `TrySetLoaders`, А НЕ `loaders`: устаревшее свойство `loaders`
                 // компилятор помечает как obsolete (уровень CS0618 ловится гейтом проекта),
@@ -127,7 +137,7 @@ namespace KazistovVvXrEditor
 
             AssetDatabase.SaveAssets();
             Debug.Log("[KvXr] Лоадеры XR для сборки: " + string.Join(" · ", report) +
-                      ". Android: OpenXR ПЕРВЫМ (шлем), ARCore ВТОРЫМ (планшет, если OpenXR не поднялся). " +
+                      ". Android: ARCore ПЕРВЫМ (планшет/телефон), OpenXR ВТОРЫМ (шлем: ARCore там падает быстро). " +
                       "Mock HMD/Simulation выключены: в сборке они подменяли бы реальный трекинг.");
         }
 
