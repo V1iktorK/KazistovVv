@@ -44,19 +44,58 @@ namespace KazistovVvTests
         }
 
         /// <summary>
-        /// В VR-СЦЕНЕ РОБОТЫ И СТЕНДЫ ОСТАЮТСЯ ВИДИМЫМИ. Дефект: `KvXrRig` создавал
-        /// `KvXrSceneEmpty`, который каждый кадр гасил столы и роботов — «как в ПК до добавления».
-        /// Владелец 04.11.2026: «роботы пропали в VR версии»; по ТЗ нужно «только робот, пульт и ангар».
+        /// СТАРТ ПУСТОЙ: СТОЛ И РОБОТА СОБИРАЕТ ПОЛЬЗОВАТЕЛЬ. Решение владельца 04.11.2026 (вечер):
+        /// «убери сразу добавленные столы — они должны собираться (стол + робот) самим пользователем,
+        /// а не быть сначала готовыми». Поэтому риг снова создаёт `KvXrSceneEmpty`, а сборка идёт из
+        /// стартового меню («Стол», «Авто стол», «Добавить робота», «Запустить стенд»).
         /// </summary>
         [Test]
-        public void Scene_NoLongerHidesRobotsInVr()
+        public void Scene_StartsEmpty_UserBuildsStandFromMenu()
         {
             string rig = ReadScript("KvXrRig.cs");
 
-            StringAssert.DoesNotContain("EnsureSceneEmpty()", rig,
-                "риг снова гасит столы и роботов сцены: в VR будет пусто, владелец снова увидит пустой ангар");
-            StringAssert.Contains("СЦЕНА: роботы и стенды видны", rig,
-                "в журнале нет строки, что роботы видны при запуске — проверить «пусто» будет нечем");
+            StringAssert.Contains("EnsureSceneEmpty()", rig,
+                "риг больше не гасит готовые столы сцены: пользователь снова получит готовый стенд вместо сборки");
+            StringAssert.Contains("СЦЕНА: старт ПУСТОЙ", rig,
+                "в журнале нет строки «старт ПУСТОЙ» — проверить пустую сцену будет нечем");
+            StringAssert.Contains("из меню", rig,
+                "в строке журнала нет подсказки, что стенд собирается из меню");
+        }
+
+        /// <summary>
+        /// ОБЛЁТ ПРОСТОЯ УДАЛЁН ПОЛНОСТЬЮ. Владелец 04.11.2026: «убери вообще эту функцию» —
+        /// камера не должна ездить сама ни при каких условиях.
+        /// </summary>
+        [Test]
+        public void IdleOrbit_RemovedCompletely()
+        {
+            string rig = ReadScript("KvXrRig.cs");
+            string panel = ReadScript("KvXrGroupPanel.cs");
+
+            StringAssert.DoesNotContain("EnsureIdleOrbit", rig, "риг снова создаёт облёт простоя");
+            StringAssert.DoesNotContain("KvXrIdleOrbit", panel, "в настройках снова есть переключатель облёта");
+            string orbitFile = Path.Combine(ScriptsDir, "KvXrIdleOrbit.cs");
+            Assert.IsFalse(File.Exists(orbitFile), "файл облёта простоя вернулся: " + orbitFile);
+        }
+
+        /// <summary>
+        /// ПАНЕЛЬ (ПУЛЬТ) В ЗАПАСНОМ ПОЛОЖЕНИИ — НА УРОВНЕ ЭКРАНА НАСТРОЕК, А НЕ У ПОЯСА.
+        /// Решение владельца 04.11.2026: «подними нулевую точку контроллеров на уровень экрана
+        /// настроек и всё это поставь на нормальный уровень». Было 1,05 м (пояс).
+        /// </summary>
+        [Test]
+        public void PanelFallback_AtSettingsScreenLevel()
+        {
+            string panel = ReadScript("KvXrGroupPanel.cs");
+
+            StringAssert.Contains("DefaultBeltHeightMeters = 1.45f", panel,
+                "запасная высота панели снова у пояса: владелец просил уровень экрана настроек");
+            StringAssert.DoesNotContain("beltHeightMeters = 1.05f", panel,
+                "старая высота пояса (1,05 м) вернулась");
+            StringAssert.Contains("Mathf.Clamp(beltHeightMeters, 1.10f, 1.60f)", panel,
+                "нижняя граница высоты панели снова ниже нормального уровня");
+            StringAssert.Contains("УРОВНЕ ЭКРАНА НАСТРОЕК", panel,
+                "в журнале нет честной строки, куда встала панель");
         }
 
         /// <summary>
@@ -110,30 +149,6 @@ namespace KazistovVvTests
                 "проверка fromHmd стоит ПОСЛЕ перемещения зала: зал снова будет ездить по недостоверной позе");
             StringAssert.Contains("НЕ двигаю", anchor,
                 "нет честной строки журнала «трекинг не готов — зал не двигаю»");
-        }
-
-        /// <summary>
-        /// ОБЛЁТ ПРОСТОЯ: ТОЛЬКО ПОСЛЕ ДОЛГОГО ПОКОЯ И С МГНОВЕННЫМ ВОЗВРАТОМ УПРАВЛЕНИЯ.
-        /// Просьба владельца 04.11.2026: «камеру летающую оставь, но после продолжительного простоя;
-        /// после шевеления контроллерами — нормальная камера».
-        /// </summary>
-        [Test]
-        public void IdleOrbit_LongIdleAndStopsOnControllerMovement()
-        {
-            string orbit = ReadScript("KvXrIdleOrbit.cs");
-
-            StringAssert.Contains("idleSeconds = 900f", orbit,
-                "порог простоя должен быть ПРОДОЛЖИТЕЛЬНЫМ (3 минуты), а не мгновенным");
-            StringAssert.Contains("TryPose", orbit,
-                "активность контроллеров не читается — облёт не остановится, когда владелец шевелит руками");
-            StringAssert.Contains("TryHeadPose", orbit,
-                "движение головы не считается активностью — облёт продолжится, когда оператор смотрит по сторонам");
-            StringAssert.Contains("ОБЛЁТ ПРОСТОЯ: остановлен", orbit,
-                "нет строки журнала об остановке облёта — проверить поведение будет нечем");
-            StringAssert.Contains("MrActive", orbit,
-                "в MR облёт обязан быть выключен: комната реальная, оператора двигать нельзя");
-            StringAssert.Contains("GetPassthrough", orbit,
-                "проверка MR идёт по запрошенному режиму комнаты — без неё облёт включится в MR-сессии");
         }
 
         /// <summary>

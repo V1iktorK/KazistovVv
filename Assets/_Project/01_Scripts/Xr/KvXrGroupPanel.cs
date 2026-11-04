@@ -64,10 +64,17 @@ public float upOffset = 0.06f;
 /// <summary>
 /// ВЫСОТА ПАНЕЛИ НАД ПОЛОМ в запасном положении, метры. Панель ставится ОТ ПОЛА, а не
 /// «от головы минус рост до пояса»: по журналу 16.10.2026 такой расчёт увёл её на −0,85 м,
-/// то есть ПОД ПОЛ, и владелец сказал «Пояса нет». 1,05 м — примерно пояс: видно,
-/// опустив глаза, и вне центрального поля зрения.
+/// то есть ПОД ПОЛ, и владелец сказал «Пояса нет».
+///
+/// БЫЛО 1,05 («примерно пояс») — СТАЛО 1,45 (решение владельца 04.11.2026: «подними нулевую точку
+/// контроллеров на уровень экрана настроек и всё это поставь на нормальный уровень»). Панель теперь
+/// встаёт на уровне экрана настроек, а не у пояса: её видно, не опуская голову, и при этом она не
+/// висит вплотную к глазам.
 /// </summary>
-public float beltHeightMeters = 1.05f;
+public const float DefaultBeltHeightMeters = 1.45f;
+
+/// <inheritdoc cref="DefaultBeltHeightMeters"/>
+public float beltHeightMeters = DefaultBeltHeightMeters;
 
 /// <summary>Размер канваса панели в пикселях (квадрат).</summary>
 public float canvasSize = 420f;
@@ -1011,36 +1018,6 @@ CreateIcon("Set_Mode", "settings",
     new Vector2(-0.18f, -0.09f),
     delegate { ToggleMixedReality(); }, false,
     KvXrSettings.GetPassthrough() ? "MR ВКЛ" : "MR выкл", 0.12f, 0.05f);
-
-// ОБЛЁТ ПРОСТОЯ — выключатель (жалоба владельца 04.11.2026 «всё равно камера летает»: облёт
-// включался, когда шлем лежал на столе). По умолчанию включён, но с 15 минутами и только на надетом
-// шлеме; если владельцу не нужен вовсе — здесь же выключается одним нажатием.
-CreateIcon("Set_Orbit", "check",
-    "Облёт простоя: " + (IdleOrbitEnabled() ? "ВКЛ" : "выкл"),
-    new Vector2(0.18f, -0.23f), delegate { ToggleIdleOrbit(); }, false,
-    IdleOrbitEnabled() ? "облёт ВКЛ" : "облёт выкл", 0.12f, 0.05f);
-}
-
-/// <summary>ВКЛЮЧЁН ЛИ ОБЛЁТ ПРОСТОЯ (компонент есть и активен).</summary>
-private static bool IdleOrbitEnabled()
-{
-    KvXrIdleOrbit orbit = Object.FindAnyObjectByType<KvXrIdleOrbit>();
-    return orbit != null && orbit.enabled;
-}
-
-/// <summary>ПЕРЕКЛЮЧИТЬ ОБЛЁТ ПРОСТОЯ (решение владельца 04.11.2026 — камера не должна «летать»).</summary>
-private void ToggleIdleOrbit()
-{
-    KvXrIdleOrbit orbit = Object.FindAnyObjectByType<KvXrIdleOrbit>();
-    if (orbit == null)
-    {
-        Debug.LogWarning("[KvXr] облёт простоя: компонент не найден — переключать нечего");
-        return;
-    }
-    orbit.enabled = !orbit.enabled;
-    Debug.Log("[KvXr] ОБЛЁТ ПРОСТОЯ: " + (orbit.enabled ? "включён" : "ВЫКЛЮЧЕН владельцем") +
-              " · при выключенном облёте камера стоит, пока оператор не двигается сам");
-    Rebuild();
 }
 
 /// <summary>
@@ -3019,7 +2996,7 @@ if (!fromHmd)
 
 // ПАНЕЛЬ СТАВИТСЯ ОТ ПОЛА, А НЕ ОТ ВЫСОТЫ ГОЛОВЫ: тогда увести её под пол нечем,
 // даже если высота головы придёт неверной.
-float height = Mathf.Clamp(beltHeightMeters, 0.60f, 1.60f);
+float height = Mathf.Clamp(beltHeightMeters, 1.10f, 1.60f);
 Vector3 flatForward = KvXrGroupPanelLayout.Flatten(headRotation * Vector3.forward);
 Vector3 position = new Vector3(head.x, height, head.z)                             + flatForward * KvXrGroupPanelLayout.BeltForwardMeters;
             transform.position = position;
@@ -3049,7 +3026,7 @@ Vector3 flatOffset = position - head;
                 flatOffset.y = 0f;
 float ahead = flatOffset.magnitude;
 float realAngle = KvXrGroupPanelLayout.AngleFromGazeDegrees(drop, ahead);
-Debug.Log("[KvXr] панель групп: позы контроллера НЕТ — панель у ПОЯСА (" +                          realAngle.ToString("0") +                          "° ниже направления взгляда, не перед глазами) · панель в " +                          position.ToString("0.00") + " · высота над полом " + position.y.ToString("0.00") +                          " м · впереди на " + ahead.ToString("0.00") + " м · от глаз " +                          (head - position).magnitude.ToString("0.00") +                          " м · голова из " + (fromHmd ? "ПОЗЫ ШЛЕМА" : "объекта-камеры") +                          " на высоте " + head.y.ToString("0.00") +                          " м · канвас " + (canvas != null && canvas.enabled ? "включён" : "ВЫКЛЮЧЕН") +                          " · иконок " + icons.Count + " · развёрнута НА оператора");
+Debug.Log("[KvXr] панель групп: позы контроллера НЕТ — панель на УРОВНЕ ЭКРАНА НАСТРОЕК (" +                          realAngle.ToString("0") +                          "° ниже направления взгляда, не перед глазами) · панель в " +                          position.ToString("0.00") + " · высота над полом " + position.y.ToString("0.00") +                          " м · впереди на " + ahead.ToString("0.00") + " м · от глаз " +                          (head - position).magnitude.ToString("0.00") +                          " м · голова из " + (fromHmd ? "ПОЗЫ ШЛЕМА" : "объекта-камеры") +                          " на высоте " + head.y.ToString("0.00") +                          " м · канвас " + (canvas != null && canvas.enabled ? "включён" : "ВЫКЛЮЧЕН") +                          " · иконок " + icons.Count + " · развёрнута НА оператора");
 }
 }
 }}
