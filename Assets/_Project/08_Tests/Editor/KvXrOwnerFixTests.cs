@@ -122,7 +122,7 @@ namespace KazistovVvTests
         {
             string orbit = ReadScript("KvXrIdleOrbit.cs");
 
-            StringAssert.Contains("idleSeconds = 180f", orbit,
+            StringAssert.Contains("idleSeconds = 900f", orbit,
                 "порог простоя должен быть ПРОДОЛЖИТЕЛЬНЫМ (3 минуты), а не мгновенным");
             StringAssert.Contains("TryPose", orbit,
                 "активность контроллеров не читается — облёт не остановится, когда владелец шевелит руками");

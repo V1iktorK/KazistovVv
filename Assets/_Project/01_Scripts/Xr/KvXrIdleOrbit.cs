@@ -21,8 +21,13 @@ namespace KazistovVvXr
     /// </summary>
     public class KvXrIdleOrbit : MonoBehaviour
     {
-        /// <summary>Сколько секунд полного покоя нужно, чтобы включился облёт (3 минуты).</summary>
-        public float idleSeconds = 180f;
+        /// <summary>
+        /// Сколько секунд полного покоя нужно, чтобы включился облёт. 15 МИНУТ — «продолжительный
+        /// простой» в прямом смысле. Прежние 3 минуты оказались слишком малы: владелец снял шлем,
+        /// положил его на стол — контроллеры не двигались, система решила «оператор бездействует»,
+        /// и через 3 минуты камера начала ездить сама («всё равно камера летает», 04.11.2026).
+        /// </summary>
+        public float idleSeconds = 900f;
 
         /// <summary>Радиус облёта вокруг активного робота, метры.</summary>
         public float orbitRadius = 2.6f;
@@ -32,6 +37,12 @@ namespace KazistovVvXr
 
         /// <summary>Шаг движения контроллера/головы, считающийся активностью, метры.</summary>
         public float activityMoveMeters = 0.012f;
+
+        /// <summary>Нижняя граница правдоподобной высоты головы (шлем надет), метры.</summary>
+        public float minHeadHeightMeters = 0.8f;
+
+        /// <summary>Верхняя граница правдоподобной высоты головы (шлем надет), метры.</summary>
+        public float maxHeadHeightMeters = 2.4f;
 
         /// <summary>Облёт идёт прямо сейчас (диагностика и тесты).</summary>
         public bool Orbiting { get; private set; }
@@ -80,7 +91,19 @@ namespace KazistovVvXr
                 return;
             }
 
-            if (!Orbiting && Time.unscaledTime - lastActivityTime >= Mathf.Max(10f, idleSeconds))
+            // ОБЛЁТ — ТОЛЬКО КОГДА ШЛЕМ ДЕЙСТВИТЕЛЬНО НАДЕТ И ТРЕКИНГ ЖИВОЙ.
+            // Найдено 04.11.2026 по журналу: шлем лежал на столе, позы головы не было, контроллеры
+            // не двигались — облёт включился через 3 минуты и «камера летала» сама по себе.
+            // Поэтому: нет достоверной позы головы, высота головы неправдоподобна или трекинг пропал —
+            // облёт не начинаем, а таймер простоя сбрасываем (пусть считается «оператор здесь»).
+            if (!IsHeadsetWorn())
+            {
+                lastActivityTime = Time.unscaledTime;
+                if (Orbiting) StopOrbit("шлем не надет или трекинг головы не готов");
+                return;
+            }
+
+            if (!Orbiting && Time.unscaledTime - lastActivityTime >= Mathf.Max(60f, idleSeconds))
             {
                 BeginOrbit();
             }
@@ -156,7 +179,33 @@ namespace KazistovVvXr
             if (haveRight) lastRight = right;
             if (haveHead) lastHead = head;
             hasLastPoses = haveLeft || haveRight || haveHead || hasLastPoses;
+
+            // НАЖАТИЕ КУРКОВ — ТОЖЕ АКТИВНОСТЬ (даже если рука почти не сместилась): оператор,
+            // стоящий неподвижно и жмущий кнопки, не «простаивает», и облёт включать нельзя.
+            if (KvXrInputSource.LeftTrigger > 0.1f || KvXrInputSource.RightTrigger > 0.1f) active = true;
+
             return active;
+        }
+
+        /// <summary>
+        /// ШЛЕМ НАДЕТ? Проверка по достоверной позе головы и правдоподобной высоте. Если шлем лежит
+        /// на столе, поза либо отсутствует, либо «уезжает» — облёт в таком состоянии не запускаем.
+        /// </summary>
+        private bool IsHeadsetWorn()
+        {
+            Vector3 head;
+            Quaternion rotation;
+            if (!KvXrInputSource.TryHeadPose(out head, out rotation)) return false;
+            if (!IsFinite(head)) return false;
+
+            float minHeight = Mathf.Min(minHeadHeightMeters, maxHeadHeightMeters);
+            float maxHeight = Mathf.Max(minHeadHeightMeters, maxHeadHeightMeters);
+            if (head.y < minHeight || head.y > maxHeight) return false;
+
+            // Поза должна быть ещё и ОРИЕНТИРОВАННОЙ: у лежащего шлема кватернион вырожден.
+            if (!IsFinite(rotation.x) || !IsFinite(rotation.y) || !IsFinite(rotation.z) || !IsFinite(rotation.w))
+                return false;
+            return Mathf.Abs(rotation.w) + Mathf.Abs(rotation.x) + Mathf.Abs(rotation.y) + Mathf.Abs(rotation.z) > 0.5f;
         }
 
         /// <summary>Вектор без NaN/бесконечности (проектное правило отсева нечисла).</summary>

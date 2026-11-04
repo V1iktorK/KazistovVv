@@ -1011,6 +1011,36 @@ CreateIcon("Set_Mode", "settings",
     new Vector2(-0.18f, -0.09f),
     delegate { ToggleMixedReality(); }, false,
     KvXrSettings.GetPassthrough() ? "MR ВКЛ" : "MR выкл", 0.12f, 0.05f);
+
+// ОБЛЁТ ПРОСТОЯ — выключатель (жалоба владельца 04.11.2026 «всё равно камера летает»: облёт
+// включался, когда шлем лежал на столе). По умолчанию включён, но с 15 минутами и только на надетом
+// шлеме; если владельцу не нужен вовсе — здесь же выключается одним нажатием.
+CreateIcon("Set_Orbit", "check",
+    "Облёт простоя: " + (IdleOrbitEnabled() ? "ВКЛ" : "выкл"),
+    new Vector2(0.18f, -0.23f), delegate { ToggleIdleOrbit(); }, false,
+    IdleOrbitEnabled() ? "облёт ВКЛ" : "облёт выкл", 0.12f, 0.05f);
+}
+
+/// <summary>ВКЛЮЧЁН ЛИ ОБЛЁТ ПРОСТОЯ (компонент есть и активен).</summary>
+private static bool IdleOrbitEnabled()
+{
+    KvXrIdleOrbit orbit = Object.FindAnyObjectByType<KvXrIdleOrbit>();
+    return orbit != null && orbit.enabled;
+}
+
+/// <summary>ПЕРЕКЛЮЧИТЬ ОБЛЁТ ПРОСТОЯ (решение владельца 04.11.2026 — камера не должна «летать»).</summary>
+private void ToggleIdleOrbit()
+{
+    KvXrIdleOrbit orbit = Object.FindAnyObjectByType<KvXrIdleOrbit>();
+    if (orbit == null)
+    {
+        Debug.LogWarning("[KvXr] облёт простоя: компонент не найден — переключать нечего");
+        return;
+    }
+    orbit.enabled = !orbit.enabled;
+    Debug.Log("[KvXr] ОБЛЁТ ПРОСТОЯ: " + (orbit.enabled ? "включён" : "ВЫКЛЮЧЕН владельцем") +
+              " · при выключенном облёте камера стоит, пока оператор не двигается сам");
+    Rebuild();
 }
 
 /// <summary>
