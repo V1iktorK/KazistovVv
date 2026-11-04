@@ -167,6 +167,10 @@ namespace KazistovVvXr
 
             KvXrPlatformModeSelector.EnsureApplied();
 
+            // СТРОКА ПРОГРАММЫ (решение владельца 04.11.2026): в журнале сразу видно, какая
+            // версия запущена и в каком режиме, — не нужно догадываться по косвенным строкам.
+            Debug.Log("[KvXr] " + KvXrGroupPanel.ModeLine());
+
             if (!logOnStart) yield break;
             Debug.Log("[KvXr] режим определён после готовности XR: " +
                       (KvXrCapabilities.XrRunning ? "XR активен" : "XR НЕ активен за " +
@@ -201,23 +205,30 @@ namespace KazistovVvXr
             // ко взгляду и остаются висеть, когда оператор отходит).
             KvXrWindowHost.Ensure(camera);
 
-            // §42: ПУСТО ПРИ ЗАПУСКЕ — столы и роботы сцены гасятся в рантайме (файл XrMain.unity не
-            // меняется), добавляются они уже из стартового меню.
-            EnsureSceneEmpty();
+            // ВЛАДЕЛЕЦ 04.11.2026: «роботы пропали в VR версии — сделай как в VR версии: только робот,
+            // пульт и ангар». Раньше здесь создавался `KvXrSceneEmpty` (§42), который каждый кадр гасил
+            // столы и роботов сцены («пусто при запуске»). В итоге на стенде не было ни роботов, ни
+            // ангара-лаборатории, хотя весь смысл приложения — работа с роботом. Гашение ОТМЕНЕНО:
+            // стенды и роботы остаются видимыми и переносятся к оператору через `KvXrSceneContent`.
+            Debug.Log("[KvXr] СЦЕНА: роботы и стенды видны при запуске (пустой старт отменён — решение владельца 04.11.2026)");
+
+            // ОБЛЁТ ПРОСТОЯ (просьба владельца 04.11.2026): «камеру летающую оставь, но после
+            // продолжительного простоя; после шевеления контроллерами — нормальная камера».
+            EnsureIdleOrbit();
 
             // §42: ПОТОК ЭТАПОВ — без него в шлеме не работала ни одна визуализация (пятна, границы,
             // зоны, сингулярности): службы привязываются к потоку, а его в XR-сцене не было вовсе.
             EnsureFlowBridge(camera);
         }
 
-        /// <summary>Создать компонент «пусто при запуске», если его нет (§42).</summary>
-        private static void EnsureSceneEmpty()
+        /// <summary>Создать облёт простоя, если его нет (камера «летает» только после долгого покоя).</summary>
+        private static void EnsureIdleOrbit()
         {
-            KvXrSceneEmpty existing = Object.FindAnyObjectByType<KvXrSceneEmpty>(FindObjectsInactive.Include);
+            KvXrIdleOrbit existing = Object.FindAnyObjectByType<KvXrIdleOrbit>(FindObjectsInactive.Include);
             if (existing != null) return;
 
-            var go = new GameObject("KvXrSceneEmpty");
-            go.AddComponent<KvXrSceneEmpty>();
+            var go = new GameObject("KvXrIdleOrbit");
+            go.AddComponent<KvXrIdleOrbit>();
         }
 
         /// <summary>Создать мост потока этапов, если его нет (§42).</summary>

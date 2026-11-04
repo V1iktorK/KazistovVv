@@ -295,18 +295,30 @@ namespace KazistovVvTests
         // ==================================================== Г. АВТООПРЕДЕЛЕНИЕ РЕЖИМА
 
         /// <summary>
-        /// РЕЖИМ ВКЛЮЧАЕТСЯ САМ. Тумблер «сквозной вид» по умолчанию ВКЛЮЧЁН, иначе `MrActive`
-        /// недостижим (именно это и было: `SetPassthrough` не вызывался ниоткуда, значение 0).
-        /// При этом решает не тумблер, а фактические возможности устройства.
+        /// ПО УМОЛЧАНИЮ — VR, MR ВКЛЮЧАЕТСЯ В НАСТРОЙКАХ (решение владельца 04.11.2026:
+        /// «сначала прога запускается как VR, но в настройках можно сделать MR»).
+        ///
+        /// ЧТО ПРОВЕРЯЕТСЯ: (1) по умолчанию режим комнаты ВЫКЛЮЧЕН; (2) в настройках шлема есть
+        /// переключатель, который пишет настройку через `SetPassthrough` (иначе «включить MR»
+        /// негде — ровно этот дефект был в S44, когда `SetPassthrough` не вызывался ниоткуда);
+        /// (3) `MrActive` по-прежнему требует ФАКТИЧЕСКОГО режима устройства, а не только настройки.
         /// </summary>
         [Test]
-        public void Mode_IsAutomatic_PassthroughOnByDefault()
+        public void Mode_DefaultsToVr_WithMixedRealitySwitchInSettings()
         {
             FieldInfo field = typeof(KvXrSettings).GetField("DefaultPassthrough",
                 BindingFlags.Public | BindingFlags.Static);
             Assert.IsNotNull(field, "в KvXrSettings нет DefaultPassthrough");
-            Assert.AreEqual(1, (int)field.GetRawConstantValue(),
-                "сквозной вид обязан быть включён по умолчанию: иначе MR не включится сам (ТЗ S1.7)");
+            Assert.AreEqual(0, (int)field.GetRawConstantValue(),
+                "запуск по умолчанию должен быть в VR: MR — экспериментальная ветка и включается в настройках");
+
+            string panel = ReadScript("KvXrGroupPanel.cs");
+            StringAssert.Contains("Режим комнаты (MR)", panel,
+                "в настройках шлема нет переключателя режима комнаты — MR негде включить");
+            StringAssert.Contains("SetPassthrough", panel,
+                "переключатель режима комнаты должен ПИСАТЬ настройку, а не только показывать надпись");
+            StringAssert.Contains("ModeLine", panel,
+                "в меню нет строки режима — владелец не отличит VR-версию от MR");
 
             string source = ReadScript("KvXrMrRoom.cs");
             StringAssert.Contains("KvXrPlatformModeSelector.Current == KvXrPlatformMode.Mr", source,

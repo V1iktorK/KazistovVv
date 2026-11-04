@@ -1002,6 +1002,45 @@ CreateIcon("Set_Interface", "settings", "Настройки интерфейса
 // СТАРТОВОЕ МЕНЮ (§41, указание владельца): вызвать снова, если закрыл. Появляется само
 // при запуске, но путь назад к нему должен быть — иначе «меню есть, а вернуться некуда».
 CreateIcon("Set_StartMenu", "session", "Стартовое меню", new Vector2(0.18f, -0.09f),                delegate { ShowStartMenu(); }, false, "меню", 0.10f, 0.05f);
+
+// РЕЖИМ КОМНАТЫ (MR) — переключатель по решению владельца 04.11.2026: «сначала прога
+// запускается как VR, но в настройках можно сделать MR». Место — свободная ячейка слева от
+// «Стартового меню»; прежние кнопки не сдвинуты (их смещения закреплены тестом §40).
+CreateIcon("Set_Mode", "settings",
+    "Режим комнаты (MR): " + (KvXrSettings.GetPassthrough() ? "ВКЛ" : "выкл"),
+    new Vector2(-0.18f, -0.09f),
+    delegate { ToggleMixedReality(); }, false,
+    KvXrSettings.GetPassthrough() ? "MR ВКЛ" : "MR выкл", 0.12f, 0.05f);
+}
+
+/// <summary>
+/// ПЕРЕКЛЮЧИТЬ РЕЖИМ КОМНАТЫ (MR). Решение применяется при следующем запуске: включение
+/// сквозного вида требует пересоздания XR-сцены (пасс-слой, реальные поверхности, перенос
+/// робота из стенда). Поэтому здесь только сохраняем настройку и ГОВОРИМ об этом прямо —
+/// молчаливое «нажал и ничего» было бы худшим вариантом.
+/// </summary>
+private void ToggleMixedReality()
+{
+    bool next = !KvXrSettings.GetPassthrough();
+    KvXrSettings.SetPassthrough(next);
+    Debug.Log("[KvXr] РЕЖИМ КОМНАТЫ (MR): " + (next ? "ВКЛЮЧЁН" : "выключен") +
+              " · применится после перезапуска приложения (сквозной вид пересоздаёт XR-сцену)");
+    Rebuild();
+}
+
+/// <summary>
+/// СТРОКА РЕЖИМА ДЛЯ МЕНЮ — отличие VR-версии от MR (решение владельца 04.11.2026):
+/// владелец должен видеть, какая программа запущена, не заходя в журнал.
+/// </summary>
+public static string ModeLine()
+{
+    bool deviceCanMr = KvXrPlatformModeSelector.Current == KvXrPlatformMode.Mr;
+    bool requested = KvXrSettings.GetPassthrough();
+
+    if (deviceCanMr && requested) return "РЕЖИМ: СМЕШАННАЯ РЕАЛЬНОСТЬ (комната)";
+    if (deviceCanMr && !requested) return "РЕЖИМ: ВИРТУАЛЬНАЯ РЕАЛЬНОСТЬ (MR доступен в настройках)";
+    if (requested && !deviceCanMr) return "РЕЖИМ: ВИРТУАЛЬНАЯ РЕАЛЬНОСТЬ (MR запрошен, шлем не дал)";
+    return "РЕЖИМ: ВИРТУАЛЬНАЯ РЕАЛЬНОСТЬ";
 }
 
 /// <summary>ПОКАЗАТЬ СТАРТОВОЕ МЕНЮ (кнопка на экране «Настройки» и первое открытие).</summary>
@@ -1625,6 +1664,10 @@ PanelSurfaceHalfSize = new Vector2(KvXrStartMenuLayout.WidthMeters * 0.5f,      
 RefreshStartLists();
             CreatePlate("MenuPlate", Vector2.zero,                new Vector2(KvXrStartMenuLayout.WidthMeters, KvXrStartMenuLayout.HeightMeters),                new Color(0.09f, 0.10f, 0.12f, 0.97f));
 CreateLabel("MenuTitle", "KazistovVv", new Vector2(0f, 0.335f), 20);
+            // ОТЛИЧИЕ ДВУХ ПРОГРАММ В МЕНЮ (решение владельца 04.11.2026): строка режима сразу
+            // под названием. Владелец тестирует VR-версию и MR-версию на одном шлеме и должен
+            // видеть, какая программа сейчас запущена, не заходя в журнал.
+            CreateLabel("MenuMode", ModeLine(), new Vector2(0f, 0.298f), 12);
 for (int i = 0; i < KvXrStartMenuLayout.SectionCount; i++)
 {
 int index = i;

@@ -128,6 +128,53 @@ namespace KazistovVvXr
         void Start()
         {
             EnsureFlow();
+            StartCoroutine(CleanViewWhenReady());
+        }
+
+        /// <summary>
+        /// ЧИСТЫЙ ВИД ПО УМОЛЧАНИЮ (решение владельца 04.11.2026: «зоны включены, какой ужас —
+        /// выключи все плюшки по умолчанию»). Ждём, когда поднимутся службы этапов (они создаются
+        /// своими хабами и привязываются к потоку), и ОДНИМ вызовом гасим все визуализации: зону
+        /// достижимости, лимиты, панель чисел, теплокарты, запретные зоны, сингулярности.
+        ///
+        /// ПОЧЕМУ ЖДАТЬ, А НЕ СДЕЛАТЬ В `Start`. В `Start` служб ещё нет (они появляются в хабах
+        /// с задержкой кадра-двух), и вызов по пустым ссылкам молча ничего бы не выключил — ровно
+        /// так «плюшки» и оставались включёнными, хотя флаги по умолчанию уже были выключены.
+        /// </summary>
+        private System.Collections.IEnumerator CleanViewWhenReady()
+        {
+            float deadline = Time.unscaledTime + 20f;
+            while (Time.unscaledTime < deadline)
+            {
+                KazistovVvFeatures.FeatureHub features = KazistovVvFeatures.FeatureHub.Current;
+                KazistovVvFeatures.KvStageHub hub = Object.FindAnyObjectByType<KazistovVvFeatures.KvStageHub>();
+                if (flow != null && features != null && hub != null) break;
+                yield return null;
+            }
+
+            // ПОВТОРНЫЕ ПРОХОДЫ ОБЯЗАТЕЛЬНЫ (найдено на устройстве 04.11.2026 в 02:11:41): сразу
+            // после первого прохода «ЗОНЫ: видимо 0», а через секунду СНОВА «видимо 1». Причина —
+            // отложенные загрузки служб: например `FeatureHub` поднимает зоны запрета с диска
+            // (`Zones.LoadAll()`) уже ПОСЛЕ того, как появились ссылки на службы, и сохранённые зоны
+            // возвращают свою видимость. Поэтому гасим четыре раза за ~5 секунд, а не один.
+            const int passes = 4;
+            for (int pass = 1; pass <= passes; pass++)
+            {
+                KazistovVvFeatures.FeatureHub features = KazistovVvFeatures.FeatureHub.Current;
+                KazistovVvFeatures.KvStageHub hub = Object.FindAnyObjectByType<KazistovVvFeatures.KvStageHub>();
+                if (flow == null || features == null)
+                {
+                    yield return new WaitForSecondsRealtime(0.5f);
+                    continue;
+                }
+
+                int hidden = KvXrCleanView.Apply(features, flow, hub);
+                if (logOnBind)
+                    Debug.Log("[KvXr] " + KvXrCleanView.Describe(hidden) +
+                              " · проход " + pass + " из " + passes);
+
+                if (pass < passes) yield return new WaitForSecondsRealtime(pass == 1 ? 1f : 2f);
+            }
         }
 
         /// <summary>СОЗДАТЬ ПОТОК, ЕСЛИ ЕГО ЕЩЁ НЕТ (идемпотентно).</summary>
@@ -367,8 +414,21 @@ namespace KazistovVvXr
             // 4. Тепловая карта зазоров
             if (features != null && features.Clearance != null && features.Clearance.Visible) visible++;
 
-            // 5. Запретные зоны («границы»): считаем существующие зоны, видимые на сцене
-            if (features != null && features.Zones != null && features.Zones.Zones.Count > 0) visible++;
+            // 5. Запретные зоны («границы»): считаем ТОЛЬКО ВИДИМЫЕ на сцене. Раньше считались все
+            // существующие (зоны поднимаются с диска), и строка врала «видимо 1», хотя ничего не видно
+            // (найдено на устройстве 04.11.2026 сразу после чистого вида).
+            if (features != null && features.Zones != null)
+            {
+                for (int i = 0; i < features.Zones.Zones.Count; i++)
+                {
+                    KazistovVvFeatures.KvZone zone = features.Zones.Zones[i];
+                    if (zone != null && zone.Data != null && zone.Data.visible)
+                    {
+                        visible++;
+                        break;
+                    }
+                }
+            }
 
             return visible;
         }

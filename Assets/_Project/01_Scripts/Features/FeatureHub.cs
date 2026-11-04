@@ -33,7 +33,15 @@ namespace KazistovVvFeatures
         public float playbackSpeed = 1f;
 
         [Header("Тепловые карты (этапы 8–9)")]
-        public bool heatmapOnByDefault = true;
+        /// <summary>
+        /// ТЕПЛОВАЯ КАРТА ПО УМОЛЧАНИЮ ВЫКЛЮЧЕНА (решение владельца 04.11.2026).
+        ///
+        /// ПОЧЕМУ. Теплокарта — это сфера вокруг робота, окрашенная по стоимости достижения, и
+        /// облако жёлтых точек. На старте владелец видел «шар и какие-то жёлтые элементы» поверх
+        /// рабочего вида. Плюшка нужная, но не по умолчанию: включается командой
+        /// `view.heatmap` (горячая клавиша H) и остаётся доступной.
+        /// </summary>
+        public bool heatmapOnByDefault = false;
         public int heatmapSamplesPerFrame = 64;
 
         [Header("Зоны запрета (этап 5)")]

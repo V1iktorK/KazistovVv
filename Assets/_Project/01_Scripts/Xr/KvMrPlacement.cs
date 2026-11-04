@@ -91,6 +91,14 @@ namespace KazistovVvXr
         private Material greenMaterial;
         private Material redMaterial;
 
+        /// <summary>
+        /// ПОКАЗЫВАТЬ ЛУЧ И МЕТКУ ПРИЦЕЛА В MR. ПО УМОЛЧАНИЮ ВЫКЛЮЧЕНО — решение владельца
+        /// 04.11.2026: «зоны включены, какой ужас — выключи все плюшки по умолчанию». Луч и метка
+        /// это подсказка, а не рабочий орган: постановка идёт автопутём и кнопкой A, поэтому без них
+        /// всё работает. Включается флагом (в инспекторе компонента), если владелец попросит.
+        /// </summary>
+        public bool showAimByDefault = false;
+
         private bool hasHit;
         private Vector3 hitPoint;
         private Vector3 hitNormal;
@@ -271,6 +279,14 @@ namespace KazistovVvXr
         private void UpdateVisuals()
         {
             if (beam == null || reticle == null) return;
+            if (!showAimByDefault)
+            {
+                // ЧИСТЫЙ ВИД (решение владельца 04.11.2026): луч и метка скрыты по умолчанию,
+                // постановка работает без них. Если флаг включат — идём обычным путём ниже.
+                beam.enabled = false;
+                reticle.SetActive(false);
+                return;
+            }
 
             Vector3 origin;
             Vector3 direction;

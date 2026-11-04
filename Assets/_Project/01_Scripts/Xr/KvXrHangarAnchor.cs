@@ -50,6 +50,8 @@ namespace KazistovVvXr
         }
 
         private float retryUntil = -1f;
+        private bool warnedNoHmd;
+        private bool gaveUpLogged;
 
         /// <summary>
         /// ДОПОСТАВИТЬ ЗАЛ, КОГДА ПОЯВИТСЯ ПОЗА ШЛЕМА. В `Start` трекинг может быть ещё не готов:
@@ -61,7 +63,19 @@ namespace KazistovVvXr
         {
             if (PlacedFromHmd) return;
             if (retryUntil < 0f) retryUntil = Time.time + 12f;
-            if (Time.time < retryUntil) Place();
+            if (Time.time < retryUntil)
+            {
+                Place();
+                return;
+            }
+
+            if (!gaveUpLogged)
+            {
+                gaveUpLogged = true;
+                Debug.Log("[KvXr] Ангар: достоверная поза шлема не появилась за 12 с — зал оставлен на " +
+                          "авторской позиции. Двигать его по объекту-камере НЕЛЬЗЯ: именно из-за этого " +
+                          "мир ездил каждый кадр и это выглядело как «летающая камера» (найдено 04.11.2026).");
+            }
         }
 
         /// <summary>Поставлено ли по позе шлема (а не по запасному пути).</summary>
@@ -85,6 +99,21 @@ namespace KazistovVvXr
             {
                 Debug.LogWarning("[KvXr] Ангар: оператор не найден (ни позы шлема, ни камеры) — " +
                                  "зал оставлен на месте из сцены.");
+                return;
+            }
+
+            // ЗАЛ СТАВИТСЯ ТОЛЬКО ПО ДОСТОВЕРНОЙ ПОЗЕ ШЛЕМА (исправлено 04.11.2026 по жалобе владельца
+            // «камера летает»). Раньше при неготовом трекинге точка оператора бралась с объекта-камеры,
+            // и `Place()` МЕСТИЛ зал каждый кадр вокруг плывущей точки — оператор видел, что мир едет
+            // сам. Теперь: нет позы HMD — не двигаем зал вообще (и честно пишем об этом в журнал).
+            if (!fromHmd)
+            {
+                if (!warnedNoHmd)
+                {
+                    warnedNoHmd = true;
+                    Debug.Log("[KvXr] Ангар: трекинг головы ещё не готов — зал НЕ двигаю (жду позу шлема); " +
+                              "мир при этом стоит на месте, а не «летает».");
+                }
                 return;
             }
             PlacedFromHmd = fromHmd;
