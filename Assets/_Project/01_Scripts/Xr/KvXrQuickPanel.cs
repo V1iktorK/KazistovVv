@@ -67,7 +67,7 @@ namespace KazistovVvXr
         public string[] commandIds =
         {
             "robot.stop", "robot.playpause", "edit.undo", "edit.redo",
-            "edit.reset", "view.workspace", "view.limits", "panel.settings"
+            "edit.reset", "view.workspace", "view.limits", "ui.settings"
         };
 
         /// <summary>Сообщать состояние панели в журнал при построении.</summary>

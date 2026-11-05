@@ -663,7 +663,7 @@ namespace KazistovVvXr
         /// хотя устройства в системе есть.
         /// </summary>
         public static readonly string[] TriggerControlNames =
-            { "triggerPressed", "trigger", "triggerButton", "selectPressed", "select", "primaryButton" };
+            { "triggerPressed", "trigger", "triggerButton", "selectPressed", "select" };
 
         /// <summary>Имена элементов «грип» (боковая кнопка или сжатие).</summary>
         public static readonly string[] GripControlNames =

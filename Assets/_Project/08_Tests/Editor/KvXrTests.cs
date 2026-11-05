@@ -144,16 +144,23 @@ namespace KazistovVvTests
 
         // ================================================ [D2] телепорт и плавный ход
 
-        /// <summary>По решению [D2] основной способ — ТЕЛЕПОРТ; плавный ход — опция.</summary>
+        /// <summary>
+        /// РЕШЕНИЕ ВЛАДЕЛЬЦА 05.11.2026: основной способ — ПЛАВНЫЙ ХОД («мне нужно нормальное
+        /// управление и перемещение как во всех остальных играх»), телепорт остаётся
+        /// переключателем. Прежний тест требовал телепорт — решение изменилось осознанно.
+        /// </summary>
         [Test]
-        public void Movement_TeleportIsDefault()
+        public void Movement_SmoothIsDefault()
         {
             KvXrMoveMode saved = KvXrSettings.GetMoveMode();
             try
             {
                 KvXrSettings.ResetMoveMode();
-                Assert.AreEqual(KvXrMoveMode.Teleport, KvXrSettings.GetMoveMode(),
-                    "по умолчанию обязан быть телепорт");
+                Assert.AreEqual(KvXrMoveMode.Smooth, KvXrSettings.GetMoveMode(),
+                    "по умолчанию обязан быть плавный ход (решение владельца 05.11.2026)");
+                // И переключение обязано работать в обе стороны — телепорт не удалён.
+                KvXrSettings.SetMoveMode(KvXrMoveMode.Teleport);
+                Assert.AreEqual(KvXrMoveMode.Teleport, KvXrSettings.GetMoveMode(), "телепорт включается");
             }
             finally { KvXrSettings.SetMoveMode(saved); }
         }

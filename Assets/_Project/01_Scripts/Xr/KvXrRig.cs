@@ -217,12 +217,25 @@ namespace KazistovVvXr
             // §42: ПОТОК ЭТАПОВ — без него в шлеме не работала ни одна визуализация (пятна, границы,
             // зоны, сингулярности): службы привязываются к потоку, а его в XR-сцене не было вовсе.
             EnsureFlowBridge(camera);
+
+            // ВИНЬЕТКА КОМФОРТА (05.11.2026): плавный ход включён по умолчанию, поэтому
+            // затемнение краёв при движении обязательно — иначе укачивает, и владелец
+            // вернёт телепорт, хотя просил «как в играх».
+            KvXrComfortVignette vignette = KvXrComfortVignette.Ensure(transform, camera);
+            if (vignette != null) Debug.Log("[KvXr] " + vignette.Status);
+
+            // ПАНЕЛЬ У РУКИ (Y): код живой, но в сцене компонента нет — кнопка Y
+            // переключала настройку, которую некому показать (аудит 05.11.2026).
+            EnsureQuickPanel();
         }
+
+
 
         /// <summary>
         /// СОЗДАТЬ «ПУСТО ПРИ ЗАПУСКЕ», если его нет (§42). Столы сцены и их роботы гасятся —
         /// пользователь собирает стенд сам из меню (решение владельца 04.11.2026, вечер).
         /// </summary>
+
         private static void EnsureSceneEmpty()
         {
             KvXrSceneEmpty existing = Object.FindAnyObjectByType<KvXrSceneEmpty>(FindObjectsInactive.Include);
@@ -230,6 +243,21 @@ namespace KazistovVvXr
 
             var go = new GameObject("KvXrSceneEmpty");
             go.AddComponent<KvXrSceneEmpty>();
+        }
+
+        /// <summary>
+        /// СОЗДАТЬ ПАНЕЛЬ БЫСТРЫХ КОМАНД (Y), если её нет. В сцене `XrQuickPanel` остался только
+        /// `KvXrGroupPanel`; `KvXrQuickPanel` — тот компонент, который рисует 8 частых команд у
+        /// руки. Без него кнопка Y «работала», но показать было нечего.
+        /// </summary>
+        private static void EnsureQuickPanel()
+        {
+            KvXrQuickPanel existing = Object.FindAnyObjectByType<KvXrQuickPanel>();
+            if (existing != null) return;
+
+            var go = new GameObject("KvXrQuickPanel");
+            KvXrQuickPanel panel = go.AddComponent<KvXrQuickPanel>();
+            Debug.Log("[KvXr] ПАНЕЛЬ У РУКИ (Y): создана в рантайме · " + panel.commandIds.Length + " команд");
         }
 
         /// <summary>Создать мост потока этапов, если его нет (§42).</summary>

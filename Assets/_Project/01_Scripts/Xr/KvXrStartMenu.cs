@@ -45,6 +45,12 @@ namespace KazistovVvXr
         /// <summary>Ниже этой высоты глаз поза считается недостоверной, метры (как в `KvXrInputSource`).</summary>
         public float minPlausibleEyeHeight = 0.5f;
 
+        /// <summary>AR: разрешить низкую «голову» (планшет/телефон) и поднять меню до читаемой высоты.</summary>
+        public bool allowLowEyeHeight;
+
+        /// <summary>AR: ниже этой высоты меню не ставится, метры (планшет держат перед собой).</summary>
+        public float lowEyeHeightFloorMeters = 1.05f;
+
         /// <summary>Показывать меню при запуске приложения (как в компьютерной версии).</summary>
         public bool showOnStart = true;
 
@@ -61,6 +67,7 @@ namespace KazistovVvXr
 
         /// <summary>Прошлое состояние нажатия стика (для переднего фронта).</summary>
         private bool stickClickWasDown;
+        private float stickPressTime = -1f;
 
         /// <summary>Меню сейчас на виду.</summary>
         public bool Visible { get { return visible; } }
@@ -118,18 +125,28 @@ namespace KazistovVvXr
 
             if (visible) { stickClickWasDown = false; return; }
 
+            // ВХОД В МЕНЮ — КОРОТКОЕ нажатие ЛЕВОГО стика (правый занят режимом точки — аудит
+            // 05.11.2026). Открываем ПО ОТПУСКАНИЮ и только если нажатие было коротким: долгое
+            // удержание — это «вернуться на рабочую позицию» (KvXrActions), и два действия на
+            // одно нажатие не должны срабатывать вместе.
             bool leftDown = KvXrInputSource.LeftStickClick;
-            bool rightDown = KvXrInputSource.RightStickClick;
-            bool down = leftDown || rightDown;
-
-            if (down && !stickClickWasDown)
+            if (leftDown && !stickClickWasDown) stickPressTime = Time.unscaledTime;
+            if (!leftDown && stickClickWasDown)
             {
-                Debug.Log("[KvXr] МЕНЮ: открыто нажатием стика (" +
-                          (leftDown ? "левый" : "правый") + " контроллер)");
-                Show();
+                float held = Time.unscaledTime - stickPressTime;
+                if (held >= 0f && held < 0.5f)
+                {
+                    Debug.Log("[KvXr] МЕНЮ: открыто коротким нажатием левого стика (" +
+                              held.ToString("0.00") + " с)");
+                    Show();
+                }
+                else
+                {
+                    Debug.Log("[KvXr] МЕНЮ: стик удержан (" + held.ToString("0.00") +
+                              " с) — это команда «вернуться к столу», меню не открывается");
+                }
             }
-
-            stickClickWasDown = down;
+            stickClickWasDown = leftDown;
         }
 
         /// <summary>ПЕРЕСТАВИТЬ МЕНЮ ПЕРЕД ОПЕРАТОРОМ — только по явному вызову, не само.</summary>
@@ -285,17 +302,19 @@ namespace KazistovVvXr
             Quaternion headRotation;
 
             if (KvXrInputSource.TryHeadPose(out headPosition, out headRotation) &&
-                headPosition.y >= minPlausibleEyeHeight)
+                (headPosition.y >= minPlausibleEyeHeight || allowLowEyeHeight))
             {
                 eye = headPosition;
+                if (allowLowEyeHeight) eye.y = Mathf.Max(eye.y, lowEyeHeightFloorMeters);
                 forward = FlatForward(headRotation * Vector3.forward);
                 return true;
             }
 
             Camera camera = headCamera != null ? headCamera : Camera.main;
-            if (camera != null && camera.transform.position.y >= minPlausibleEyeHeight)
+            if (camera != null && (camera.transform.position.y >= minPlausibleEyeHeight || allowLowEyeHeight))
             {
                 eye = camera.transform.position;
+                if (allowLowEyeHeight) eye.y = Mathf.Max(eye.y, lowEyeHeightFloorMeters);
                 forward = FlatForward(camera.transform.forward);
                 return true;
             }

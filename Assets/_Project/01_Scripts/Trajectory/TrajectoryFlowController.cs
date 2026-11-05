@@ -294,6 +294,21 @@ public class TrajectoryFlowController : MonoBehaviour
     /// <summary>Активен ли режим перемещения точки (камера по этому флагу отдаёт QWEASD точке).</summary>
     public bool IsPointMoveMode => state.phase == FlowState.PointMoveMode;
 
+    /// <summary>
+    /// ПЕРЕТАЩИТЬ ТОЧКУ РУКОЙ (шаг 4 плана VR-управления, 05.11.2026): в режиме перемещения точки
+    /// правая рука с зажатым грипом ведёт маркер по поверхности — то же, что стик, но «взять и
+    /// поставить». Реализация ОДНА с стиком: меняется только `state.movePoint`, дальше работают
+    /// те же проверки достижимости и HUD. Вне режима метод ничего не делает (false).
+    /// </summary>
+    public bool DragPointTo(Vector3 worldPoint)
+    {
+        if (state.phase != FlowState.PointMoveMode) return false;
+        state.movePoint = worldPoint;
+        if (pointHud != null && pointHud.IsVisible)
+            pointHud.SetPoint(state.movePoint, PointInRobotFrame(state.movePoint));
+        return true;
+    }
+
     // ------------------------------------------------------------------ доступ для ПК-интерфейса
     // Только ЧТЕНИЕ/обёртки: переходы State Machine не меняются, новых биндов не появляется.
     // Нужны десктопному интерфейсу (дерево/свойства/статус-бар/кнопки тулбара).

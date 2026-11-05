@@ -34,6 +34,10 @@ namespace KazistovVvXr
 
         public const string KeyMoveMode = "KazistovVv.XR.MoveMode";
         public const string KeySmoothSpeed = "KazistovVv.XR.SmoothSpeed";
+        public const string KeyMoveAcceleration = "KazistovVv.XR.MoveAcceleration";
+        public const string KeyWalkDeadzone = "KazistovVv.XR.WalkDeadzone";
+        public const string KeyVignette = "KazistovVv.XR.ComfortVignette";
+        public const string KeyVignetteStrength = "KazistovVv.XR.ComfortVignetteStrength";
         public const string KeyTeleportDistance = "KazistovVv.XR.TeleportDistance";
         public const string KeyPanelDistance = "KazistovVv.XR.PanelDistance";
         public const string KeyWorldScale = "KazistovVv.XR.WorldScale";
@@ -53,12 +57,20 @@ namespace KazistovVvXr
 
         // ------------------------------------------------------------------ значения по умолчанию
 
-        /// <summary>[D2] по умолчанию — телепорт.</summary>
-        public const int DefaultMoveMode = (int)KvXrMoveMode.Teleport;
+        /// <summary>ВЛАДЕЛЕЦ 05.11.2026: по умолчанию — ПЛАВНЫЙ ХОД («как во всех играх»), телепорт остаётся переключателем.</summary>
+        public const int DefaultMoveMode = (int)KvXrMoveMode.Smooth;
         /// <summary>Скорость плавного хода, м/с. Ограничена: быстрее — укачивает.</summary>
-        public const float DefaultSmoothSpeed = 1.4f;
+        public const float DefaultSmoothSpeed = 1.8f;
         /// <summary>Дальность телепорта, метры.</summary>
         public const float DefaultTeleportDistance = 6f;
+        /// <summary>РАЗГОН хода, м/с²: без него старт/стоп «дёргает» — второй источник дискомфорта.</summary>
+        public const float DefaultMoveAcceleration = 3.0f;
+        /// <summary>Мёртвая зона стика ХОДА (у поворота своя — 0,15 в компоненте).</summary>
+        public const float DefaultWalkDeadzone = 0.15f;
+        /// <summary>Виньетка комфорта включена: затемняет края при плавном ходе (против укачивания).</summary>
+        public const int DefaultVignette = 1;
+        /// <summary>Сила виньетки 0…0,8 (доля затемнения краёв).</summary>
+        public const float DefaultVignetteStrength = 0.35f;
         /// <summary>Расстояние плоской панели от глаз, метры.</summary>
         public const float DefaultPanelDistance = KvXrUiPanel.DefaultDistanceMeters;
         /// <summary>Масштаб мира: 1 — как в сцене.</summary>
@@ -94,6 +106,12 @@ namespace KazistovVvXr
 
         public const float MinSmoothSpeed = 0.5f;
         public const float MaxSmoothSpeed = 3f;
+        public const float MinMoveAcceleration = 1f;
+        public const float MaxMoveAcceleration = 10f;
+        public const float MinWalkDeadzone = 0.05f;
+        public const float MaxWalkDeadzone = 0.40f;
+        public const float MinVignetteStrength = 0f;
+        public const float MaxVignetteStrength = 0.80f;
         public const float MinTeleportDistance = 1f;
         public const float MaxTeleportDistance = 20f;
         public const float MinPanelDistance = 0.4f;
@@ -336,6 +354,67 @@ namespace KazistovVvXr
         public static void SetSmoothSpeed(float metersPerSecond)
         {
             PlayerPrefs.SetFloat(KeySmoothSpeed, Mathf.Clamp(metersPerSecond, MinSmoothSpeed, MaxSmoothSpeed));
+        }
+
+        /// <summary>РАЗГОН/ТОРМОЖЕНИЕ плавного хода, м/с² (1…10).</summary>
+        public static float GetMoveAcceleration()
+        {
+            return Mathf.Clamp(PlayerPrefs.GetFloat(KeyMoveAcceleration, DefaultMoveAcceleration),
+                MinMoveAcceleration, MaxMoveAcceleration);
+        }
+
+        public static void SetMoveAcceleration(float metersPerSecondSquared)
+        {
+            PlayerPrefs.SetFloat(KeyMoveAcceleration,
+                Mathf.Clamp(metersPerSecondSquared, MinMoveAcceleration, MaxMoveAcceleration));
+        }
+
+        /// <summary>Мёртвая зона стика хода, доля отклонения (0,05…0,4).</summary>
+        public static float GetWalkDeadzone()
+        {
+            return Mathf.Clamp(PlayerPrefs.GetFloat(KeyWalkDeadzone, DefaultWalkDeadzone),
+                MinWalkDeadzone, MaxWalkDeadzone);
+        }
+
+        public static void SetWalkDeadzone(float fraction)
+        {
+            PlayerPrefs.SetFloat(KeyWalkDeadzone, Mathf.Clamp(fraction, MinWalkDeadzone, MaxWalkDeadzone));
+        }
+
+        /// <summary>Виньетка комфорта включена (по умолчанию да).</summary>
+        public static bool GetVignetteEnabled()
+        {
+            return PlayerPrefs.GetInt(KeyVignette, DefaultVignette) != 0;
+        }
+
+        public static void SetVignetteEnabled(bool enabled)
+        {
+            PlayerPrefs.SetInt(KeyVignette, enabled ? 1 : 0);
+        }
+
+        /// <summary>Сила виньетки 0…0,8 (доля затемнения краёв экрана).</summary>
+        public static float GetVignetteStrength()
+        {
+            return Mathf.Clamp(PlayerPrefs.GetFloat(KeyVignetteStrength, DefaultVignetteStrength),
+                MinVignetteStrength, MaxVignetteStrength);
+        }
+
+        public static void SetVignetteStrength(float strength)
+        {
+            PlayerPrefs.SetFloat(KeyVignetteStrength,
+                Mathf.Clamp(strength, MinVignetteStrength, MaxVignetteStrength));
+        }
+
+        /// <summary>
+        /// ПЕРЕКЛЮЧИТЬ СПОСОБ ПЕРЕМЕЩЕНИЯ (двойное нажатие X в шлеме). Возвращает новый способ —
+        /// вызывающий пишет его в журнал, чтобы переключение было видно, а не «что-то щёлкнуло».
+        /// </summary>
+        public static KvXrMoveMode ToggleMoveMode()
+        {
+            KvXrMoveMode next = GetMoveMode() == KvXrMoveMode.Smooth ? KvXrMoveMode.Teleport : KvXrMoveMode.Smooth;
+            SetMoveMode(next);
+            PlayerPrefs.Save();
+            return next;
         }
 
         /// <summary>Дальность телепорта, метры (1…20).</summary>

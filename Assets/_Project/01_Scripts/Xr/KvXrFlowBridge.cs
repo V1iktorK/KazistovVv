@@ -67,6 +67,7 @@ namespace KazistovVvXr
         private bool leftTriggerWasDown;
         /// <summary>Клик правого стика в прошлом кадре — для фронта входа в режим точки (п.9).</summary>
         private bool stickClickWasDown;
+        private bool gripDragLogged;
         private bool rightTriggerWasDown;
         private bool bindLogged;
         private float nextZoneLog;
@@ -375,6 +376,20 @@ namespace KazistovVvXr
 
                 // Мёртвая зона: дребезг стика не должен «шевелить» точку на доли миллиметра.
                 if (moveAxis.magnitude < 0.15f) moveAxis = Vector3.zero;
+
+                // ПЕРЕТАЩИТЬ ТОЧКУ ГРИПОМ (шаг 4): грип в режиме точки ведёт маркер по поверхности.
+                // Приоритет у грипа: если он зажат, стик точку не двигает — иначе два источника
+                // движения «спорили» бы за одно и то же место.
+                bool gripDrag = KvXrInputSource.RayGrip >= 0.7f;
+                if (gripDrag && aimHit && !overInterface && flow.DragPointTo(aimPoint))
+                {
+                    moveAxis = Vector3.zero;
+                    if (!gripDragLogged)
+                    {
+                        gripDragLogged = true;
+                        Debug.Log("[KvXr] ТОЧКА: тащим грипом — маркер идёт за лучом");
+                    }
+                }
             }
 
             flow.UpdateAim(aimPoint, aimHit && !overInterface, confirm, false,

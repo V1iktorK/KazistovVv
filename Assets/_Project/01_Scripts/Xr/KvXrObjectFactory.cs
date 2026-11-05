@@ -150,6 +150,14 @@ namespace KazistovVvXr
         /// <summary>AR: поправка позиции создаваемого робота. null — без поправки.</summary>
         public static System.Func<Vector3, Vector3> RobotPositionFixup;
 
+        /// <summary>
+        /// AR: МИРОВЫЕ ВЫСОТЫ — АБСОЛЮТНЫЕ. На планшете «пол» — найденная плоскость на реальной
+        /// высоте, а не мировой y=0: меню не должно переписывать высоту стола/робота как  ,98,
+        /// иначе робот оказывается на 0,98 м выше стола (двойная высота, аудит 05.11.2026).
+        /// В VR/ПК флаг выключен — поведение прежнее.
+        /// </summary>
+        public static bool AbsoluteWorldHeights;
+
         /// <summary>ТОЧКА ПЕРЕД ОПЕРАТОРОМ на полу (для создаваемого стола).</summary>
         public static Vector3 SpotInFrontOf(Camera camera, float distanceMeters)
         {

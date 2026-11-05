@@ -176,6 +176,25 @@ namespace KazistovVvAr
             for (int i = 0; i < pointers.Length; i++)
                 if (pointers[i] != null) pointers[i].headCamera = head;
 
+            // 5) ПАНЕЛЬ 110 КОМАНД В AR (руки нет, XRHMD нет): разрешаем показ без шлема,
+            // отцепляем от руки и управляем позицией сами. Без этого веер команд закрыт
+            // гейтом `HeadsetPresent` и на планшете недостижим (аудит 05.11.2026).
+            KvXrGroupPanel hand = KvXrPanels.HandPanel;
+            if (hand != null)
+            {
+                hand.allowWithoutHeadset = true;
+                hand.arDetached = true;
+                hand.SetArVisible(false);           // сначала скрыта; открывается кнопкой «Команды»
+                Debug.Log("[KvAr] ИНТЕРФЕЙС AR: панель команд доступна без шлема (кнопка «Команды»)");
+            }
+
+            // 6) СТАРТОВОЕ МЕНЮ В AR: на планшете «голова» может быть ниже 0,5 м (устройство
+            // держат у стола) — разрешаем низкую позу и поднимаем меню до читаемой высоты.
+            if (KvXrStartMenu.Active != null)
+            {
+                KvXrStartMenu.Active.allowLowEyeHeight = true;
+            }
+
             Debug.Log("[KvAr] ИНТЕРФЕЙС AR: меню, окна и поток подняты без VR-рига " +
                       "(руки/жесты/облёт камеры не работают)");
         }
@@ -289,8 +308,12 @@ namespace KazistovVvAr
         public void InstallObjectFactoryHooks()
         {
             KvXrObjectFactory.SpotOverride = ArSpawnSpot;
+            // ВЫСОТЫ АБСОЛЮТНЫЕ (AR): пол — найденная плоскость, поэтому фабрика НЕ должна
+            // прибавлять высоту якоря к позиции робота. Раньше это давало двойную высоту
+            // (робот на 0,98 м выше стола); найдено аудитом 05.11.2026.
+            KvXrObjectFactory.AbsoluteWorldHeights = true;
+            KvXrObjectFactory.RobotPositionFixup = null;
             KvXrObjectFactory.TableFloorFixup = ArTableFloor;
-            KvXrObjectFactory.RobotPositionFixup = ArRobotPosition;
             Debug.Log("[KvAr] ФАБРИКА ОБЪЕКТОВ: меню ставит столы и роботов на найденную плоскость " +
                       "(хуки включены)");
         }
@@ -301,6 +324,7 @@ namespace KazistovVvAr
             KvXrObjectFactory.SpotOverride = null;
             KvXrObjectFactory.TableFloorFixup = null;
             KvXrObjectFactory.RobotPositionFixup = null;
+            KvXrObjectFactory.AbsoluteWorldHeights = false;
         }
 
         private static Vector3? ArSpawnSpot(Camera camera, float distanceMeters)
@@ -362,6 +386,33 @@ namespace KazistovVvAr
             {
                 if (touch != null) touch.ResetView();
             });
+            ui.AddButton("Команды", delegate
+            {
+                KvXrGroupPanel hand = KvXrPanels.HandPanel;
+                if (hand == null)
+                {
+                    Debug.LogWarning("[KvAr] КНОПКА: панели команд нет — проверить состав ArMain");
+                    return;
+                }
+                bool show = !hand.IsCanvasVisible;
+                // Стартовое меню гасит объект панели целиком — возвращаем его в игру.
+                if (hand.gameObject.activeSelf != show) hand.gameObject.SetActive(show);
+                if (show && KvXrStartMenu.Active != null && KvXrStartMenu.Active.Visible)
+                {
+                    // Два слоя поверх друг друга не читаются: меню убираем, команды показываем.
+                    KvXrStartMenu.Active.Hide();
+                }
+                hand.SetArVisible(show);
+                if (show)
+                {
+                    Camera place = logicalHead != null ? logicalHead : arCamera;
+                    // 0,5 м и масштаб 1,6: на планшете панель читаема и попадаема пальцем
+                    // (радиус 0,11 м на 0,9 м давал ~7° — палец в иконку не попадал).
+                    hand.PlaceInFrontOf(place, 0.5f, 0f, 1.6f);
+                }
+                Debug.Log("[KvAr] КНОПКА: панель 110 команд " + (show ? "показана" : "скрыта"));
+            });
+
             Debug.Log("[KvAr] ПУЛЬТ AR: кнопок " + ui.ButtonCount);
         }
 

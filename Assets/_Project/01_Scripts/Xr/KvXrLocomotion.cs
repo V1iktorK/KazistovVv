@@ -145,9 +145,29 @@ namespace KazistovVvXr
         /// <summary>Сколько секунд оператор двигался плавным ходом — метрика «укачивания».</summary>
         public float SmoothMovingSeconds { get; private set; }
 
+        /// <summary>ЖИВАЯ ЛОКОМОЦИЯ (для виньетки и подсказок): одна на сцену.</summary>
+        public static KvXrLocomotion Active { get; private set; }
+
+        /// <summary>ТЕКУЩАЯ скорость плавного хода, м/с — для виньетки комфорта (0 в покое).</summary>
+        public float SmoothSpeedMetersPerSecond { get { return smoothVelocity.magnitude; } }
+
+        /// <summary>0…1: доля скорости от максимума — виньетка нарастает пропорционально.</summary>
+        public float SmoothSpeedRatio
+        {
+            get
+            {
+                float max = Mathf.Max(0.01f, KvXrSettings.GetSmoothSpeed());
+                return Mathf.Clamp01(smoothVelocity.magnitude / max);
+            }
+        }
+
+        private Vector3 smoothVelocity;
+
         void Awake()
+
         {
             rigRoot = transform;
+            Active = this;
         }
 
         void OnEnable()
@@ -159,6 +179,11 @@ namespace KazistovVvXr
         {
             KvXrSettingsChanged.SettingsChanged -= OnSettingsChanged;
             if (teleportMarker != null) teleportMarker.SetActive(false);
+        }
+
+        void OnDestroy()
+        {
+            if (Active == this) Active = null;
         }
 
         private void OnSettingsChanged()
@@ -361,7 +386,7 @@ namespace KazistovVvXr
             }
 
             // РУКА ТЕЛЕПОРТА — ТА ЖЕ, ЧТО У ЛУЧА (§37).
-            bool haveAim = KvXrInputSource.TryRayPose(out Vector3 handPos, out Quaternion handRot);
+            bool haveAim = KvXrInputSource.TryRayAimPose(out Vector3 handPos, out Quaternion handRot);
             if (!haveAim)
             {
                 SetMarker(false, Vector3.zero, rigYaw);
@@ -474,6 +499,7 @@ namespace KazistovVvXr
             rigRoot.position = new Vector3(groundPoint.x - headOffset.x, rigRoot.position.y,
                 groundPoint.z - headOffset.z);
             TeleportCount++;
+            KvHapticsBridge.Pulse(KvXrQuickHand.Right, true);
         }
 
         // ------------------------------------------------------------------ плавный ход
@@ -482,17 +508,53 @@ namespace KazistovVvXr
         {
             // СТИК ХОДА — тот же, что и у телепорта (MoveStick): по умолчанию левый, как в играх.
             Vector2 stick = MoveStick;
-            Vector2 deadzoned = ApplyDeadzone(stick, 0.15f);
-            if (deadzoned.sqrMagnitude < 1e-4f) return;
+            float deadzone = KvXrSettings.GetWalkDeadzone();
+            Vector2 deadzoned = ApplyDeadzone(stick, deadzone);
 
-            // Направление — по взгляду оператора: «вперёд по стику» значит «вперёд по взгляду».
+            // ЦЕЛЕВАЯ СКОРОСТЬ: направление по взгляду оператора, величина — доля отклонения стика.
             Vector3 forward = rigYaw * Vector3.forward;
             Vector3 right = rigYaw * Vector3.right;
             Vector3 move = forward * deadzoned.y + right * deadzoned.x;
-
             float speed = KvXrSettings.GetSmoothSpeed();
-            rigRoot.position += move * speed * Time.deltaTime;
-            SmoothMovingSeconds += Time.deltaTime;
+            Vector3 targetVelocity = move.sqrMagnitude > 1e-6f
+                ? move.normalized * (speed * Mathf.Clamp01(deadzoned.magnitude))
+                : Vector3.zero;
+
+            // РАЗГОН/ТОРМОЖЕНИЕ (05.11.2026): мгновенная скорость — второй источник дискомфорта
+            // после поворота. `MoveTowards` даёт постоянное ускорение и мягкий останов.
+            float acceleration = KvXrSettings.GetMoveAcceleration();
+            smoothVelocity = Vector3.MoveTowards(smoothVelocity, targetVelocity,
+                acceleration * Mathf.Min(Time.deltaTime, MaxTurnFrameSeconds));
+            if (smoothVelocity.sqrMagnitude < 1e-6f) return;
+
+            Vector3 step = smoothVelocity * Mathf.Min(Time.deltaTime, MaxTurnFrameSeconds);
+
+            // ГРАНИЦЫ И СТОЛКНОВЕНИЯ — только в VR (в MR зал скрыт, комната 1:1 — ходьба свободная).
+            Vector3 current = rigRoot.position;
+            Vector3 desired = current + step;
+            if (KvXrWalkRules.EnabledInCurrentMode)
+            {
+                desired = KvXrWalkRules.ClampToHangar(desired);
+                desired = KvXrWalkRules.ResolveObstacles(current, desired, 0.30f, 1.70f);
+            }
+
+            rigRoot.position = desired;
+            SmoothMovingSeconds += Mathf.Min(Time.deltaTime, MaxTurnFrameSeconds);
+        }
+
+        private static bool IsSmoothMode()
+        {
+            return KvXrSettings.GetMoveMode() == KvXrMoveMode.Smooth;
+        }
+
+        /// <summary>
+        /// ВЕРНУТЬСЯ НА РАБОЧУЮ ПОЗИЦИЮ (удержание левого стика): аварийный выход из «ушёл и
+        /// потерялся». Ставит риг в начало отсчёта — там стоят стенды (см. `KvXrSceneContent`).
+        /// </summary>
+        public void ReturnToStart()
+        {
+            TeleportTo(Vector3.zero);
+            Debug.Log("[KvXr] ХОД: возврат на рабочую позицию (центр ангара)");
         }
 
         /// <summary>Мёртвая зона стика: у шлемовых стиков заметный дребезг в нуле.</summary>

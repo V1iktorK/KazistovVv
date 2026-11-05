@@ -443,5 +443,84 @@ namespace KazistovVvTests
             Assert.AreEqual("XrMain", KvArMode.VrSceneName);
             Assert.AreEqual("ArMain", KvArMode.ArSceneName);
         }
+        /// <summary>
+        /// AR: ПАНЕЛЬ 110 КОМАНД ДОСТУПНА БЕЗ ШЛЕМА. На ARCore нет XRHMD, поэтому обычный гейт
+        /// `HeadsetPresent` скрывал панель и все команды были недостижимы (аудит 05.11.2026).
+        /// Тест держит контракт: флаг показа без шлема, отцепление от руки, постановка перед
+        /// камерой, кнопка «Команды», фильтр невидимых панелей при касании.
+        /// </summary>
+        [Test]
+        public void ArCommandPanel_IsReachableWithoutHeadset()
+        {
+            string panel = File.ReadAllText(Path.Combine(ProjectRoot, "Assets", "_Project", "01_Scripts", "Xr", "KvXrGroupPanel.cs"));
+            StringAssert.Contains("allowWithoutHeadset", panel,
+                "в KvXrGroupPanel нет флага показа без шлема — 110 команд в AR снова будут скрыты");
+            StringAssert.Contains("KvXrInputSource.HeadsetPresent || allowWithoutHeadset", panel,
+                "гейт панели не учитывает AR-флаг — панель останется невидимой на планшете");
+            StringAssert.Contains("IsCanvasVisible", panel, "нет проверки видимости канваса для касаний");
+            StringAssert.Contains("PlaceInFrontOf", panel, "нет постановки панели перед камерой в AR");
+
+            string runtime = ReadScript("KvArRuntime.cs");
+            StringAssert.Contains("hand.allowWithoutHeadset = true", runtime,
+                "AR-слой не разрешает панель без шлема");
+            StringAssert.Contains("hand.arDetached = true", runtime,
+                "AR-слой не отцепляет панель от руки (она не переставится без позы кисти)");
+            StringAssert.Contains("ui.AddButton(\"Команды\"", runtime,
+                "в AR нет кнопки «Команды» — веер 110 команд не открыть");
+
+            string touch = ReadScript("KvArTouchInput.cs");
+            StringAssert.Contains("candidate.IsCanvasVisible", touch,
+                "касание бьёт по невидимой панели — на планшете это «коснулись плиты меню» без действия");
+        }
+
+        /// <summary>
+        /// AR: СТАРТОВОЕ МЕНЮ СТАВИТСЯ И ПРИ НИЗКОЙ «ГОЛОВЕ». На планшете устройство держат у стола,
+        /// «высота глаз» может быть ниже 0,5 м — прежний гейт не давал меню вообще появиться.
+        /// </summary>
+        [Test]
+        public void ArStartMenu_AllowsLowEyeHeight()
+        {
+            string menu = File.ReadAllText(Path.Combine(ProjectRoot, "Assets", "_Project", "01_Scripts", "Xr", "KvXrStartMenu.cs"));
+            StringAssert.Contains("allowLowEyeHeight", menu, "в стартовом меню нет режима низкой головы для AR");
+            StringAssert.Contains("|| allowLowEyeHeight", menu, "гейт высоты глаз не учитывает AR-режим");
+            StringAssert.Contains("lowEyeHeightFloorMeters", menu, "меню не поднимается до читаемой высоты в AR");
+
+            string runtime = ReadScript("KvArRuntime.cs");
+            StringAssert.Contains(".allowLowEyeHeight = true", runtime,
+                "AR-слой не включает режим низкой головы — меню не появится на планшете");
+        }
+
+        /// <summary>
+        /// AR: ДВОЙНАЯ ВЫСОТА РОБОТА НЕ ВОЗВРАЩАЕТСЯ. В AR пол — найденная плоскость на реальной
+        /// высоте, а не мировой y=0; фабрика не должна прибавлять высоту якоря к уже абсолютной
+        /// позиции (иначе робот висит на 0,98 м выше стола).
+        /// </summary>
+        [Test]
+        public void ArRobotHeight_IsAbsoluteNotDoubled()
+        {
+            string factory = File.ReadAllText(Path.Combine(ProjectRoot, "Assets", "_Project", "01_Scripts", "Xr", "KvXrObjectFactory.cs"));
+            StringAssert.Contains("AbsoluteWorldHeights", factory,
+                "у фабрики нет флага абсолютных высот AR — двойная высота робота вернётся");
+
+            string runtime = ReadScript("KvArRuntime.cs");
+            StringAssert.Contains("AbsoluteWorldHeights = true", runtime,
+                "AR-слой не включает абсолютные высоты");
+            StringAssert.Contains("AbsoluteWorldHeights = false", runtime,
+                "снятие хуков не выключает абсолютные высоты — VR/ПК получат чужие правила");
+            StringAssert.DoesNotContain("RobotPositionFixup = ArRobotPosition", runtime,
+                "хук высоты робота снова включён — робот на столе получит двойную высоту");
+
+            string panel = File.ReadAllText(Path.Combine(ProjectRoot, "Assets", "_Project", "01_Scripts", "Xr", "KvXrGroupPanel.cs"));
+            StringAssert.Contains("if (!KvXrObjectFactory.AbsoluteWorldHeights) spot.y = KvXrTableKinds.TopHeight;", panel,
+                "меню снова переписывает высоту стола на 0,98 м в AR — робот окажется выше стола");
+        }
+
+        /// <summary>AR: фабрика по умолчанию работает в прежних (виртуальных) высотах.</summary>
+        [Test]
+        public void ArFactory_DefaultHeightsUnchanged()
+        {
+            Assert.IsFalse(KvXrObjectFactory.AbsoluteWorldHeights,
+                "флаг абсолютных высот по умолчанию включён — VR/ПК поменяют раскладку");
+        }
     }
 }

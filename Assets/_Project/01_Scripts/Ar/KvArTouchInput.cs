@@ -422,6 +422,7 @@ namespace KazistovVvAr
             {
                 KvXrGroupPanel candidate = KvXrPanels.At(i);
                 if (candidate == null || !candidate.isActiveAndEnabled) continue;
+                if (!candidate.IsCanvasVisible) continue; // невидимая панель — не цель касания
 
                 int candidateIndex;
                 float candidateFromCenter;
@@ -448,6 +449,7 @@ namespace KazistovVvAr
             {
                 KvXrGroupPanel candidate = KvXrPanels.At(i);
                 if (candidate == null || !candidate.isActiveAndEnabled) continue;
+                if (!candidate.IsCanvasVisible) continue; // невидимая панель — не цель касания
                 float candidateAlong;
                 if (!candidate.TryHitPanelSurface(ray.origin, ray.direction, out candidateAlong)) continue;
                 if (candidateAlong <= 0f || candidateAlong > aimMaxDistanceMeters) continue;

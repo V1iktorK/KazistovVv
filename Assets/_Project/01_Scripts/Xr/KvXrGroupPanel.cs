@@ -135,6 +135,60 @@ public bool logOnBuild = true;
 /// иначе это снова «панель», а не меню.
 /// </summary>
 public bool followHand = true;
+    /// <summary>
+    /// AR: ПАНЕЛЬ ЖИВЁТ БЕЗ ШЛЕМА. На ARCore нет XRHMD, поэтому `HeadsetPresent` = false, и
+    /// обычная панель у руки невидима. В AR флаг разрешает показ без XRHMD, иначе 110 команд
+    /// недостижимы на планшете (найдено аудитом 05.11.2026). В VR флаг выключен.
+    /// </summary>
+    public bool allowWithoutHeadset;
+
+    /// <summary>AR: ПАНЕЛЬ НЕ СЛЕДУЕТ ЗА РУКОЙ — позицией управляет AR-слой (`PlaceInFrontOf`).</summary>
+    public bool arDetached;
+
+    /// <summary>AR: панель скрыта пользователем кнопкой «Команды» (переключатель).</summary>
+    public bool arHidden;
+
+    /// <summary>Реально ли панель на экране: касание видит её, только если да.</summary>
+    public bool IsCanvasVisible
+    {
+        get { return canvas != null && canvas.gameObject.activeInHierarchy; }
+    }
+
+    /// <summary>AR-слой: показать/скрыть панель касаниями (канвас, не компонент).</summary>
+    public void SetArVisible(bool visible)
+    {
+        arHidden = !visible;
+        if (canvas != null) canvas.gameObject.SetActive(visible);
+    }
+
+    /// <summary>
+    /// ПОСТАВИТЬ ПАНЕЛЬ ПЕРЕД КАМЕРОЙ (AR: руки нет). Наклон взгляда погашен, панель на уровне
+    /// глаз: на планшете устройство держат перед собой, поэтому «у глаз» — читаемо.
+    /// </summary>
+    public void PlaceInFrontOf(Camera camera, float distanceMeters = 0.9f, float heightMeters = 1.05f,
+                                float scale = 1f)
+    {
+        if (camera == null) camera = headCamera;
+        if (camera == null) camera = Camera.main;
+        if (camera == null) return;
+
+        Vector3 forward = Vector3.ProjectOnPlane(camera.transform.forward, Vector3.up);
+        if (forward.sqrMagnitude < 0.0001f) forward = Vector3.forward;
+        forward.Normalize();
+
+        Vector3 position = camera.transform.position + forward * Mathf.Max(0.3f, distanceMeters);
+        // НА ПЛАНШЕТЕ «ВЫСОТА» НЕ 1,05 м: начало отсчёта AR — поза устройства при запуске,
+        // поэтому camera.y ≈ 0. Подъём на 1,05 м уводил панель вверх за экран (проверено на
+        // планшете 05.11.2026 — виден только верх дуги). Ставим панель НА УРОВЕНЬ ГЛАЗ.
+        position.y = camera.transform.position.y + 0.02f;
+        transform.position = position;
+        transform.rotation = Quaternion.LookRotation(forward, Vector3.up);
+            // НА ПЛАНШЕТЕ ПАНЕЛЬ УВЕЛИЧИВАЕТСЯ: радиус 0,11 м на 0,9 м — это ~7° поля
+            // зрения, пальцем не попасть. Масштаб — только для AR (в VR панель 1:1 у руки).
+            transform.localScale = Vector3.one * Mathf.Max(0.1f, scale);
+        placed = true;
+        PlacedAtHand = false;
+    }
 
 /// <summary>
 /// СКОЛЬКО СЕКУНД ПАНЕЛЬ СТОИТ ПОСЛЕ УХОДА ЛУЧА, не переставляясь. Даёт закончить
@@ -294,7 +348,8 @@ placed = false;
 // панель встанет заново уже с новым радиусом
 Debug.Log("[KvXr] панель групп: радиус изменён на " +                          radius.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture) +                          " м — панель перестроена · " +                          KvXrGroupPanelLayout.DescribeSizes(icons.Count,                              level == KvXrPanelLevel.Groups                                  ? KvXrGroupPanelLayout.GroupSpanDegrees                                  : KvXrGroupPanelLayout.FanSpanDegrees, radius));
 }
-bool visible = KvXrSettings.GetQuickPanelVisible() && KvXrInputSource.HeadsetPresent;
+            bool visible = KvXrSettings.GetQuickPanelVisible() && !arHidden &&
+                           (KvXrInputSource.HeadsetPresent || allowWithoutHeadset);
 if (followHand)
 {
                 if (canvas.gameObject.activeSelf != visible) canvas.gameObject.SetActive(visible);
@@ -312,7 +367,7 @@ UpdateLabelDwell();
 // оставалась у пояса НАВСЕГДА. Теперь правило простое: есть поза руки — панель идёт к руке,
 // независимо от того, что было раньше.
 bool handPoseAvailable = KvXrSettings.GetQuickPanelHand() == KvXrQuickHand.Right                ? KvXrInputSource.TryRightAimPose(out _, out _)                : KvXrInputSource.TryLeftAimPose(out _, out _);
-if (followHand && (PlacedAtHand || handPoseAvailable || !ShouldHoldStill())) PlacePanel();
+if (followHand && !arDetached && (PlacedAtHand || handPoseAvailable || !ShouldHoldStill())) PlacePanel();
             LogOrientationProbe();
 }
 
@@ -2032,7 +2087,7 @@ Debug.Log("[KvXr] МЕНЮ: создан стол «" + table.name + "» · ст
             if (existing != null)
             {
                 spot = existing.transform.position;
-                spot.y = KvXrTableKinds.TopHeight;
+                if (!KvXrObjectFactory.AbsoluteWorldHeights) spot.y = KvXrTableKinds.TopHeight;
                 Debug.Log("[KvXr] МЕНЮ: замена робота «" + existing.robotName + "» на " +
                           (scara ? "SCARA" : "6-осевого") + " (второй робот не добавляется)");
                 UnityEngine.Object.Destroy(existing.gameObject);
@@ -2040,7 +2095,7 @@ Debug.Log("[KvXr] МЕНЮ: создан стол «" + table.name + "» · ст
             else
             {
                 spot = KvXrObjectFactory.SpotInFrontOf(headCamera, KvXrObjectFactory.SpawnDistanceMeters);
-                spot.y = KvXrTableKinds.TopHeight;
+                if (!KvXrObjectFactory.AbsoluteWorldHeights) spot.y = KvXrTableKinds.TopHeight;
             }
 
             RobotController robot = KvXrObjectFactory.CreateRobot(scara, spot, 0f);
@@ -2590,6 +2645,7 @@ return canvasRect.position + canvasRect.right * offset.x + canvasRect.up * offse
 /// </summary>
 public void PressIndex(int index)
 {
+            KvHapticsBridge.Pulse(KvXrSettings.GetQuickPanelHand(), false); // тактильный отклик нажатия
             if (index < 0 || index >= iconActions.Count)
 {
 Debug.LogWarning("[KvXr] ПАНЕЛЬ: нажатие мимо иконки проигнорировано (номер " + index + ")");
