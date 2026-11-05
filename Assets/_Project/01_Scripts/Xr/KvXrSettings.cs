@@ -103,6 +103,48 @@ namespace KazistovVvXr
         public const float MinOperatorHeight = 1.33f;
         public const float MaxOperatorHeight = 2.13f;
 
+        // ------------------------------------ ВИЗУАЛИЗАЦИИ VR ПО УМОЛЧАНИЮ (05.11.2026)
+
+        /// <summary>Ключ «зона достижимости включена владельцем».</summary>
+        public const string KeyWorkspaceVisible = "KazistovVv.XR.Workspace";
+
+        /// <summary>Ключ «лимиты суставов включены владельцем».</summary>
+        public const string KeyJointLimitsVisible = "KazistovVv.XR.JointLimits";
+
+        /// <summary>
+        /// ЗОНА ДОСТИЖИМОСТИ ПО УМОЛЧАНИЮ ВЫКЛЮЧЕНА (жалоба владельца 05.11.2026: «появились зоны
+        /// достижимости сами по себе»). Флаг хранится в PlayerPrefs: включение из настроек шлема
+        /// переживает перезапуск, а `KvXrFlowBridge` следит, чтобы визуализация не включилась сама.
+        /// </summary>
+        public const int DefaultWorkspaceVisible = 0;
+
+        /// <summary>ЛИМИТЫ СУСТАВОВ ПО УМОЛЧАНИЮ ВЫКЛЮЧЕНЫ — по той же причине.</summary>
+        public const int DefaultJointLimitsVisible = 0;
+
+        /// <summary>Зона достижимости включена владельцем?</summary>
+        public static bool GetWorkspaceVisible()
+        {
+            return PlayerPrefs.GetInt(KeyWorkspaceVisible, DefaultWorkspaceVisible) != 0;
+        }
+
+        /// <summary>Включить/выключить зону достижимости (запомнить).</summary>
+        public static void SetWorkspaceVisible(bool visible)
+        {
+            PlayerPrefs.SetInt(KeyWorkspaceVisible, visible ? 1 : 0);
+        }
+
+        /// <summary>Лимиты суставов включены владельцем?</summary>
+        public static bool GetJointLimitsVisible()
+        {
+            return PlayerPrefs.GetInt(KeyJointLimitsVisible, DefaultJointLimitsVisible) != 0;
+        }
+
+        /// <summary>Включить/выключить лимиты суставов (запомнить).</summary>
+        public static void SetJointLimitsVisible(bool visible)
+        {
+            PlayerPrefs.SetInt(KeyJointLimitsVisible, visible ? 1 : 0);
+        }
+
         // ---------------------------------------------------- панель у руки ([D20], сессия §32)
 
         /// <summary>[D20] панель быстрого выбора у руки по умолчанию ПОКАЗАНА: это основной способ

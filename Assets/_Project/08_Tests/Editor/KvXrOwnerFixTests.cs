@@ -131,6 +131,33 @@ namespace KazistovVvTests
         }
 
         /// <summary>
+        /// ЗОНЫ ДОСТИЖИМОСТИ НЕ ВКЛЮЧАЮТСЯ САМИ (жалоба владельца 05.11.2026). Дефект: через
+        /// сценарии/команды визуализация поднималась снова после чистого вида. Теперь есть сторож
+        /// `GuardVisuals`, настройка по умолчанию ВЫКЛ, и явные переключатели в настройках шлема.
+        /// </summary>
+        [Test]
+        public void WorkspaceVisuals_OffByDefault_Guarded_AndSwitchableInSettings()
+        {
+            string settings = ReadScript("KvXrSettings.cs");
+            StringAssert.Contains("DefaultWorkspaceVisible = 0", settings,
+                "зона достижимости снова включена по умолчанию — владелец увидит её сам по себе");
+            StringAssert.Contains("DefaultJointLimitsVisible = 0", settings,
+                "лимиты суставов снова включены по умолчанию");
+
+            string bridge = ReadScript("KvXrFlowBridge.cs");
+            StringAssert.Contains("GuardVisuals", bridge,
+                "нет сторожа визуализаций: зона достижимости снова сможет включиться сама");
+            StringAssert.Contains("ЗОНА ДОСТИЖИМОСТИ: включилась сама", bridge,
+                "нет честной строки журнала о самовольном включении");
+
+            string panel = ReadScript("KvXrGroupPanel.cs");
+            StringAssert.Contains("Зона достижимости: ", panel,
+                "в настройках шлема нет переключателя зоны достижимости — владелец его не нашёл");
+            StringAssert.Contains("Лимиты суставов: ", panel,
+                "в настройках шлема нет переключателя лимитов суставов");
+        }
+
+        /// <summary>
         /// ЗАЛ НЕ ДВИГАЕТСЯ БЕЗ ДОСТОВЕРНОЙ ПОЗЫ ШЛЕМА. Дефект: при неготовом трекинге точка
         /// оператора бралась с объекта-камеры, и `Place()` метал зал каждый кадр — «камера летает».
         /// Проверяется ПОРЯДОК: проверка `fromHmd` обязана стоять ДО `SetPositionAndRotation`.

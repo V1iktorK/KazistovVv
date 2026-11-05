@@ -1018,6 +1018,47 @@ CreateIcon("Set_Mode", "settings",
     new Vector2(-0.18f, -0.09f),
     delegate { ToggleMixedReality(); }, false,
     KvXrSettings.GetPassthrough() ? "MR ВКЛ" : "MR выкл", 0.12f, 0.05f);
+
+// ВИЗУАЛИЗАЦИИ VR — ЯВНЫЕ ПЕРЕКЛЮЧАТЕЛИ (жалоба владельца 05.11.2026: «появились зоны
+// достижимости сами по себе, в меню не нашёл настройку»). Теперь настройка есть здесь, в
+// настройках шлема, и выбор запоминается: по умолчанию обе выключены, сторож
+// (`KvXrFlowBridge.GuardVisuals`) не даёт им включиться самим.
+CreateIcon("Set_Workspace", "check",
+    "Зона достижимости: " + (KvXrSettings.GetWorkspaceVisible() ? "ВКЛ" : "выкл"),
+    new Vector2(-0.18f, -0.23f), delegate { ToggleWorkspaceFromSettings(); }, false,
+    KvXrSettings.GetWorkspaceVisible() ? "зона ВКЛ" : "зона выкл", 0.12f, 0.05f);
+
+CreateIcon("Set_JointLimits", "check",
+    "Лимиты суставов: " + (KvXrSettings.GetJointLimitsVisible() ? "ВКЛ" : "выкл"),
+    new Vector2(0.18f, -0.23f), delegate { ToggleJointLimitsFromSettings(); }, false,
+    KvXrSettings.GetJointLimitsVisible() ? "лимиты ВКЛ" : "лимиты выкл", 0.12f, 0.05f);
+}
+
+/// <summary>
+/// ВКЛЮЧИТЬ/ВЫКЛЮЧИТЬ ЗОНУ ДОСТИЖИМОСТИ ИЗ НАСТРОЕК ШЛЕМА. Настройка запоминается (PlayerPrefs),
+/// поэтому сторож визуализаций её не отменяет и после перезапуска состояние сохраняется.
+/// </summary>
+private void ToggleWorkspaceFromSettings()
+{
+    bool on = !KvXrSettings.GetWorkspaceVisible();
+    KvXrSettings.SetWorkspaceVisible(on);
+    KvXrFlowBridge bridge = KvXrFlowBridge.Active;
+    if (bridge != null && bridge.Flow != null) bridge.Flow.SetWorkspaceVisible(on);
+    Debug.Log("[KvXr] ЗОНА ДОСТИЖИМОСТИ: " + (on ? "включена владельцем" : "выключена владельцем") +
+              " · настройка запомнена");
+    Rebuild();
+}
+
+/// <summary>ВКЛЮЧИТЬ/ВЫКЛЮЧИТЬ ЛИМИТЫ СУСТАВОВ ИЗ НАСТРОЕК ШЛЕМА (настройка запоминается).</summary>
+private void ToggleJointLimitsFromSettings()
+{
+    bool on = !KvXrSettings.GetJointLimitsVisible();
+    KvXrSettings.SetJointLimitsVisible(on);
+    KvXrFlowBridge bridge = KvXrFlowBridge.Active;
+    if (bridge != null && bridge.Flow != null) bridge.Flow.SetJointLimitsVisible(on);
+    Debug.Log("[KvXr] ЛИМИТЫ СУСТАВОВ: " + (on ? "включены владельцем" : "выключены владельцем") +
+              " · настройка запомнена");
+    Rebuild();
 }
 
 /// <summary>

@@ -81,6 +81,15 @@ namespace KazistovVvXr
         /// <summary>Попросить подтверждение (кнопка A / эквивалент курка).</summary>
         public static void RequestConfirm() { confirmRequested = true; }
 
+        /// <summary>Следующая проверка «визуализации не включились сами», секунды.</summary>
+        private float nextVisualGuard;
+
+        /// <summary>Строка «зона достижимости включилась сама — выключил» уже напечатана.</summary>
+        private bool guardWorkspaceLogged;
+
+        /// <summary>Строка «лимиты суставов включились сами — выключил» уже напечатана.</summary>
+        private bool guardLimitsLogged;
+
         /// <summary>Созданный поток (для проверок и журнала).</summary>
         public TrajectoryFlowController Flow { get { return flow; } }
 
@@ -190,8 +199,58 @@ namespace KazistovVvXr
             return flow != null;
         }
 
+        /// <summary>
+        /// СТОРОЖ ВИЗУАЛИЗАЦИЙ: ОНИ НЕ ДОЛЖНЫ ВКЛЮЧАТЬСЯ САМИ (жалоба владельца 05.11.2026:
+        /// «появились зоны достижимости сами по себе»).
+        ///
+        /// ПОЧЕМУ НУЖЕН ОТДЕЛЬНЫЙ СТОРОЖ. Зона достижимости и лимиты включаются не одним путём:
+        /// их включают сценарии (`FeatureHub.BuildScenarios` — сценарий «Показать workspace»),
+        /// команды `view.workspace`, отложенная привязка служб, восстановление флагов сессии.
+        /// Чистого вида на старте недостаточно: через минуту работы кто-то из них снова поднимает
+        /// визуализацию. Поэтому раз в секунду сверяем состояние с НАСТРОЙКОЙ владельца (PlayerPrefs,
+        /// по умолчанию ВЫКЛ) и гасим всё, что включилось не по его воле.
+        ///
+        /// ВЛАДЕЛЕЦ УПРАВЛЯЕТ ИЗ НАСТРОЕК ШЛЕМА: «Настройки → Зона достижимости: ВКЛ/выкл» и
+        /// «Лимиты суставов: ВКЛ/выкл» — они пишут ту же настройку, поэтому выбор переживает
+        /// перезапуск и сторож его не отменяет.
+        /// </summary>
+        private void GuardVisuals()
+        {
+            if (Time.unscaledTime < nextVisualGuard) return;
+            nextVisualGuard = Time.unscaledTime + 1f;
+            if (flow == null) return;
+
+            WorkspaceVisualizer viz = flow.Workspace;
+            if (viz == null) return;
+
+            bool wantWorkspace = KvXrSettings.GetWorkspaceVisible();
+            if (viz.WorkspaceVisible != wantWorkspace)
+            {
+                flow.SetWorkspaceVisible(wantWorkspace);
+                if (!wantWorkspace && !guardWorkspaceLogged)
+                {
+                    guardWorkspaceLogged = true;
+                    Debug.Log("[KvXr] ЗОНА ДОСТИЖИМОСТИ: включилась сама — выключил (по умолчанию выключено; " +
+                              "включить: Настройки → Зона достижимости)");
+                }
+            }
+
+            bool wantLimits = KvXrSettings.GetJointLimitsVisible();
+            if (viz.JointLimitsVisible != wantLimits)
+            {
+                flow.SetJointLimitsVisible(wantLimits);
+                if (!wantLimits && !guardLimitsLogged)
+                {
+                    guardLimitsLogged = true;
+                    Debug.Log("[KvXr] ЛИМИТЫ СУСТАВОВ: включились сами — выключил (по умолчанию выключено; " +
+                              "включить: Настройки → Лимиты суставов)");
+                }
+            }
+        }
+
         void Update()
         {
+            GuardVisuals();
             if (!feedAim) return;
             if (flow == null && !EnsureFlow()) return;
 
