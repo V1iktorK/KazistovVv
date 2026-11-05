@@ -3,6 +3,9 @@ using System.Collections;
 using System.Text;
 using UnityEngine;
 using UnityEngine.XR.ARFoundation;
+using UnityEngine.XR.ARSubsystems;
+using UnityEngine.UI;
+using UnityEngine.Android;
 using KazistovVvXr;
 
 namespace KazistovVvAr
@@ -85,6 +88,7 @@ namespace KazistovVvAr
 
         private float nextStateLog;
         private int lastPlanes = -1;
+        private bool pcUiLogged;
         private bool lastPlaced;
         private float fpsSmoothed;
 
@@ -105,7 +109,45 @@ namespace KazistovVvAr
             Application.targetFrameRate = Mathf.Clamp(targetFrameRate, 20, 120);
             QualitySettings.vSyncCount = 0;
 
+            // ЭКРАН НЕ ДОЛЖЕН ГАСНУТЬ: у планшета сон экрана останавливает ARCore-трекинг,
+            // и владелец видел «не могу двигать экраном» — камера замирала вместе с экраном.
+            Screen.sleepTimeout = SleepTimeout.NeverSleep;
+
+            // ГИРОСКОП: Android не требует разрешения на датчики, но без явного включения
+            // `Input.gyro` не обновляется. AR-трекинг даёт позу устройства сам; гироскоп
+            // включаем как резерв и пишем факт в журнал.
+            Input.gyro.enabled = true;
+            Debug.Log("[KvAr] ДАТЧИКИ: гироскоп " + (Input.gyro.enabled ? "включён" : "НЕ включён") +
+                      " · экран не гаснет (SleepTimeout.NeverSleep)");
+
+            // МЕНЮ НЕ ДОЛЖНО ОТКРЫВАТЬСЯ САМО: в AR оно закрывало экран, и камера/обзор были
+            // недоступны. Открывается кнопкой «Меню».
+            KvXrStartMenu.SuppressAutoShow = true;
+
+            // ДЕСКТОПНЫЙ ОВЕРЛЕЙ ОСТАЁТСЯ ВЫКЛЮЧЕННЫМ (сторож работает): его окна рисовали
+            // жёлтую заливку поверх камеры. ПК-вид на планшете даёт СОБСТВЕННЫЙ слой `KvArUi`
+            // (меню сверху, дерево слева, статус внизу) — камера при этом видна.
+
+            EnsureCameraPermission();
+
             ResolveReferences();
+
+            // СТОРОЖ СЕССИИ: в сцене ArMain сохранены старые 8 с и 3 сброса (поле сериализовано).
+            // Ставим новые значения в рантайме: ARCore на однотонной поверхности инициализируется
+            // дольше 8 с, а частые Reset только мешают (проверено на планшете 05.11.2026).
+            if (sessionController != null)
+            {
+                sessionController.stuckResetSeconds = 20f;
+                sessionController.maxAutomaticResets = 1;
+            }
+
+            // КОМПАКТНЫЕ AR-КНОПКИ: в сцене ArMain сохранены старые 300×96 px (поле сериализовано),
+            // поэтому размеры задаём в рантайме — иначе «компактный ряд» снова занимает пол-экрана.
+            if (ui != null)
+            {
+                ui.buttonWidth = 240f;
+                ui.buttonHeight = 64f;
+            }
             if (disableVrOnlyComponents) DisableVrOnlyComponents();
             if (hideVirtualHangar) HideVirtualHangar();
             EnsureSingletonAudioListener();
@@ -130,6 +172,7 @@ namespace KazistovVvAr
             if (installObjectFactoryHooks) InstallObjectFactoryHooks();
             EnsureArUiSupport();
             if (ui != null) BuildScreenButtons();
+            EnsureGyroFallback();
             if (logOnStart) StartCoroutine(LogReadyWhenSessionStarts());
         }
 
@@ -207,6 +250,7 @@ namespace KazistovVvAr
         void Update()
         {
             if (!Ready) return;
+            DiagnoseYellowOnce();
             fpsSmoothed = Mathf.Lerp(fpsSmoothed <= 0f ? 1f / Mathf.Max(0.0001f, Time.unscaledDeltaTime) : fpsSmoothed,
                 1f / Mathf.Max(0.0001f, Time.unscaledDeltaTime), 0.1f);
 
@@ -351,6 +395,82 @@ namespace KazistovVvAr
         }
 
         /// <summary>СОЗДАТЬ КНОПКИ AR-ПУЛЬТА (крупные, под палец).</summary>
+        /// <summary>
+        /// КОМПАКТНЫЙ АР-ПУЛЬТ (ПК-ВИД): только те действия, которых нет в ПК-интерфейсе.
+        /// Всё остальное — тулбар/меню/окна проекта, поднятые как на компьютере.
+        /// </summary>
+        /// <summary>
+        /// ПК-ВИД ВКЛЮЧАЕМ ТОЛЬКО ПОСЛЕ ТРЕКИНГА (или через 8 с). Включение десктопных канвасов
+        /// до старта ARCore мешало инициализации (VIO «kNotTracking», сессия висела в
+        /// SessionInitializing — проверено на планшете 05.11.2026). Сначала камера/трекинг,
+        /// потом тяжёлый ПК-интерфейс.
+        /// </summary>
+        private System.Collections.IEnumerator EnablePcUiAfterTracking()
+        {
+            float deadline = Time.unscaledTime + 8f;
+            while (Time.unscaledTime < deadline)
+            {
+                if (sessionController != null && sessionController.State == ARSessionState.SessionTracking)
+                    break;
+                yield return null;
+            }
+            EnablePcUiForTablet();
+            if (sessionController == null || sessionController.State != ARSessionState.SessionTracking)
+                Debug.LogWarning("[KvAr] ИНТЕРФЕЙС: трекинг ещё не начался — ПК-вид включён без него");
+        }
+
+        /// <summary>ГИРО-ФОЛБЭК: пока ARCore не отслеживает, поворот устройства вращает мир.</summary>
+        private void EnsureGyroFallback()
+        {
+            if (GetComponent<KvArGyroFallback>() == null)
+                gameObject.AddComponent<KvArGyroFallback>();
+        }
+        private bool yellowDiagnosed;
+        private float yellowDiagAt;
+
+        /// <summary>
+        /// ДИАГНОСТИКА «ЖЁЛТОГО ЭКРАНА» (одна строка в журнал). Владелец видел жёлтую заливку
+        /// вместо камеры; сканирование канвасов её не нашло, значит источник — 3D-объект или окно,
+        /// созданное позже. Смотрим центральный луч и все видимые рендереры у камеры.
+        /// </summary>
+        private void DiagnoseYellowOnce()
+        {
+            if (yellowDiagnosed) return;
+            if (arCamera == null) return;
+            if (yellowDiagAt <= 0f) yellowDiagAt = Time.unscaledTime + 8f;
+            if (Time.unscaledTime < yellowDiagAt) return;
+            yellowDiagnosed = true;
+
+            Ray center = arCamera.ScreenPointToRay(new Vector3(Screen.width * 0.5f, Screen.height * 0.5f));
+            if (Physics.Raycast(center, out RaycastHit hit, 50f))
+                Debug.Log("[KvAr] ДИАГНОСТИКА ЭКРАНА: в центре 3D-объект «" + PathOf(hit.collider.transform) +
+                          "» материал «" + (hit.collider.sharedMaterial != null ? hit.collider.sharedMaterial.name : "нет") + "»");
+            else
+                Debug.Log("[KvAr] ДИАГНОСТИКА ЭКРАНА: в центре 3D-объекта нет (жёлтое — UI или камера)");
+
+            Renderer[] renderers = FindObjectsByType<Renderer>(FindObjectsSortMode.None);
+            int shown = 0;
+            for (int i = 0; i < renderers.Length && shown < 12; i++)
+            {
+                Renderer r = renderers[i];
+                if (r == null || !r.isVisible) continue;
+                Material m = r.sharedMaterial;
+                Debug.Log("[KvAr] ДИАГНОСТИКА ЭКРАНА: видимый «" + PathOf(r.transform) +
+                          "» материал «" + (m != null ? m.name : "нет") + "»");
+                shown++;
+            }
+        }
+
+        private static string PathOf(Transform t)
+        {
+            if (t == null) return "null";
+            string path = t.name;
+            Transform p = t.parent;
+            int guard = 0;
+            while (p != null && guard++ < 6) { path = p.name + "/" + path; p = p.parent; }
+            return path;
+        }
+
         public void BuildScreenButtons()
         {
             if (ui == null) return;
@@ -364,28 +484,6 @@ namespace KazistovVvAr
             {
                 if (placement != null) placement.RePlace();
             });
-            ui.AddButton("Меню", delegate
-            {
-                if (KvXrStartMenu.Active != null)
-                {
-                    KvXrStartMenu.Active.Show();
-                    Debug.Log("[KvAr] КНОПКА: стартовое меню показано");
-                }
-                else
-                {
-                    KvXrGroupPanel hand = KvXrPanels.HandPanel;
-                    if (hand != null) hand.OpenStartMenu();
-                    Debug.Log("[KvAr] КНОПКА: меню команд открыто");
-                }
-            });
-            ui.AddButton("Двигать точку", delegate
-            {
-                if (touch != null) touch.ToggleMovePointMode();
-            });
-            ui.AddButton("Сброс вида", delegate
-            {
-                if (touch != null) touch.ResetView();
-            });
             ui.AddButton("Команды", delegate
             {
                 KvXrGroupPanel hand = KvXrPanels.HandPanel;
@@ -395,25 +493,150 @@ namespace KazistovVvAr
                     return;
                 }
                 bool show = !hand.IsCanvasVisible;
-                // Стартовое меню гасит объект панели целиком — возвращаем его в игру.
                 if (hand.gameObject.activeSelf != show) hand.gameObject.SetActive(show);
                 if (show && KvXrStartMenu.Active != null && KvXrStartMenu.Active.Visible)
                 {
-                    // Два слоя поверх друг друга не читаются: меню убираем, команды показываем.
                     KvXrStartMenu.Active.Hide();
                 }
                 hand.SetArVisible(show);
                 if (show)
                 {
                     Camera place = logicalHead != null ? logicalHead : arCamera;
-                    // 0,5 м и масштаб 1,6: на планшете панель читаема и попадаема пальцем
-                    // (радиус 0,11 м на 0,9 м давал ~7° — палец в иконку не попадал).
                     hand.PlaceInFrontOf(place, 0.5f, 0f, 1.6f);
                 }
                 Debug.Log("[KvAr] КНОПКА: панель 110 команд " + (show ? "показана" : "скрыта"));
             });
+            ui.AddButton("Меню", delegate
+            {
+                if (KvXrStartMenu.Active != null)
+                {
+                    KvXrStartMenu.Active.Toggle();
+                    Debug.Log("[KvAr] КНОПКА: стартовое меню " +
+                              (KvXrStartMenu.Active.Visible ? "показано" : "скрыто"));
+                }
+            });
+            ui.AddButton("Сброс вида", delegate
+            {
+                if (touch != null) touch.ResetView();
+            });
 
-            Debug.Log("[KvAr] ПУЛЬТ AR: кнопок " + ui.ButtonCount);
+            Debug.Log("[KvAr] ПУЛЬТ AR: кнопок " + ui.ButtonCount +
+                      " · компактный ряд справа сверху (ПК-вид: интерфейс проекта включён)");
+        }
+
+        /// <summary>
+        /// РАЗРЕШЕНИЕ КАМЕРЫ (Android). Без него ARCore не получает кадров: экран остаётся
+        /// заливкой, а трекинг стоит — владелец видит «всё жёлтым и не двигается».
+        /// </summary>
+        private void EnsureCameraPermission()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (Permission.HasUserAuthorizedPermission(Permission.Camera))
+            {
+                Debug.Log("[KvAr] КАМЕРА: разрешение уже выдано системой");
+                return;
+            }
+            Debug.Log("[KvAr] КАМЕРА: запрашиваю разрешение у системы (диалог Android)");
+            Permission.RequestUserPermission(Permission.Camera);
+#else
+            Debug.Log("[KvAr] КАМЕРА: редактор — системное разрешение не требуется");
+#endif
+        }
+
+        /// <summary>
+        /// ПК-ВИД НА ПЛАНШЕТЕ: включить канвасы проекта (`KazistovVv_UI` — тулбар, меню, окна),
+        /// которые штатно гасит `KvXrDesktopOverlayGuard` для шлема. На планшете нужен именно
+        /// ПК-подобный интерфейс, поэтому сторож выключен в `Awake`, а канвасы включаются здесь.
+        /// </summary>
+        /// <summary>
+        /// УБРАТЬ ЖЁЛТУЮ ЗАЛИВКУ «ГРАФИЧЕСКОГО ОКНА» ПК-ИНТЕРФЕЙСА. В ПК-версии центральная
+        /// область прозрачна (сквозь неё виден 3D). На планшете она рисовалась жёлтой заливкой и
+        /// перекрывала камеру AR — владелец видел «всё жёлтым». Гасим самые большие жёлтые
+        /// графические элементы: цвет уходит в прозрачный, камера видна, кнопки остаются.
+        /// </summary>
+        private void ClearYellowViewport(Canvas canvas)
+        {
+            if (canvas == null) return;
+            Graphic[] graphics = canvas.GetComponentsInChildren<Graphic>(true);
+            Graphic biggest = null;
+            float biggestArea = 0f;
+            for (int i = 0; i < graphics.Length; i++)
+            {
+                Graphic graphic = graphics[i];
+                if (graphic == null) continue;
+                RectTransform rect = graphic.rectTransform;
+                if (rect == null) continue;
+                float w = rect.rect.width;
+                float h = rect.rect.height;
+                float area = w * h;
+                if (area > biggestArea) { biggestArea = area; biggest = graphic; }
+
+                Color color = graphic.color;
+                bool yellow = color.r > 0.65f && color.g > 0.65f && color.b < 0.35f && color.a > 0.5f;
+                if (!yellow) continue;
+                bool large = w > Screen.width * 0.3f || h > Screen.height * 0.3f;
+                if (!large) continue;
+                color.a = 0f;
+                graphic.color = color;
+                Debug.Log("[KvAr] ИНТЕРФЕЙС: жёлтая заливка «" + graphic.gameObject.name +
+                          "» (" + w.ToString("0") + "×" + h.ToString("0") +
+                          " px) сделана прозрачной — видна камера AR");
+            }
+
+            // САМЫЙ БОЛЬШОЙ ГРАФИЧЕСКИЙ ЭЛЕМЕНТ КАНВАСА — это «окно песочницы» ПК-интерфейса,
+            // которое на планшете заливалось жёлтым и перекрывало камеру AR (проверено
+            // скриншотом 05.11.2026: жёлтый прямоугольник ровно между панелями ПК-UI). Гасим
+            // только заливку (alpha 0): кнопки/текст остаются, а под ней видна камера.
+            if (biggest != null && biggestArea > Screen.width * Screen.height * 0.05f)
+            {
+                Color tint = biggest.color;
+                if (tint.a > 0.01f)
+                {
+                    tint.a = 0f;
+                    biggest.color = tint;
+                    Debug.Log("[KvAr] ИНТЕРФЕЙС: большая заливка «" + biggest.gameObject.name +
+                              "» (" + biggestArea.ToString("0") + " px²) убрана — камера AR видна");
+                }
+            }
+        }
+
+        public void EnablePcUiForTablet()
+        {
+            int enabledCanvases = 0;
+            Canvas[] canvases = FindObjectsByType<Canvas>(FindObjectsInactive.Include);
+            for (int i = 0; i < canvases.Length; i++)
+            {
+                Canvas canvas = canvases[i];
+                if (canvas == null) continue;
+                if (canvas.renderMode != RenderMode.ScreenSpaceOverlay) continue;
+                if (canvas.GetComponentInParent<KazistovVvUI.KazistovVvUIManager>(true) == null) continue;
+
+                if (!canvas.gameObject.activeSelf) canvas.gameObject.SetActive(true);
+                if (!canvas.enabled) canvas.enabled = true;
+                if (canvas.sortingOrder < 40) canvas.sortingOrder = 40;
+                enabledCanvases++;
+            }
+
+            // ОКНА ПК-ИНТЕРФЕЙСА МОГУТ БЫТЬ WORLD-SPACE КАНВАСАМИ: они не дети
+            // `KazistovVvUIManager`, но именно их заливки перекрывали камеру AR (жёлтый экран).
+            // Сканируем ВСЕ канвасы, кроме нашего AR-слоя, и гасим крупные заливки.
+            Canvas[] allCanvases = FindObjectsByType<Canvas>(FindObjectsInactive.Include);
+            for (int i = 0; i < allCanvases.Length; i++)
+            {
+                Canvas canvas = allCanvases[i];
+                if (canvas == null) continue;
+                if (canvas.GetComponentInParent<KvArUi>(true) != null) continue;
+                if (canvas.GetComponentInParent<KvArUi>() == ui) continue;
+                ClearYellowViewport(canvas);
+            }
+
+            if (enabledCanvases > 0 && !pcUiLogged)
+            {
+                pcUiLogged = true;
+                Debug.Log("[KvAr] ИНТЕРФЕЙС: ПК-вид включён — канвасов " + enabledCanvases +
+                          " (тулбар/меню/окна как на компьютере) · AR-кнопки справа сверху");
+                // Повторы не отменяем: окна ПК-UI создаются кодом ПОЗЖЕ первого включения.
+            }
         }
 
         private void EnsureSingletonAudioListener()
@@ -481,6 +704,16 @@ namespace KazistovVvAr
                 fpsSmoothed, anchorHeight));
             if (touch != null && !string.IsNullOrEmpty(touch.SelectedLabel))
                 ui.SetStatus(ui.StatusText + "\nвыбрано: " + touch.SelectedLabel);
+
+            // ПОДСКАЗКА, КОГДА ARCore НЕ ВИДИТ ПОВЕРХНОСТЬ: однотонный стол/потолок не даёт
+            // признаков для VIO, и владелец видит «жёлтый экран» без движения. Пишем, что делать.
+            bool tracking = sessionController != null &&
+                            sessionController.State == ARSessionState.SessionTracking;
+            if (!tracking && Time.unscaledTime > 4f && !string.IsNullOrEmpty(ui.HintText) &&
+                ui.HintText.IndexOf("текстур", StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                ui.SetHint(ui.HintText + " · поднимите планшет и наведите камеру на предметы/комнату (однотонную поверхность ARCore не видит)");
+            }
         }
 
         private static string Yes(UnityEngine.Object target)

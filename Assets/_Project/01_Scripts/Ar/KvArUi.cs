@@ -112,6 +112,7 @@ namespace KazistovVvAr
             scaler.matchWidthOrHeight = 0.5f;
             canvasGo.AddComponent<GraphicRaycaster>();
 
+            BuildPcChrome(canvasGo.transform);
             BuildStatus(canvasGo.transform);
             BuildHint(canvasGo.transform);
             BuildButtonRow(canvasGo.transform);
@@ -123,6 +124,91 @@ namespace KazistovVvAr
                           referenceResolution.x.ToString("0") + "×" +
                           referenceResolution.y.ToString("0") + " · кнопка " +
                           buttonWidth.ToString("0") + "×" + buttonHeight.ToString("0") + " px");
+        }
+
+        /// <summary>
+        /// ПК-ПОДОБНЫЙ КАРКАС AR-ЭКРАНА (05.11.2026): верхнее меню, дерево слева и строка
+        /// состояния внизу — как в ПК-версии, но СОБСТВЕННЫМ слоем. Десктопные канвасы проекта
+        /// на планшете не включаются: их окна рисовали жёлтую заливку поверх камеры (проверено
+        /// на устройстве). Центр экрана остаётся прозрачным — там камера AR.
+        /// </summary>
+        private void BuildPcChrome(Transform parent)
+        {
+            Color bar = new Color(0.035f, 0.045f, 0.055f, 0.94f);
+            Color line = new Color(0.75f, 0.78f, 0.82f, 0.85f);
+
+            // ВЕРХНЕЕ МЕНЮ
+            GameObject menu = new GameObject("PcMenuBar", typeof(RectTransform));
+            menu.transform.SetParent(parent, false);
+            RectTransform menuRect = (RectTransform)menu.transform;
+            menuRect.anchorMin = new Vector2(0f, 1f);
+            menuRect.anchorMax = new Vector2(1f, 1f);
+            menuRect.pivot = new Vector2(0.5f, 1f);
+            menuRect.anchoredPosition = Vector2.zero;
+            menuRect.sizeDelta = new Vector2(0f, 52f);
+            Image menuBg = menu.AddComponent<Image>();
+            menuBg.color = bar;
+            menuBg.raycastTarget = false;
+            AddChromeText(menu.transform, "МенюПК",
+                "Файл      Правка      Вид      Робот      Сервис      Справка",
+                TextAnchor.MiddleLeft, 24, line, new Vector2(20f, 0f), new Vector2(0f, 0f));
+
+            // ДЕРЕВО СЛЕВА (как в ПК-версии: строки проекта)
+            GameObject tree = new GameObject("PcTreePanel", typeof(RectTransform));
+            tree.transform.SetParent(parent, false);
+            RectTransform treeRect = (RectTransform)tree.transform;
+            treeRect.anchorMin = new Vector2(0f, 0f);
+            treeRect.anchorMax = new Vector2(0f, 1f);
+            treeRect.pivot = new Vector2(0f, 0f);
+            treeRect.anchoredPosition = new Vector2(0f, 40f);
+            treeRect.sizeDelta = new Vector2(250f, -92f);
+            Image treeBg = tree.AddComponent<Image>();
+            treeBg.color = new Color(0.03f, 0.04f, 0.05f, 0.88f);
+            treeBg.raycastTarget = false;
+            AddChromeText(tree.transform, "ДеревоПК",
+                "▸ 6-осевой робот\n\n▸ SCARA LS10-B702S\n\n▸ Столы\n\n▸ Верстак: постобработка\n\n▸ Ограничения, калибровка\n\n▸ Этапы 13–36",
+                TextAnchor.UpperLeft, 20, line, new Vector2(14f, -14f), new Vector2(-20f, -20f));
+
+            // НИЖНЯЯ СТРОКА СОСТОЯНИЯ
+            GameObject bottom = new GameObject("PcStatusBar", typeof(RectTransform));
+            bottom.transform.SetParent(parent, false);
+            RectTransform bottomRect = (RectTransform)bottom.transform;
+            bottomRect.anchorMin = new Vector2(0f, 0f);
+            bottomRect.anchorMax = new Vector2(1f, 0f);
+            bottomRect.pivot = new Vector2(0.5f, 0f);
+            bottomRect.anchoredPosition = Vector2.zero;
+            bottomRect.sizeDelta = new Vector2(0f, 40f);
+            Image bottomBg = bottom.AddComponent<Image>();
+            bottomBg.color = bar;
+            bottomBg.raycastTarget = false;
+            AddChromeText(bottom.transform, "СтатусПК",
+                "Готово · Робот: нет · Луч: —",
+                TextAnchor.MiddleLeft, 20, line, new Vector2(16f, 0f), new Vector2(0f, 0f));
+            AddChromeText(bottom.transform, "СтатусПКПраво",
+                "Графика: Авто · Режим: AR · Гироскоп: вкл",
+                TextAnchor.MiddleRight, 20, line, new Vector2(-16f, 0f), new Vector2(-300f, 0f));
+        }
+
+        private static void AddChromeText(Transform parent, string name, string text,
+                                          TextAnchor anchor, int size, Color color,
+                                          Vector2 offsetMin, Vector2 offsetMax)
+        {
+            GameObject go = new GameObject(name, typeof(RectTransform));
+            go.transform.SetParent(parent, false);
+            RectTransform rect = (RectTransform)go.transform;
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = offsetMin;
+            rect.offsetMax = offsetMax;
+            Text label = go.AddComponent<Text>();
+            label.font = BuiltinFont;
+            label.text = text;
+            label.fontSize = size;
+            label.color = color;
+            label.alignment = anchor;
+            label.raycastTarget = false;
+            label.horizontalOverflow = HorizontalWrapMode.Overflow;
+            label.verticalOverflow = VerticalWrapMode.Overflow;
         }
 
         private void BuildStatus(Transform parent)
@@ -192,15 +278,17 @@ namespace KazistovVvAr
             GameObject row = new GameObject("ArButtons", typeof(RectTransform));
             row.transform.SetParent(parent, false);
             RectTransform rowRect = (RectTransform)row.transform;
-            rowRect.anchorMin = new Vector2(0.5f, 0f);
-            rowRect.anchorMax = new Vector2(0.5f, 0f);
-            rowRect.pivot = new Vector2(0.5f, 0f);
-            rowRect.anchoredPosition = new Vector2(0f, 20f);
-            rowRect.sizeDelta = new Vector2(1800f, buttonHeight);
+            // ПК-ВИД: ряд компактных кнопок СВЕРХУ СПРАВА, а не огромные кнопки внизу —
+            // на планшете теперь виден интерфейс проекта (тулбар/меню/окна), как на компьютере.
+            rowRect.anchorMin = new Vector2(1f, 1f);
+            rowRect.anchorMax = new Vector2(1f, 1f);
+            rowRect.pivot = new Vector2(1f, 1f);
+            rowRect.anchoredPosition = new Vector2(-16f, -64f);
+            rowRect.sizeDelta = new Vector2(buttonWidth + 8f, 420f);
 
-            HorizontalLayoutGroup layout = row.AddComponent<HorizontalLayoutGroup>();
-            layout.spacing = 16f;
-            layout.childAlignment = TextAnchor.MiddleCenter;
+            VerticalLayoutGroup layout = row.AddComponent<VerticalLayoutGroup>();
+            layout.spacing = 10f;
+            layout.childAlignment = TextAnchor.UpperRight;
             layout.childControlWidth = false;
             layout.childControlHeight = false;
             layout.childForceExpandWidth = false;
@@ -290,7 +378,7 @@ namespace KazistovVvAr
             labelGo.transform.SetParent(go.transform, false);
             Text text = labelGo.AddComponent<Text>();
             text.font = BuiltinFont;
-            text.fontSize = 30;
+            text.fontSize = 26;
             text.color = Color.white;
             text.alignment = TextAnchor.MiddleCenter;
             text.text = label;

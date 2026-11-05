@@ -48,10 +48,10 @@ namespace KazistovVvAr
         /// API AR Foundation (`ARSession.Reset`), который перезапускает подсистему. Без него
         /// оператор видит чёрный фон и не понимает, что делать.
         /// </summary>
-        public float stuckResetSeconds = 8f;
+        public float stuckResetSeconds = 20f;
 
         /// <summary>Сколько автоматических сбросов допустимо (потом — только сообщение).</summary>
-        public int maxAutomaticResets = 3;
+        public int maxAutomaticResets = 1;
 
         /// <summary>Текущее состояние сессии (для журнала и строки состояния).</summary>
         public ARSessionState State { get; private set; }

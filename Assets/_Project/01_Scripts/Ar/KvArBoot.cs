@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using UnityEngine;
+using UnityEngine.Android;
 using UnityEngine.SceneManagement;
 using UnityEngine.XR.Management;
 using KazistovVvXr;
@@ -57,6 +58,28 @@ namespace KazistovVvAr
 
         IEnumerator Start()
         {
+            // РАЗРЕШЕНИЕ КАМЕРЫ — ДО ИНИЦИАЛИЗАЦИИ XR. На Android это отдельный диалог; ARCore
+            // без него не получает кадров (экран остаётся заливкой, трекинг стоит). Спрашиваем
+            // ДО подъёма XR, иначе сессия стартует без камеры и владелец видит «всё жёлтым».
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (!Permission.HasUserAuthorizedPermission(Permission.Camera))
+            {
+                Debug.Log("[KvAr] КАМЕРА: запрашиваю разрешение (до инициализации XR)");
+                Permission.RequestUserPermission(Permission.Camera);
+                float permissionDeadline = Time.unscaledTime + 20f;
+                while (!Permission.HasUserAuthorizedPermission(Permission.Camera) &&
+                       Time.unscaledTime < permissionDeadline)
+                    yield return null;
+                Debug.Log("[KvAr] КАМЕРА: разрешение " +
+                          (Permission.HasUserAuthorizedPermission(Permission.Camera)
+                              ? "выдано" : "НЕ выдано — AR не сможет смотреть в камеру"));
+            }
+            else
+            {
+                Debug.Log("[KvAr] КАМЕРА: разрешение уже выдано");
+            }
+#endif
+
             // XR ПОДНИМАЕМ САМИ, С ПОРЯДКОМ ПОД УСТРОЙСТВО.
             // Автоинициализация XR в настройках Android выключена (`m_InitManagerOnStart = 0`):
             // шлему нужен OpenXR первым, планшету — ARCore первым, иначе одна из платформ

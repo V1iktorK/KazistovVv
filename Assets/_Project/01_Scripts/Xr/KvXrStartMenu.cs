@@ -54,6 +54,13 @@ namespace KazistovVvXr
         /// <summary>Показывать меню при запуске приложения (как в компьютерной версии).</summary>
         public bool showOnStart = true;
 
+        /// <summary>
+        /// НЕ ПОКАЗЫВАТЬ МЕНЮ САМО (AR/планшет). В AR меню закрывало весь экран, и владелец не мог
+        /// ни увидеть камеру, ни повернуть вид пальцем: «вижу всё жёлтым и не могу двигать экраном».
+        /// В AR меню открывается кнопкой «Меню» на пульте, а не само.
+        /// </summary>
+        public static bool SuppressAutoShow;
+
         /// <summary>Печатать строки в журнал.</summary>
         public bool logOnShow = true;
 
@@ -88,7 +95,7 @@ namespace KazistovVvXr
         void Start()
         {
             Build();
-            if (showOnStart) Show();
+            if (showOnStart && !SuppressAutoShow) Show();
         }
 
         /// <summary>

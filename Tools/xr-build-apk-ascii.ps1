@@ -80,6 +80,19 @@ if (Test-Path $log) {
         Select-Object -First 20 | ForEach-Object { $_.Line }
 }
 
+# ПРОВЕРКА ПРОВАЛА КОМПИЛЯЦИИ: Unity при ошибках пишет "Scripts have compiler errors" и
+# выходит, но НЕ создаёт APK. Раньше скрипт всё равно находил старый APK и сообщал успех —
+# владелец получал сборку без правок (05.11.2026: так пропали изменения ПК-интерфейса).
+if (Test-Path $log) {
+    $failed = Select-String -Path $log -Pattern 'Scripts have compiler errors|Aborting batchmode due to failure|BuildFailedException' -Quiet
+    if ($failed) {
+        Write-Host "СБОРКА ПРОВАЛЕНА: компиляция/сборка Unity завершилась ошибкой" -ForegroundColor Red
+        Select-String -Path $log -Pattern 'error CS|Aborting batchmode|BuildFailedException' |
+            Select-Object -First 15 | ForEach-Object { $_.Line }
+        exit 1
+    }
+}
+
 $apk = Join-Path $Target 'Builds\KazistovVv.apk'
 if (Test-Path $apk) {
     $mb = [math]::Round((Get-Item $apk).Length / 1MB, 1)
