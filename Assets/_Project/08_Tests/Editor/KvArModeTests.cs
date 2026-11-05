@@ -466,5 +466,86 @@ namespace KazistovVvTests
             StringAssert.Contains("инициализация дольше", source);
             StringAssert.Contains("stuckResetSeconds", source);
         }
-    }
+
+
+        /// <summary>
+        /// ПОРЯДОК ЛОАДЕРОВ ЗАВИСИТ ОТ УСТРОЙСТВА. Один APK на шлем и планшет: шлему нужен
+        /// OpenXR первым (иначе не поднимается VR), планшету — ARCore первым (иначе зависает
+        /// инициализация XR и экран остаётся чёрным). Проверяется чистая логика выбора.
+        /// </summary>
+        [Test]
+        public void LoaderBootstrap_PicoFirstOpenXr_TabletFirstArCore()
+        {
+            string[] pico = KazistovVvAr.KvArLoaderBootstrap.DesiredLoaderOrder(true);
+            Assert.AreEqual(2, pico.Length);
+            StringAssert.Contains("OpenXR", pico[0],
+                "на шлеме ПЕРВЫМ обязан идти OpenXR: с ARCore первым ломается запуск VR (жалоба MR 05.11.2026)");
+            StringAssert.Contains("ARCore", pico[1], "на шлеме вторым обязан идти ARCore (запас на всякий случай)");
+
+            string[] tablet = KazistovVvAr.KvArLoaderBootstrap.DesiredLoaderOrder(false);
+            Assert.AreEqual(2, tablet.Length);
+            StringAssert.Contains("ARCore", tablet[0],
+                "на планшете ПЕРВЫМ обязан идти ARCore: с OpenXR первым PICO-загрузчик зависает в инициализации");
+            StringAssert.Contains("OpenXR", tablet[1], "на планшете вторым обязан идти OpenXR (запас)");
+        }
+
+        /// <summary>
+        /// АВТОИНИЦИАЛИЗАЦИЯ XR ДЛЯ ANDROID ВЫКЛЮЧЕНА. Иначе XR Management поднимет XR ДО первой
+        /// сцены с тем порядком, что записан в настройках, и `KvArLoaderBootstrap` уже ничего
+        /// не сможет переставить: одна из платформ получит неверный порядок и зависнет.
+        /// </summary>
+        [Test]
+        public void AndroidSettings_DoNotAutoInitializeXr()
+        {
+            string settings = ReadAsset("Assets", "XR", "XRGeneralSettingsPerBuildTarget.asset");
+            int android = settings.IndexOf("m_Name: Android Settings", System.StringComparison.Ordinal);
+            Assert.GreaterOrEqual(android, 0, "в настройках XR нет блока «Android Settings»");
+            int init = settings.IndexOf("m_InitManagerOnStart:", android, System.StringComparison.Ordinal);
+            Assert.Greater(init, android, "в Android Settings нет поля m_InitManagerOnStart");
+            string value = settings.Substring(init, 40);
+            StringAssert.Contains("m_InitManagerOnStart: 0", value,
+                "для Android включена автоинициализация XR: порядок загрузчиков по устройству не применится, " +
+                "и одна из платформ (шлем или планшет) зависнет в инициализации XR");
+        }
+
+        /// <summary>
+        /// BOOTAR ПОДНИМАЕТ XR САМ, с порядком по устройству. Без этого вызова при выключенной
+        /// автоинициализации XR не поднимется вообще, и приложение всегда показывало бы отказ.
+        /// </summary>
+        [Test]
+        public void Boot_InitializesXrForDevice()
+        {
+            string source = ReadAsset("Assets", "_Project", "01_Scripts", "Ar", "KvArBoot.cs");
+            StringAssert.Contains("KvArLoaderBootstrap.InitializeForDevice", source,
+                "BootAr не инициализирует XR с порядком по устройству — при выключенной автоинициализации XR не поднимется");
+        }
+
+        /// <summary>
+        /// ANDROID-АКТИВНОСТЬ — GameActivity СО ШТАТНОЙ ТЕМОЙ UNITY.
+        ///
+        /// ПОЧЕМУ (уточнено 05.11.2026 по двум живым устройствам):
+        ///  • шлему PICO нужна GameActivity: с классической UnityPlayerActivity OpenXR-лоадер
+        ///    поднимается, но VR-дисплей не активируется («XR НЕ активен», MR/AR-возможностей нет);
+        ///  • чёрный экран на планшете HyperOS/Android 16 давала НЕ GameActivity, а кастомная
+        ///    AppCompat-тема `Theme.AppCompat.DayNight.NoActionBar` — с ней окно получало
+        ///    прозрачную поверхность и Unity не выводил кадры. Штатная тема Unity
+        ///    `@style/BaseUnityGameActivityTheme` работает на планшете.
+        /// Тест держит контракт: GameActivity + тема Unity + applicationEntry 2, и НЕ наша
+        /// кастомная AppCompat-тема (иначе снова чёрный экран).
+        /// </summary>
+        [Test]
+        public void AndroidManifest_UsesGameActivityWithUnityTheme()
+        {
+            string manifest = ReadAsset("Assets", "Plugins", "Android", "AndroidManifest.xml");
+            StringAssert.Contains("com.unity3d.player.UnityPlayerGameActivity", manifest,
+                "в манифесте нет UnityPlayerGameActivity — на шлеме PICO не включится VR-дисплей");
+            StringAssert.Contains("@style/BaseUnityGameActivityTheme", manifest,
+                "тема активности не штатная Unity: кастомная AppCompat-тема даёт чёрный экран на HyperOS (проверено)");
+            StringAssert.DoesNotContain("@style/Theme.AppCompat", manifest,
+                "в манифесте снова кастомная AppCompat-тема — на планшете это давало чёрный экран");
+
+            string project = ReadAsset("ProjectSettings", "ProjectSettings.asset");
+            StringAssert.Contains("androidApplicationEntry: 2", project,
+                "androidApplicationEntry не 2 (GameActivity): на шлеме PICO не активируется VR-дисплей");
+        }    }
 }

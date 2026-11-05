@@ -57,6 +57,12 @@ namespace KazistovVvAr
 
         IEnumerator Start()
         {
+            // XR ПОДНИМАЕМ САМИ, С ПОРЯДКОМ ПОД УСТРОЙСТВО.
+            // Автоинициализация XR в настройках Android выключена (`m_InitManagerOnStart = 0`):
+            // шлему нужен OpenXR первым, планшету — ARCore первым, иначе одна из платформ
+            // зависает в инициализации и показывает чёрный экран/отказ.
+            yield return KvArLoaderBootstrap.InitializeForDevice();
+
             float begin = Time.unscaledTime;
             yield return WaitForXrInitialization();
             WaitedSeconds = Time.unscaledTime - begin;

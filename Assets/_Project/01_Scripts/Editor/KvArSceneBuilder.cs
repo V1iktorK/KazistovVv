@@ -430,7 +430,8 @@ namespace KazistovVvArEditor
         /// <summary>
         /// ФИЧА AR-ФОНА ДЛЯ VULKAN. Документация AR Foundation 6.5 (URP + Vulkan): без
         /// `ARCommandBufferSupportRendererFeature` камера-фон не выводится. Android в проекте
-        /// собирается ТОЛЬКО под Vulkan (проверено в ProjectSettings), поэтому фича обязательна.
+        /// в 03.11.2026 собиралась ТОЛЬКО под Vulkan, поэтому фича обязательна; 05.11.2026 Android
+/// переведён на OpenGLES3, фича оставлена для совместимости с Vulkan-сборкой.
         /// Добавляется в мобильный рендерер; под OpenXR (шлем) она не делает ничего.
         /// </summary>
         private static void EnsureRendererFeature()

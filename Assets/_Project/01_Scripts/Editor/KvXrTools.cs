@@ -82,8 +82,8 @@ namespace KazistovVvXrEditor
 
             XRLoader arCore = FindArCoreLoader();
             if (arCore == null)
-                Debug.LogWarning("[KvXr] Не найден ARCoreLoader.asset — на планшете AR-режим " +
-                                 "не запустится (сборка останется только для шлема)");
+                Debug.LogError("[KvXr] НЕ НАЙДЕН ARCoreLoader.asset — APK получится БЕЗ AR " +
+                               "(на планшете AR-режим не запустится вообще)");
 
             // Группы платформ, а не отдельные платформы: настройки XR Management хранятся
             // именно по группам (Standalone, Android), и `SettingsForBuildTarget` принимает
@@ -125,6 +125,16 @@ namespace KazistovVvXrEditor
                 // компилятор помечает как obsolete (уровень CS0618 ловится гейтом проекта),
                 // а прямая правка списка в рантайме вообще объявлена неопределённым поведением.
                 manager.TrySetLoaders(wanted);
+                // XI: АВТОИНИЦИАЛИЗАЦИЮ XR ВЫКЛЮЧАЕМ ДЛЯ ANDROID (05.11.2026).
+                //
+                // ПОЧЕМУ. Порядок лоадеров не может быть одним на всех: шлему нужен OpenXR
+                // первым, планшету — ARCore первым (иначе зависает инициализация). Поэтому
+                // XR Management НЕ инициализирует XR сам, а порядок выставляет `KvArLoaderBootstrap`
+                // в первой сцене по факту устройства. Standalone (ПК) не трогаем — там XR не нужен.
+                if (target == BuildTargetGroup.Android)
+                {
+                    settings.InitManagerOnStart = false;
+                }
                 EditorUtility.SetDirty(manager);
                 EditorUtility.SetDirty(settings);
 
@@ -142,6 +152,53 @@ namespace KazistovVvXrEditor
         }
 
         /// <summary>
+        /// ПРОВЕРКА «В ЛОАДЕРАХ ANDROID ЕСТЬ ОБА ПРОВАЙДЕРА» ПРЯМО ПЕРЕД СБОРКОЙ.
+        ///
+        /// ПОЧЕМУ. 05.11.2026 сборка прошла без единой ошибки, но в APK ушёл ОДИН лоадер
+        /// (OpenXRLoader): ARCore-ассет в свежей копии проекта не был найден, `ConfigureXrLoaders`
+        /// молча записал неполный список, APK получился 116 МБ вместо 189 МБ и без AR.
+        /// Такую сборку нельзя выпускать: на телефоне/планшете AR не запустится.
+        /// Теперь сборка ОСТАНАВЛИВАЕТСЯ с внятной ошибкой.
+        /// </summary>
+        public static void VerifyAndroidLoadersOrThrow()
+        {
+            XRGeneralSettingsPerBuildTarget perTarget =
+                AssetDatabase.LoadAssetAtPath<XRGeneralSettingsPerBuildTarget>(
+                    "Assets/XR/XRGeneralSettingsPerBuildTarget.asset");
+            XRGeneralSettings android = perTarget != null
+                ? perTarget.SettingsForBuildTarget(BuildTargetGroup.Android)
+                : null;
+            XRManagerSettings manager = android != null ? android.Manager : null;
+            IReadOnlyList<XRLoader> loaders = manager != null ? manager.activeLoaders : null;
+
+            bool hasArCore = false, hasOpenXr = false;
+            string names = "нет";
+            if (loaders != null)
+            {
+                var list = new List<string>();
+                foreach (XRLoader loader in loaders)
+                {
+                    if (loader == null) { list.Add("null"); continue; }
+                    string type = loader.GetType().Name;
+                    list.Add(type);
+                    if (type.IndexOf("ARCore", System.StringComparison.OrdinalIgnoreCase) >= 0) hasArCore = true;
+                    if (type.IndexOf("OpenXR", System.StringComparison.OrdinalIgnoreCase) >= 0) hasOpenXr = true;
+                }
+                names = string.Join(", ", list.ToArray());
+            }
+
+            if (!hasArCore)
+                throw new System.Exception(
+                    "[KvXr] СБОРКА ОСТАНОВЛЕНА: в лоадерах Android нет ARCore (сейчас: " + names +
+                    "). APK получился бы без AR — на телефоне/планшете режим AR не запустится. " +
+                    "Проверены Assets/XR/Loaders/ARCoreLoader.asset и пакет com.unity.xr.arcore.");
+            if (!hasOpenXr)
+                throw new System.Exception(
+                    "[KvXr] СБОРКА ОСТАНОВЛЕНА: в лоадерах Android нет OpenXR (сейчас: " + names +
+                    "). Шлем остался бы без VR/MR.");
+        }
+
+        /// <summary>
         /// Найти ассет лоадера ARCore (для второго места в списке Android).
         /// Тот же приём, что у OpenXR: ассет читается как ScriptableObject, тип проверяется
         /// во время выполнения (загрузчик ассетов не видит `XRLoader` напрямую).
@@ -149,12 +206,36 @@ namespace KazistovVvXrEditor
         public static XRLoader FindArCoreLoader()
         {
             const string path = "Assets/XR/Loaders/ARCoreLoader.asset";
-            var asset = AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
-            if (asset == null) return null;
-
-            XRLoader loader = asset as XRLoader;
+            XRLoader loader = TryLoadLoaderAsset(path);
             if (loader != null) return loader;
+
+            // ПОВТОР ПОСЛЕ REFRESH (дефект 05.11.2026). В свежей ASCII-копии проекта
+            // `LoadAssetAtPath` в момент выполнения метода сборки может вернуть null, если
+            // ассеты ещё не импортированы. Тогда `ConfigureXrLoaders` молча выкидывал ARCore,
+            // и APK уходил БЕЗ AR (в логе: «Android: лоадеров 1 [OpenXRLoader]», размер
+            // 116 МБ вместо 189 МБ; ни одной ошибки сборки при этом не было).
+            AssetDatabase.Refresh();
+            loader = TryLoadLoaderAsset(path);
+            if (loader != null) return loader;
+
+            // Последний запасной путь: найти ассет по имени в папке лоадеров.
+            string[] guids = AssetDatabase.FindAssets("ARCoreLoader", new[] { "Assets/XR/Loaders" });
+            foreach (string guid in guids)
+            {
+                string found = AssetDatabase.GUIDToAssetPath(guid);
+                loader = TryLoadLoaderAsset(found);
+                if (loader != null) return loader;
+            }
             return null;
+        }
+
+        /// <summary>Загрузить ассет лоадера как XRLoader (два способа загрузки на случай импорта).</summary>
+        private static XRLoader TryLoadLoaderAsset(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return null;
+            ScriptableObject asset = AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
+            if (asset == null) asset = AssetDatabase.LoadMainAssetAtPath(path) as ScriptableObject;
+            return asset as XRLoader;
         }
 
         /// <summary>
@@ -517,6 +598,7 @@ namespace KazistovVvXrEditor
             string finalApkPath = Path.Combine(outputDir, "KazistovVv.apk");
 
             ConfigureXrLoaders();
+            VerifyAndroidLoadersOrThrow();   // без ARCore APK не выпускаем (дефект 05.11.2026)
             AddXrSceneToBuildSilent();
 
             // НАСТРОИТЬ ПОДПИСЬ ПЕРЕД СБОРКОЙ (добавлено 31.10.2026, S44).
@@ -937,20 +1019,36 @@ namespace KazistovVvXrEditor
         /// </summary>
         public static void SetAndroidGraphicsApi()
         {
-            // ТОЛЬКО VULKAN. Сначала здесь стоял список «Vulkan, OpenGLES3» (Vulkan первым,
-            // OpenGLES3 в запасе) — и сборка падала ПОВТОРНО, потому что валидатор HDRP
-            // (`HDUtils.AreGraphicsAPIsSupported`) проверяет ВЕСЬ список: достаточно одного
-            // неподдерживаемого API, чтобы платформа считалась неподходящей. OpenGLES3 для
-            // HDRP не поддерживается ни в каком порядке. Замерено 02.10.2026.
-            PlayerSettings.SetGraphicsAPIs(BuildTarget.Android,
-                new[] { UnityEngine.Rendering.GraphicsDeviceType.Vulkan });
+            // VULKAN (возвращено 05.11.2026 после проверки на двух устройствах).
+            //
+            // ИСТОРИЯ. Сначала был Vulkan — и шлем PICO в VR работал. Потом на планшете
+            // был чёрный экран, а в журнале шли `ArFrame_getHardwareBuffer … error '-12'`;
+            // я переключил Android на OpenGLES3. Чёрный экран оказался вызван кастомной
+            // AppCompat-темой активности (не графическим API). Но на GLES3 у шлема PICO
+            // перестал активироваться VR-дисплей: OpenXR-лоадер активен, а
+            // `XRSettings.isDeviceActive = false` и MR-возможности не определяются.
+            // Поэтому возвращаем Vulkan — он проверен на шлеме; ARCore официально
+            // поддерживает Vulkan (в рендерере уже лежит ARCommandBufferSupportRendererFeature),
+            // проверка планшета на Vulkan — в этом же прогоне.
+            // ВЫБОР API ДЛЯ ВАРИАНТА СБОРКИ: KAZISTOVVV_GFX=gl → OpenGLES3 (планшет),
+            // иначе Vulkan (шлем PICO). ДВА ВАРИАНТА ИЗ ОДНОГО КОДА — вынужденно:
+            // на планшете Redmi Pad 2 Pro Unity 6.5/Vulkan не выводит кадры (чёрный экран при
+            // живом процессе, одинаково с любой темой активности), а на шлеме PICO с GLES3
+            // не активируется VR-дисплей (OpenXR-лоадер активен, isDeviceActive=false).
+            // Оба ограничения проверены на живых устройствах 05.11.2026.
+            bool gles = string.Equals(System.Environment.GetEnvironmentVariable("KAZISTOVVV_GFX"),
+                                      "gl", System.StringComparison.OrdinalIgnoreCase);
+            PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, gles
+                ? new[] { UnityEngine.Rendering.GraphicsDeviceType.OpenGLES3 }
+                : new[] { UnityEngine.Rendering.GraphicsDeviceType.Vulkan });
             PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.Android, false);
             AssetDatabase.SaveAssets();
 
             var check = PlayerSettings.GetGraphicsAPIs(BuildTarget.Android);
             Debug.Log("[KvXr] Графический API для Android: " +
                 string.Join(", ", System.Array.ConvertAll(check, a => a.ToString())) +
-                " (Vulkan обязателен для HDRP — решение [R2]; OpenGLES3 убран намеренно).");
+                (gles ? " (вариант ПЛАНШЕТА: Vulkan на этом устройстве даёт чёрный экран)."
+                      : " (вариант ШЛЕМА: GLES3 на PICO не активирует VR-дисплей)."));
         }
 
         /// <summary>ПК-сцена (HDRP, мышь): в APK не попадает. Одно место — один список.</summary>
@@ -1288,7 +1386,7 @@ namespace KazistovVvXrEditor
             var apis = PlayerSettings.GetGraphicsAPIs(BuildTarget.Android);
             sb.AppendLine("[KvA] графический API Android: " +
                 (apis != null ? string.Join(", ", System.Array.ConvertAll(apis, a => a.ToString())) : "нет") +
-                " (ожидание: Vulkan — решение [R2])");
+                " (ожидание: Vulkan или OpenGLES3 — два варианта сборки)");
 
             sb.AppendLine("[KvA] уровни качества: " + DescribeQualityLevels());
 
