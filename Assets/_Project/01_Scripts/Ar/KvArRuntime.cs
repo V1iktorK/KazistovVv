@@ -507,6 +507,11 @@ namespace KazistovVvAr
             if (hidden > 0) Debug.Log("[KvAr] ИНТЕРФЕЙС: погашено посторонних канвасов " + hidden);
         }
 
+        /// <summary>
+        /// ПРАВЫЙ РЯД БЫСТРЫХ ДЕЙСТВИЙ ПЛАНШЕТА (ПК-вид). Всё остальное — меню, инструменты и
+        /// дерево проекта в `KvArUi`; здесь только то, чего нет в ПК-меню: постановка мира,
+        /// пересборка, панель ВСЕХ команд и сброс вида.
+        /// </summary>
         public void BuildScreenButtons()
         {
             if (ui == null) return;
@@ -522,44 +527,16 @@ namespace KazistovVvAr
             });
             ui.AddButton("Команды", delegate
             {
-                KvXrGroupPanel hand = KvXrPanels.HandPanel;
-                if (hand == null)
-                {
-                    Debug.LogWarning("[KvAr] КНОПКА: панели команд нет — проверить состав ArMain");
-                    return;
-                }
-                bool show = !hand.IsCanvasVisible;
-                if (hand.gameObject.activeSelf != show) hand.gameObject.SetActive(show);
-                if (show && KvXrStartMenu.Active != null && KvXrStartMenu.Active.Visible)
-                {
-                    KvXrStartMenu.Active.Hide();
-                }
-                hand.SetArVisible(show);
-                if (show)
-                {
-                    Camera place = logicalHead != null ? logicalHead : arCamera;
-                    hand.PlaceInFrontOf(place, 0.5f, 0f, 1.6f);
-                }
-                Debug.Log("[KvAr] КНОПКА: панель 110 команд " + (show ? "показана" : "скрыта"));
-            });
-            ui.AddButton("Меню", delegate
-            {
-                if (KvXrStartMenu.Active != null)
-                {
-                    KvXrStartMenu.Active.Toggle();
-                    Debug.Log("[KvAr] КНОПКА: стартовое меню " +
-                              (KvXrStartMenu.Active.Visible ? "показано" : "скрыто"));
-                }
+                if (ui != null) ui.OpenCommands("robot");
             });
             ui.AddButton("Сброс вида", delegate
             {
                 if (touch != null) touch.ResetView();
             });
 
-            Debug.Log("[KvAr] ПУЛЬТ AR: кнопок " + ui.ButtonCount +
-                      " · компактный ряд справа сверху (ПК-вид: интерфейс проекта включён)");
+            KvArUi.EnsureEventSystem();
+            Debug.Log("[KvAr] ИНТЕРФЕЙС: правый ряд кнопок — 4 · меню/инструменты/дерево в оверлее");
         }
-
         /// <summary>
         /// РАЗРЕШЕНИЕ КАМЕРЫ (Android). Без него ARCore не получает кадров: экран остаётся
         /// заливкой, а трекинг стоит — владелец видит «всё жёлтым и не двигается».
@@ -727,31 +704,59 @@ namespace KazistovVvAr
         }
 
         /// <summary>Обновить экранную строку состояния (без спама: раз в кадр — дешёвая строка).</summary>
+        private float nextFooterTime;
+        private float nextCountTime;
+        private int uiRobots;
+        private int uiTables;
+
+        /// <summary>
+        /// НИЖНЯЯ СТРОКА СОСТОЯНИЯ КАК В ПК (06.11.2026). Верхней строки «AR · камера есть…»
+        /// больше нет — владелец просил убрать. Внизу: робот/столы/плоскости слева, камера/
+        /// трекинг/кадры справа. Подсказка под строкой состояния — нейтральная, без «VR/MR».
+        /// </summary>
         private void UpdateStatusLine()
         {
             if (ui == null) return;
+            if (Time.unscaledTime < nextFooterTime) return;
+            nextFooterTime = Time.unscaledTime + 0.5f;
+
             int planes = planeManager != null ? planeManager.trackables.count : 0;
             bool placed = world != null && world.IsPlaced;
-            bool robot = world != null && world.Robot != null;
+            bool robotPlaced = world != null && world.Robot != null;
             bool cameraOk = cameraManager != null && cameraManager.permissionGranted;
-            bool sessionReady = sessionController != null && sessionController.Ready;
-            float anchorHeight = placed && world != null ? world.FloorY : -9999f;
-            ui.SetStatus(KvArUi.BuildStatusLine(sessionReady, cameraOk, planes, placed, robot,
-                fpsSmoothed, anchorHeight));
-            if (touch != null && !string.IsNullOrEmpty(touch.SelectedLabel))
-                ui.SetStatus(ui.StatusText + "\nвыбрано: " + touch.SelectedLabel);
-
-            // ПОДСКАЗКА, КОГДА ARCore НЕ ВИДИТ ПОВЕРХНОСТЬ: однотонный стол/потолок не даёт
-            // признаков для VIO, и владелец видит «жёлтый экран» без движения. Пишем, что делать.
             bool tracking = sessionController != null &&
                             sessionController.State == ARSessionState.SessionTracking;
-            if (!tracking && Time.unscaledTime > 4f && !string.IsNullOrEmpty(ui.HintText) &&
-                ui.HintText.IndexOf("текстур", StringComparison.OrdinalIgnoreCase) < 0)
+
+            // Счётчики реже строки: поиск объектов по сцене 1 раз в секунду, а не в каждом кадре.
+            if (Time.unscaledTime >= nextCountTime)
             {
-                ui.SetHint(ui.HintText + " · поднимите планшет и наведите камеру на предметы/комнату (однотонную поверхность ARCore не видит)");
+                nextCountTime = Time.unscaledTime + 1f;
+                uiRobots = UnityEngine.Object.FindObjectsByType<RobotController>(
+                    FindObjectsInactive.Exclude, FindObjectsSortMode.None).Length;
+                uiTables = KvArUi.CreatedTableCount;
+            }
+
+            string left = "Готово · Робот: " + (robotPlaced ? "поставлен" : (uiRobots > 0 ? uiRobots + " в сцене" : "нет")) +
+                          " · Столов: " + uiTables +
+                          " · Плоскости: " + planes;
+            string right = "Камера: " + (cameraOk ? "вкл" : "ждём") +
+                           " · Трекинг: " + (tracking ? "да" : "ждём") +
+                           " · " + fpsSmoothed.ToString("0") + " кадр/с";
+            ui.SetFooter(left, right);
+
+            if (touch != null && !string.IsNullOrEmpty(touch.SelectedLabel))
+            {
+                ui.SetHint("Выбрано: " + touch.SelectedLabel);
+            }
+            else if (!placed)
+            {
+                ui.SetHint("Поднимите планшет и наведите камеру на стол · затем «Поставить»");
+            }
+            else
+            {
+                ui.SetHint("Коснитесь стола для точки · «Команды» — все функции программы");
             }
         }
-
         private static string Yes(UnityEngine.Object target)
         {
             return target != null ? "есть" : "НЕТ";

@@ -545,5 +545,138 @@ namespace KazistovVvTests
                     "(камера работает, экран остаётся заливкой)");
             }
         }
+        /// <summary>
+        /// ПК-ОВЕРЛЕЙ ПЛАНШЕТА: меню/инструменты/дерево/нижняя строка — и всё это НАСТОЯЩИЕ
+        /// функции (команды проекта через реестр `KvCommands`), как на компьютере.
+        /// Владелец 06.11.2026: «Переделай оверлей под ПК версию… наполни функциями максимально».
+        /// </summary>
+        [Test]
+        public void ArOverlay_IsPcStyleWithWorkingFunctions()
+        {
+            string ui = ReadScript("KvArUi.cs");
+            StringAssert.Contains("PcMenuBar", ui, "нет верхнего меню как в ПК");
+            StringAssert.Contains("PcToolbar", ui, "нет строки инструментов");
+            StringAssert.Contains("PcTreePanel", ui, "нет дерева проекта слева");
+            StringAssert.Contains("PcStatusBar", ui, "нет нижней строки состояния");
+            StringAssert.Contains("KvCommands.Invoke", ui, "пункты меню не выполняют команды реестра");
+            StringAssert.Contains("KvToolbarGroups.All", ui, "панель команд не берёт группы проекта");
+            StringAssert.Contains("OpenCommands", ui, "нет окна со всеми командами");
+            StringAssert.Contains("MenuCommands", ui, "нет списка команд меню");
+            StringAssert.Contains("SetFooter", ui, "нет обновления нижней строки состояния");
+            StringAssert.Contains("\"Файл\"", ui);
+            StringAssert.Contains("\"Справка\"", ui);
+
+            string runtime = ReadScript("KvArRuntime.cs");
+            StringAssert.Contains("SetFooter", runtime, "рантайм не обновляет ПК-строку состояния");
+            StringAssert.Contains("ui.OpenCommands", runtime, "кнопка «Команды» не открывает окно команд");
+        }
+
+        /// <summary>
+        /// ВЕРХНЕЙ ПОДСКАЗКИ «AR · камера есть…» БОЛЬШЕ НЕТ, и в оверлее нет слов VR/MR.
+        /// Владелец: «убери подсказки в оверлее “AR. камера есть...”; чтобы ничего не напоминало VR/MR».
+        /// </summary>
+        [Test]
+        public void ArOverlay_HasNoTopStatusAndNoVrWords()
+        {
+            string ui = ReadScript("KvArUi.cs");
+            // Историческая чистая функция BuildStatusLine оставлена для тестов, НО рантайм её
+            // больше не выводит: проверяем именно это (ниже) и что подсказки ПК-строки — свои.
+            StringAssert.Contains("SetFooter", ui);
+            StringAssert.DoesNotContain("\"VR\"", ui);
+            StringAssert.DoesNotContain("\"MR\"", ui);
+
+            string runtime = ReadScript("KvArRuntime.cs");
+            StringAssert.DoesNotContain("ui.SetStatus(KvArUi.BuildStatusLine", runtime,
+                "рантайм снова выводит верхнюю строку «AR · камера есть…»");
+        }
+
+        /// <summary>
+        /// КОМАНДЫ МЕНЮ — ИЗ РЕЕСТРА: каждая строка меню обязана быть зарегистрированной
+        /// командой, иначе кнопка на планшете ничего не делает (владелец: «не для галочки»).
+        /// Проверяем по исходникам, как это делает сторож полноты меню шлема.
+        /// </summary>
+        [Test]
+        public void ArOverlay_MenuCommandsExistInRegistry()
+        {
+            string ui = ReadScript("KvArUi.cs");
+            string scripts = Path.Combine(ProjectRoot, "Assets", "_Project");
+            var registered = new System.Collections.Generic.HashSet<string>();
+            foreach (string file in Directory.GetFiles(scripts, "*.cs", System.IO.SearchOption.AllDirectories))
+            {
+                string text;
+                try { text = File.ReadAllText(file); } catch { continue; }
+                if (text.IndexOf("KvCommands.Register", System.StringComparison.Ordinal) < 0) continue;
+                foreach (System.Text.RegularExpressions.Match m in
+                         System.Text.RegularExpressions.Regex.Matches(text,
+                             "KvCommands\\.Register\\s*\\(\\s*new\\s+KvCommand\\s*\\{(.*?)\\}\\s*\\)\\s*;",
+                             System.Text.RegularExpressions.RegexOptions.Singleline))
+                {
+                    System.Text.RegularExpressions.Match id =
+                        System.Text.RegularExpressions.Regex.Match(m.Groups[1].Value, "\\bId\\s*=\\s*\"([^\"]+)\"");
+                    if (id.Success) registered.Add(id.Groups[1].Value);
+                }
+                foreach (System.Text.RegularExpressions.Match m in
+                         System.Text.RegularExpressions.Regex.Matches(text, "KvCommands\\.Register\\s*\\(\\s*\"([^\"]+)\""))
+                {
+                    int lineStart = text.LastIndexOf('\n', m.Index) + 1;
+                    string prefix = text.Substring(lineStart, m.Index - lineStart);
+                    if (prefix.Contains("//") || prefix.Contains("*")) continue;
+                    registered.Add(m.Groups[1].Value);
+                }
+            }
+
+            Assert.Greater(registered.Count, 50, "реестр команд не разобран — проверка бессмысленна");
+
+            int start = ui.IndexOf("private static string[] MenuCommands", System.StringComparison.Ordinal);
+            Assert.Greater(start, 0, "нет таблицы команд меню");
+            int end = ui.IndexOf("/// <summary>ЗАКРЫТЬ МЕНЮ", System.StringComparison.Ordinal);
+            if (end < start) end = ui.Length;
+            string table = ui.Substring(start, end - start);
+
+            var missing = new System.Collections.Generic.List<string>();
+            foreach (System.Text.RegularExpressions.Match m in
+                     System.Text.RegularExpressions.Regex.Matches(table, "\"([a-z][a-z0-9]*(?:\\.[a-z0-9_]+)+)\""))
+            {
+                string id = m.Groups[1].Value;
+                // Динамические команды моделей роботов регистрируются в рантайме (KvRobotCommands),
+                // статический разбор реестра их не видит — как и сторож полноты меню шлема.
+                if (id.StartsWith("robot.model.", System.StringComparison.Ordinal)) continue;
+                if (!registered.Contains(id)) missing.Add(id);
+            }
+
+            Assert.AreEqual(0, missing.Count,
+                "в меню планшета команды, которых нет в реестре (кнопка ничего не сделает): " +
+                string.Join(", ", missing.ToArray()));
+        }
+
+        /// <summary>ДЕРЕВО И ТУЛБАР ТОЖЕ РАБОТАЮТ: действия «столы» и «группы» ведут к фабрике/окну команд.</summary>
+        [Test]
+        public void ArOverlay_TreeAndToolbarActionsAreWired()
+        {
+            string ui = ReadScript("KvArUi.cs");
+            StringAssert.Contains("table.square", ui, "нет действия создания квадратного стола");
+            StringAssert.Contains("table.auto", ui, "нет действия создания автостола");
+            StringAssert.Contains("KvXrObjectFactory.CreateTable", ui, "стол не создаётся фабрикой проекта");
+            StringAssert.Contains("group:", ui, "дерево не умеет открывать команды группы");
+            StringAssert.Contains("view.limits", ui);
+            StringAssert.Contains("features.open", ui);
+        }
+        /// <summary>
+        /// ЭКСПОРТ НА ПЛАНШЕТЕ ПИШЕТ В ДОСТУПНЫЙ КАТАЛОГ. На устройстве функция «Сделать
+        /// скриншот» падала: путь `/Videos` (системная папка Windows) на Android не существует.
+        /// Теперь на мобильной платформе — `<persistentDataPath>/KazistovVv`.
+        /// </summary>
+        [Test]
+        public void Captures_OnAndroidUsePersistentDataPath()
+        {
+            string path = Path.Combine(ProjectRoot, "Assets", "_Project", "01_Scripts", "Features",
+                "KvCaptures.cs");
+            Assert.IsTrue(File.Exists(path), "нет KvCaptures.cs");
+            string source = File.ReadAllText(path);
+            StringAssert.Contains("UNITY_ANDROID", source,
+                "нет мобильной ветки пути — на планшете скриншот снова упадёт");
+            StringAssert.Contains("persistentDataPath, \"KazistovVv\"", source,
+                "на Android папка экспорта должна быть доступным каталогом приложения");
+        }
     }
 }

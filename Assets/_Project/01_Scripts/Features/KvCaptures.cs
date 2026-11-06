@@ -87,6 +87,14 @@ namespace KazistovVvFeatures
         {
             get
             {
+#if UNITY_ANDROID && !UNITY_EDITOR
+                // ANDROID (06.11.2026): системная папка «Видео» на планшете недоступна без
+                // MediaStore (на Android 11+ прямой File-доступ к публичным папкам закрыт),
+                // а на Android она отдавала путь «/Videos», куда писать нельзя. Пишем в каталог
+                // приложения: <persistentDataPath>/KazistovVv — он виден по USB и работает без
+                // специальных разрешений.
+                return Path.Combine(Application.persistentDataPath, "KazistovVv");
+#endif
                 try
                 {
                     string dir = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);

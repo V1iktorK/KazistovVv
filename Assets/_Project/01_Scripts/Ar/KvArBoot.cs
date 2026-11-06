@@ -140,13 +140,13 @@ namespace KazistovVvAr
             ui.buildOnStart = false;
             ui.EnsureBuilt();
             ui.SetButtonsVisible(false);
-            ui.SetStatus("AR: нужен доступ к камере");
+            ui.SetStatus("Камера: нужен доступ");
 
             float lastLog = Time.unscaledTime;
             while (!Permission.HasUserAuthorizedPermission(Permission.Camera))
             {
                 ui.ShowMessage(
-                    "Для режима AR программе нужен доступ к камере:\nбез него не видно стол и AR не работает.\n\n" +
+                    "Программе нужен доступ к камере:\nбез него не видно стол и работа с ним невозможна.\n\n" +
                     "Нажмите кнопку и разрешите камеру в системном окне.",
                     cameraPermissionRequests >= 2 ? "ОТКРЫТЬ НАСТРОЙКИ" : "РАЗРЕШИТЬ КАМЕРУ",
                     RequestCameraOrSettings);
@@ -160,7 +160,7 @@ namespace KazistovVvAr
             }
 
             ui.HideMessage();
-            Debug.Log("[KvAr] КАМЕРА: разрешение ВЫДАНО — продолжаю запуск AR");
+            Debug.Log("[KvAr] КАМЕРА: разрешение ВЫДАНО — продолжаю запуск");
         }
 
         private void RequestCameraOrSettings()

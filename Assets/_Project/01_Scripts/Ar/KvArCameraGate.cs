@@ -138,7 +138,7 @@ namespace KazistovVvAr
             bool granted = Permission.HasUserAuthorizedPermission(Permission.Camera);
             if (!granted)
             {
-                SetStatus("КАМЕРА НЕ РАЗРЕШЕНА\nНажмите «Разрешить камеру» — программа без неё не видит стол.");
+                SetStatus("КАМЕРА НЕ РАЗРЕШЕНА\nНажмите «Разрешить камеру» — без неё программа не видит стол.");
                 if (elapsed > 3f) ShowSettingsButton();
                 return;
             }
@@ -157,7 +157,7 @@ namespace KazistovVvAr
                 // НЕ ПРЯЧЕМ САМИ: владелец должен увидеть подтверждение и нажать кнопку — иначе
                 // «увидел запрос, но не успел нажать» (жалоба 06.11.2026).
                 SetStatus("Камера работает: получено кадров " + CameraFrames +
-                          ".\nНажмите «ПРОДОЛЖИТЬ», чтобы начать AR.");
+                          ".\nНажмите «ПРОДОЛЖИТЬ», чтобы начать работу.");
                 if (actionLabel != null) actionLabel.text = "ПРОДОЛЖИТЬ";
                 return;
             }
@@ -310,7 +310,7 @@ namespace KazistovVvAr
             fallbackImage.raycastTarget = false;
 
             SetStatus("Камера включена (резервный режим).\n" +
-                      "ARCore не смог начать трекинг — видно камеру, но не плоскости.");
+                      "Трекинг камеры не запустился — видно камеру, но не плоскости.");
         }
 
         // ================================================================ интерфейс
@@ -400,7 +400,7 @@ namespace KazistovVvAr
             actionLabel.raycastTarget = false;
             actionLabel.text = "РАЗРЕШИТЬ КАМЕРУ";
 
-            SetStatus("Программе нужен доступ к камере: без него AR не видит стол.");
+            SetStatus("Программе нужен доступ к камере: без него не видно стол.");
         }
 
         private void OnActionPressed()
