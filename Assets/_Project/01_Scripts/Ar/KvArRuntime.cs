@@ -148,6 +148,15 @@ namespace KazistovVvAr
                 ui.buttonWidth = 240f;
                 ui.buttonHeight = 64f;
             }
+
+            // СТРАЖ КАМЕРЫ: явный запрос разрешения + доказательство, что камера реально
+            // отдаёт кадры, и резервный живой предпросмотр, если ARCore не смог (06.11.2026).
+            if (GetComponent<KvArCameraGate>() == null)
+                gameObject.AddComponent<KvArCameraGate>();
+
+            // УБРАТЬ ПОСТОРОННИЕ КАНВАСЫ: жёлтая заливка поверх камеры может быть
+            // world-space канвасом проекта, который сторож десктопного интерфейса не гасит.
+            HideForeignCanvases();
             if (disableVrOnlyComponents) DisableVrOnlyComponents();
             if (hideVirtualHangar) HideVirtualHangar();
             EnsureSingletonAudioListener();
@@ -469,6 +478,33 @@ namespace KazistovVvAr
             int guard = 0;
             while (p != null && guard++ < 6) { path = p.name + "/" + path; p = p.parent; }
             return path;
+        }
+
+        /// <summary>
+        /// ПОГАСИТЬ ВСЕ КАНВАСЫ, КРОМЕ НАШИХ (06.11.2026). Владелец видел жёлтую заливку во весь
+        /// экран при работающей камере. Причина — посторонний world-space канвас проекта
+        /// (`KazistovVv_UI`/окна), который не ловится сторожем. Оставляем только AR-пульт,
+        /// страж камеры и панель команд (она должна открываться по кнопке).
+        /// </summary>
+        private void HideForeignCanvases()
+        {
+            Canvas[] canvases = FindObjectsByType<Canvas>(FindObjectsInactive.Include);
+            int hidden = 0;
+            for (int i = 0; i < canvases.Length; i++)
+            {
+                Canvas canvas = canvases[i];
+                if (canvas == null) continue;
+                if (canvas.GetComponentInParent<KvArUi>(true) != null) continue;
+                if (canvas.GetComponentInParent<KvArCameraGate>(true) != null) continue;
+                if (canvas.GetComponentInParent<KvXrGroupPanel>(true) != null) continue;
+                if (canvas.GetComponentInParent<KvXrStartMenu>(true) != null) continue;
+                if (canvas.GetComponentInParent<KvXrWindowHost>(true) != null) continue;
+                if (!canvas.enabled) continue;
+                canvas.enabled = false;
+                hidden++;
+                Debug.Log("[KvAr] ИНТЕРФЕЙС: посторонний канвас «" + canvas.gameObject.name + "» погашен (камера не должна быть закрыта)");
+            }
+            if (hidden > 0) Debug.Log("[KvAr] ИНТЕРФЕЙС: погашено посторонних канвасов " + hidden);
         }
 
         public void BuildScreenButtons()

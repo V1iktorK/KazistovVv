@@ -58,26 +58,12 @@ namespace KazistovVvAr
 
         IEnumerator Start()
         {
-            // РАЗРЕШЕНИЕ КАМЕРЫ — ДО ИНИЦИАЛИЗАЦИИ XR. На Android это отдельный диалог; ARCore
-            // без него не получает кадров (экран остаётся заливкой, трекинг стоит). Спрашиваем
-            // ДО подъёма XR, иначе сессия стартует без камеры и владелец видит «всё жёлтым».
+            // РАЗРЕШЕНИЕ КАМЕРЫ — ДО ИНИЦИАЛИЗАЦИИ XR, И ЖДЁМ, ПОКА ВЛАДЕЛЕЦ НАЖМЁТ.
+            // Владелец 06.11.2026: «увидел запрос на подтверждение, но не успел нажать» — поэтому
+            // НИКАКОГО таймаута: на экране остаётся сообщение с кнопкой «РАЗРЕШИТЬ КАМЕРУ», и AR
+            // не стартует, пока разрешение не выдано (без него камера не используется вообще).
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (!Permission.HasUserAuthorizedPermission(Permission.Camera))
-            {
-                Debug.Log("[KvAr] КАМЕРА: запрашиваю разрешение (до инициализации XR)");
-                Permission.RequestUserPermission(Permission.Camera);
-                float permissionDeadline = Time.unscaledTime + 20f;
-                while (!Permission.HasUserAuthorizedPermission(Permission.Camera) &&
-                       Time.unscaledTime < permissionDeadline)
-                    yield return null;
-                Debug.Log("[KvAr] КАМЕРА: разрешение " +
-                          (Permission.HasUserAuthorizedPermission(Permission.Camera)
-                              ? "выдано" : "НЕ выдано — AR не сможет смотреть в камеру"));
-            }
-            else
-            {
-                Debug.Log("[KvAr] КАМЕРА: разрешение уже выдано");
-            }
+            yield return EnsureCameraPermissionForAr();
 #endif
 
             // XR ПОДНИМАЕМ САМИ, С ПОРЯДКОМ ПОД УСТРОЙСТВО.
@@ -131,6 +117,91 @@ namespace KazistovVvAr
         /// ЖДАТЬ, ПОКА XR ЗАКОНЧИТ ИНИЦИАЛИЗАЦИЮ. Условие готовности — `isInitializationComplete`
         /// (XR Management выставляет его после перебора лоадеров), а не «прошло N секунд».
         /// </summary>
+        private int cameraPermissionRequests;
+
+        /// <summary>
+        /// ЖДАТЬ РАЗРЕШЕНИЕ КАМЕРЫ БЕЗ ТАЙМАУТА. Показываем сообщение и кнопку, повторяем запрос
+        /// по нажатию; после двух отказов кнопка ведёт в настройки приложения Android. Без
+        /// разрешения XR не инициализируем: иначе ARCore стартует без камеры.
+        /// </summary>
+        private IEnumerator EnsureCameraPermissionForAr()
+        {
+            if (Permission.HasUserAuthorizedPermission(Permission.Camera))
+            {
+                Debug.Log("[KvAr] КАМЕРА: разрешение уже выдано");
+                yield break;
+            }
+
+            Debug.Log("[KvAr] КАМЕРА: запрашиваю разрешение (до инициализации XR)");
+            Permission.RequestUserPermission(Permission.Camera);
+
+            ui = GetComponent<KvArUi>();
+            if (ui == null) ui = gameObject.AddComponent<KvArUi>();
+            ui.buildOnStart = false;
+            ui.EnsureBuilt();
+            ui.SetButtonsVisible(false);
+            ui.SetStatus("AR: нужен доступ к камере");
+
+            float lastLog = Time.unscaledTime;
+            while (!Permission.HasUserAuthorizedPermission(Permission.Camera))
+            {
+                ui.ShowMessage(
+                    "Для режима AR программе нужен доступ к камере:\nбез него не видно стол и AR не работает.\n\n" +
+                    "Нажмите кнопку и разрешите камеру в системном окне.",
+                    cameraPermissionRequests >= 2 ? "ОТКРЫТЬ НАСТРОЙКИ" : "РАЗРЕШИТЬ КАМЕРУ",
+                    RequestCameraOrSettings);
+
+                if (Time.unscaledTime - lastLog > 5f)
+                {
+                    lastLog = Time.unscaledTime;
+                    Debug.Log("[KvAr] КАМЕРА: ждём разрешение (нажатий запроса: " + cameraPermissionRequests + ")");
+                }
+                yield return null;
+            }
+
+            ui.HideMessage();
+            Debug.Log("[KvAr] КАМЕРА: разрешение ВЫДАНО — продолжаю запуск AR");
+        }
+
+        private void RequestCameraOrSettings()
+        {
+            cameraPermissionRequests++;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (cameraPermissionRequests >= 2 && !Permission.HasUserAuthorizedPermission(Permission.Camera))
+            {
+                OpenAndroidAppSettings();
+                return;
+            }
+            Permission.RequestUserPermission(Permission.Camera);
+            Debug.Log("[KvAr] КАМЕРА: повторный запрос разрешения (" + cameraPermissionRequests + ")");
+#endif
+        }
+
+        private void OpenAndroidAppSettings()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                using (var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
+                using (var intent = new AndroidJavaObject("android.content.Intent",
+                           "android.settings.APPLICATION_DETAILS_SETTINGS"))
+                using (var uri = new AndroidJavaClass("android.net.Uri"))
+                {
+                    var data = uri.CallStatic<AndroidJavaObject>("fromParts", "package",
+                        activity.Call<string>("getPackageName"), null);
+                    intent.Call<AndroidJavaObject>("setData", data);
+                    activity.Call("startActivity", intent);
+                }
+                Debug.Log("[KvAr] КАМЕРА: открыты настройки приложения — включите «Камера»");
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[KvAr] КАМЕРА: не удалось открыть настройки: " + e.Message);
+            }
+#endif
+        }
+
         private IEnumerator WaitForXrInitialization()
         {
             float deadline = Time.unscaledTime + Mathf.Max(1f, xrInitTimeoutSeconds);

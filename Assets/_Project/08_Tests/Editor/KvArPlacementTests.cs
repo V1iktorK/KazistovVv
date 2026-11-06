@@ -522,5 +522,28 @@ namespace KazistovVvTests
             Assert.IsFalse(KvXrObjectFactory.AbsoluteWorldHeights,
                 "флаг абсолютных высот по умолчанию включён — VR/ПК поменяют раскладку");
         }
+        /// <summary>
+        /// ФОН КАМЕРЫ AR В URP: в рендерере ОБЯЗАТЕЛЕН `ARBackgroundRendererFeature`. Без него
+        /// камера работает (кадры идут, `dumpsys media.camera` показывает наше приложение), но
+        /// на экране вместо изображения заливка — владелец видел «всё жёлтым» (06.11.2026).
+        /// </summary>
+        [Test]
+        public void ArRenderer_HasArBackgroundFeature()
+        {
+            string[] renderers =
+            {
+                "Mobile_Renderer.asset",
+                "PC_Renderer.asset"
+            };
+            foreach (string renderer in renderers)
+            {
+                string path = Path.Combine(ProjectRoot, "Assets", "Settings", renderer);
+                Assert.IsTrue(File.Exists(path), "нет рендерера " + path);
+                string text = File.ReadAllText(path);
+                StringAssert.Contains("ARBackgroundRendererFeature", text,
+                    "в " + renderer + " нет ARBackgroundRendererFeature — фон AR-камеры не рисуется " +
+                    "(камера работает, экран остаётся заливкой)");
+            }
+        }
     }
 }
