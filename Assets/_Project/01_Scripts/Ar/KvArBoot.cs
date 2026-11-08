@@ -58,12 +58,22 @@ namespace KazistovVvAr
 
         IEnumerator Start()
         {
-            // РАЗРЕШЕНИЕ КАМЕРЫ — ДО ИНИЦИАЛИЗАЦИИ XR, И ЖДЁМ, ПОКА ВЛАДЕЛЕЦ НАЖМЁТ.
-            // Владелец 06.11.2026: «увидел запрос на подтверждение, но не успел нажать» — поэтому
-            // НИКАКОГО таймаута: на экране остаётся сообщение с кнопкой «РАЗРЕШИТЬ КАМЕРУ», и AR
-            // не стартует, пока разрешение не выдано (без него камера не используется вообще).
+            // РАЗРЕШЕНИЕ КАМЕРЫ — ТОЛЬКО ДЛЯ AR И ТОЛЬКО ПОСЛЕ ОПРЕДЕЛЕНИЯ РЕЖИМА (12.11.2026).
+            //
+            // ЧТО БЫЛО. Здесь стояло `yield return EnsureCameraPermissionForAr()` ДО определения
+            // режима, а внутри — `while (!Permission.HasUserAuthorizedPermission(Camera))` БЕЗ
+            // ТАЙМАУТА (так просил владелец 06.11.2026: «увидел запрос, но не успел нажать»).
+            // ЧЕМ ЭТО ГРОЗИЛО. На шлеме этот цикл и был концом запуска: системный диалог разрешения
+            // в очках нажать нечем, разрешение не выдаётся никогда, приложение стоит в
+            // «КАМЕРА: ждём разрешение (нажатий запроса: 0)» и до VR не доходит. Именно поэтому
+            // VR/MR на шлеме ни разу не проверяли — до него просто не доезжало (находка приёмки
+            // 12.11.2026, PICO A9210).
+            // ЧТО СТАЛО. Камера нужна ТОЛЬКО ветке AR. Разрешение запрашиваем сразу (диалог
+            // появляется параллельно с инициализацией XR — на планшете оператор видит его так же
+            // быстро, как раньше), но ЖДЁМ его только если режим оказался AR. В шлеме ждать нечего
+            // и нечего показывать: OpenXR сам управляет доступом к камере.
 #if UNITY_ANDROID && !UNITY_EDITOR
-            yield return EnsureCameraPermissionForAr();
+            RequestCameraPermissionNoWait();
 #endif
 
             // XR ПОДНИМАЕМ САМИ, С ПОРЯДКОМ ПОД УСТРОЙСТВО.
@@ -77,6 +87,9 @@ namespace KazistovVvAr
             WaitedSeconds = Time.unscaledTime - begin;
             XrInitializationComplete = IsXrInitializationComplete();
             ActiveLoaderName = ReadActiveLoaderName();
+
+            // РЕЖИМ ЧИТАЕТСЯ ОДИН РАЗ — ПО ИМЕНИ ПОДНЯТОГО ЛОАДЕРА. Дальше от него зависит
+            // ЕДИНСТВЕННОЕ решение про камеру: ждать разрешение (AR) или не ждать вовсе (VR/MR).
             Decided = KvArMode.Classify(ActiveLoaderName);
 
             if (logOnStart)
@@ -87,6 +100,19 @@ namespace KazistovVvAr
                            xrInitTimeoutSeconds.ToString("0") + " с") +
                           " · ожидание " + WaitedSeconds.ToString("0.0") + " с");
             }
+
+            // КАМЕРА: ЖДЁМ РАЗРЕШЕНИЕ ТОЛЬКО В AR. В шлеме (VR/MR) — не ждём ни секунды.
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (Decided == KvArBootKind.Ar)
+            {
+                yield return EnsureCameraPermissionForAr();
+            }
+            else
+            {
+                Debug.Log("[KvAr] КАМЕРА: режим " + Decided + " — разрешение камеры не требуется " +
+                          "(доступом управляет OpenXR), ожидания нет");
+            }
+#endif
 
             if (Decided == KvArBootKind.Ar)
             {
@@ -120,9 +146,29 @@ namespace KazistovVvAr
         private int cameraPermissionRequests;
 
         /// <summary>
+        /// ЗАПРОСИТЬ РАЗРЕШЕНИЕ КАМЕРЫ, НЕ ДОЖИДАЯСЬ ОТВЕТА (12.11.2026).
+        ///
+        /// Диалог Android появляется сразу, параллельно с инициализацией XR, поэтому на планшете
+        /// оператор видит его так же быстро, как раньше. Ждём ответа — отдельно и только в AR
+        /// (`EnsureCameraPermissionForAr`): в шлеме ждать нечего, диалог там нажать нечем.
+        /// </summary>
+        private void RequestCameraPermissionNoWait()
+        {
+            if (Permission.HasUserAuthorizedPermission(Permission.Camera))
+            {
+                Debug.Log("[KvAr] КАМЕРА: разрешение уже выдано");
+                return;
+            }
+            Debug.Log("[KvAr] КАМЕРА: запрашиваю разрешение (до инициализации XR)");
+            Permission.RequestUserPermission(Permission.Camera);
+        }
+
+        /// <summary>
         /// ЖДАТЬ РАЗРЕШЕНИЕ КАМЕРЫ БЕЗ ТАЙМАУТА. Показываем сообщение и кнопку, повторяем запрос
-        /// по нажатию; после двух отказов кнопка ведёт в настройки приложения Android. Без
-        /// разрешения XR не инициализируем: иначе ARCore стартует без камеры.
+        /// по нажатию; после двух отказов кнопка ведёт в настройки приложения Android.
+        ///
+        /// ВЫЗЫВАЕТСЯ ТОЛЬКО В РЕЖИМЕ AR (ветка планшета/телефона). В шлеме этот цикл означал бы
+        /// вечное ожидание: системный диалог в очках нажать нечем (находка приёмки 12.11.2026).
         /// </summary>
         private IEnumerator EnsureCameraPermissionForAr()
         {
@@ -132,7 +178,7 @@ namespace KazistovVvAr
                 yield break;
             }
 
-            Debug.Log("[KvAr] КАМЕРА: запрашиваю разрешение (до инициализации XR)");
+            Debug.Log("[KvAr] КАМЕРА: ждём разрешение в режиме AR (до инициализации сцены)");
             Permission.RequestUserPermission(Permission.Camera);
 
             ui = GetComponent<KvArUi>();

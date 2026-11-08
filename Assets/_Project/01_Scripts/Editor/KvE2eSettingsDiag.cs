@@ -463,6 +463,35 @@ public static class KvE2eSettingsDiag
                       last.IndexOf(KvXrSettings.ModeShortLabel(toggledMode), StringComparison.Ordinal) >= 0,
                       "строка 7: «" + last + "»");
 
+                // 6.6 РЕЕСТР КОМАНД: НИ ОДНОГО ПУНКТА БЕЗ ФУНКЦИОНАЛА (12.11.2026).
+                //
+                // ТРЕБОВАНИЕ ВЛАДЕЛЬЦА: «чтобы все кнопочки были заполнены функционалом».
+                // ПОЧЕМУ ЗДЕСЬ, А НЕ В СТАТИЧЕСКОМ ГЕЙТЕ. Гейт (`Tools/acceptance-gate.ps1`,
+                // проверка UI_STUBS) читает ИСХОДНИКИ и считает, сколько раз регистрируется id —
+                // то есть он ЗНАЕТ ТОЛЬКО ЭВРИСТИКУ и не видит порядка перекрытия. Здесь проверяется
+                // ФАКТ: после ВСЕХ регистраций (менеджер + хабы этапов) в реестре не должно
+                // остаться команды с `Stub = true` или с пустым `Execute` — иначе кнопка в
+                // интерфейсе есть, а действия за ней нет.
+                int stubCommands = 0;
+                int emptyHandlers = 0;
+                string firstBad = "";
+                var registry = KvCommands.All;
+                for (int i = 0; i < registry.Count; i++)
+                {
+                    KvCommand cmd = registry[i];
+                    if (cmd == null) continue;
+                    bool bad = cmd.Stub || cmd.Execute == null;
+                    if (!bad) continue;
+                    if (cmd.Stub) stubCommands++;
+                    if (cmd.Execute == null) emptyHandlers++;
+                    if (firstBad.Length == 0) firstBad = cmd.Id;
+                }
+                Check("6.6 в реестре команд нет кнопок без функционала (Stub / пустой обработчик)",
+                      stubCommands == 0 && emptyHandlers == 0,
+                      "команд в реестре: " + registry.Count + " · заглушек: " + stubCommands +
+                      " · без обработчика: " + emptyHandlers +
+                      (firstBad.Length > 0 ? " · первая: " + firstBad : ""));
+
                 Next(6);
                 break;
             }
