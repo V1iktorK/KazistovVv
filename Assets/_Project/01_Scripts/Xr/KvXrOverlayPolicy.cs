@@ -66,6 +66,22 @@ namespace KazistovVvXr
         public const string VrGroupCanvasName = "KvXrGroupCanvas";
 
         /// <summary>
+        /// КАНВАС ПАНЕЛЕЙ ОПЕРАТОРА (R6-1, третий круг приёмки 12.11.2026).
+        ///
+        /// ЧТО БЫЛО. Dock-панели (настройки, свойства, дерево, горячие клавиши) жили в общем
+        /// канвасе десктопной оболочки `KazistovVvCanvas`. В AR и в шлеме этот канвас штатно
+        /// погашен — и правильно: десктопного интерфейса там быть не должно. Но вместе с ним
+        /// гасла и панель настроек, которую оператор ЗАПРОСИЛ ПРЯМО. На планшете это и выглядело
+        /// как «команда выполнена, панели нет»: флаг включён, прямоугольник в экране, а рисовать
+        /// некому.
+        ///
+        /// ЧТО СТАЛО. Панели оператора переехали на СВОЙ канвас (это его имя), который сторож
+        /// гасит только тогда, когда запрошенных панелей нет. Правило — чистая функция
+        /// <see cref="ClassifyDockCanvas"/>: его можно проверить тестом без сцены и без устройства.
+        /// </summary>
+        public const string DockCanvasName = "KazistovVvDockCanvas";
+
+        /// <summary>
         /// ЧТО ДЕЛАТЬ С ОБЪЕКТОМ ПО ЕГО ИМЕНИ. Незнакомое имя — «не трогать»: молчаливое
         /// гашение чего-то нужного хуже, чем лишний объект в шлеме.
         /// </summary>
@@ -79,6 +95,14 @@ namespace KazistovVvXr
 
             if (string.Equals(objectName, PanelAnchorName, StringComparison.Ordinal))
                 return KvXrOverlayDisposition.Remove;
+
+            // КАНВАС ПАНЕЛЕЙ ОПЕРАТОРА по ОДНОМУ ИМЕНИ — тоже десктопный интерфейс: по
+            // происхождению это часть оболочки. Разрешение показать его даёт только признак
+            // «оператор открыл панель командой» — см. `ClassifyDockCanvas` и перегрузку
+            // `Classify(string, bool)`. Здесь, без этого признака, ответ обязан быть «погасить»:
+            // иначе любой вызов, не знающий о панелях, оставил бы десктопный оверлей в AR.
+            if (IsDockCanvas(objectName))
+                return KvXrOverlayDisposition.HideRendering;
 
             if (string.Equals(objectName, DesktopCanvasName, StringComparison.Ordinal) ||
                 string.Equals(objectName, DesktopUiRootName, StringComparison.Ordinal))
@@ -94,6 +118,64 @@ namespace KazistovVvXr
             return string.Equals(objectName, VrPanelName, StringComparison.Ordinal) ||
                    string.Equals(objectName, VrPanelCanvasName, StringComparison.Ordinal) ||
                    string.Equals(objectName, VrGroupCanvasName, StringComparison.Ordinal);
+        }
+
+        /// <summary>Это канвас панелей оператора (настройки/свойства/дерево/горячие клавиши)?</summary>
+        public static bool IsDockCanvas(string objectName)
+        {
+            return string.Equals(objectName, DockCanvasName, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// ГАСИТЬ ЛИ КАНВАС ПАНЕЛЕЙ ОПЕРАТОРА.
+        ///
+        /// `hostsRequestedPanel` — в канвасе есть панель, которую оператор запросил В ЭТОМ СЕАНСЕ
+        /// (`KvDockPanel.OperatorRequested`). Это единственное, что отличает «панель открыли
+        /// командой» от «панель была в сохранённой раскладке»: первое — прямое указание оператора
+        /// и гасить его нельзя, второе — обычный десктопный интерфейс, которого в шлеме/AR быть
+        /// не должно.
+        ///
+        /// Почему это правило, а не проверка внутри сторожа: сторож вызывается по таймеру и обязан
+        /// оставаться тонким применением политики. Здесь же решение проверяется тестом без сцены —
+        /// обе ветки, потому что «всегда гасить» и «всегда оставлять» одинаково ломают продукт.
+        /// </summary>
+        public static KvXrOverlayDisposition ClassifyDockCanvas(bool hostsRequestedPanel)
+        {
+            return ClassifyDockCanvas(hostsRequestedPanel, false);
+        }
+
+        /// <summary>
+        /// ТО ЖЕ ПРАВИЛО С УЧЁТОМ ШЛЕМА.
+        ///
+        /// ЗАЧЕМ ОТДЕЛЬНЫЙ ПРИЗНАК. В шлеме экранный канвас рисуется как плоский слой поверх
+        /// стерео-картинки — то есть панель оператора выглядела бы там как десктопный оверлей,
+        /// который владелец прямо запретил («в шлеме его быть не должно»). В шлеме настройки
+        /// открываются МИРОВЫМ окном (`KvXrWindowHost`), а не экранной панелью. На планшете в AR
+        /// наоборот: экранная панель — единственный путь к переключателю VR/MR, и именно её
+        /// открывает команда.
+        ///
+        /// Отсюда правило: шлем есть — гасим всегда; шлема нет (планшет/AR) — решает признак
+        /// запрошенной панели. Без этой оговорки кнопка «Настройки» стартового меню
+        /// (`KvXrStartMenu`) тянула бы десктопную панель в шлем.
+        /// </summary>
+        public static KvXrOverlayDisposition ClassifyDockCanvas(bool hostsRequestedPanel,
+                                                                bool headsetPresent)
+        {
+            if (headsetPresent) return KvXrOverlayDisposition.HideRendering;
+            return hostsRequestedPanel
+                ? KvXrOverlayDisposition.Keep
+                : KvXrOverlayDisposition.HideRendering;
+        }
+
+        /// <summary>
+        /// РАСШИРЕННАЯ КЛАССИФИКАЦИЯ: имя + факт «в канвасе есть запрошенная панель». Прежняя
+        /// сигнатура <see cref="Classify(string)"/> остаётся: по имени канвас панелей — десктопный
+        /// интерфейс, и это правильно для всех, кто решает судьбу объекта, не заглядывая внутрь.
+        /// </summary>
+        public static KvXrOverlayDisposition Classify(string objectName, bool hostsRequestedPanel)
+        {
+            if (IsDockCanvas(objectName)) return ClassifyDockCanvas(hostsRequestedPanel);
+            return Classify(objectName);
         }
 
         /// <summary>

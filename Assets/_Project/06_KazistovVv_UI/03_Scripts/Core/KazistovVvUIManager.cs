@@ -6,6 +6,7 @@ using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.UI;
 using UnityEngine.UI;
+using KazistovVvXr;
 using TrajectoryCore;
 
 namespace KazistovVvUI
@@ -103,6 +104,17 @@ namespace KazistovVvUI
         private Canvas canvas;
         private RectTransform canvasRect;
         private CanvasScaler scaler;
+
+        // ------------------------------------------------------------------ КАНВАС ПАНЕЛЕЙ (R6-1)
+        // ЧТО БЫЛО. Dock-панели строились в общем канвасе оболочки. В AR на планшете и в шлеме
+        // этот канвас штатно погашен (десктопного интерфейса там быть не должно) — и вместе с ним
+        // гасла панель настроек, открытая ПРЯМОЙ командой оператора. Команда «выполнена», на
+        // экране ничего; в журнале ни одной строки о панели, потому что по флагу и геометрии всё
+        // «в порядке». ЧТО СТАЛО. Панели оператора — на собственном канвасе (см. `BuildPanelOverlay`),
+        // который сторож гасит только когда запрошенных панелей нет.
+        private Canvas panelCanvas;
+        private RectTransform panelCanvasRect;
+        private CanvasScaler panelScaler;
 
         private KvMenuBar menuBar;
         private KvToolbar toolbar;
@@ -220,8 +232,13 @@ namespace KazistovVvUI
         /// ЗАКРЫВАЛО — а оператор не видел ни открытия, ни закрытия. На планшете в AR это и
         /// выглядело как «команда выполнена, панели нет» (находка R6-1).
         ///
-        /// ЧТО СТАЛО. Здесь «видна» = флаг + панель попадает в экран (см. `KvDockGeometry`).
+        /// ЧТО СТАЛО. Здесь «видна» = флаг + РИСОВАНИЕ + панель попадает в экран (см. `KvDockGeometry`).
         /// Повторное нажатие закрывает только то, что оператор действительно видит.
+        ///
+        /// ТРЕТЬЕ СЛАГАЕМОЕ — РИСОВАНИЕ (третий круг приёмки, 12.11.2026). Первые две версии этой
+        /// правки проверяли только флаг и прямоугольник, и на планшете в AR обе отвечали «видна»,
+        /// хотя сторож оверлея погасил канвас и на экране не было ничего — ровно находка R6-1,
+        /// вернувшаяся из приёмки. Панель, которую не рисует ни один рендерер, — не «видна».
         /// </summary>
         public bool IsPanelEffectivelyVisible(string id)
         {
@@ -231,6 +248,13 @@ namespace KazistovVvUI
 
             KvDockPanel panel = DockById(id);
             if (panel == null || panel.Root == null) return false;
+
+            // РИСОВАНИЕ: объект панели активен в иерархии и её канвас не выключен.
+            Canvas ownerCanvas = panelCanvas;
+            if (!KvDockGeometry.IsRenderable(panel.Shown,
+                    panel.Root.gameObject.activeInHierarchy,
+                    ownerCanvas == null || ownerCanvas.enabled))
+                return false;
 
             // ПРЯМОУГОЛЬНИК ПАНЕЛИ И ЭКРАН — В ОДНОЙ СИСТЕМЕ КООРДИНАТ (исправлено 12.11.2026).
             //
@@ -242,17 +266,20 @@ namespace KazistovVvUI
             // исправной панели.
             // ЧТО СТАЛО. Обе стороны берутся в координатах КАНВАСА: экран — это `canvasRect.rect`,
             // а прямоугольник панели сдвигается на `canvasRect.rect.min`, то есть в ту же систему.
-            Rect canvasLocal = canvasRect != null ? canvasRect.rect : new Rect(0f, 0f, Screen.width, Screen.height);
+            // С 12.11.2026 панели живут на СВОЁМ канвасе, поэтому берётся его прямоугольник (размер
+            // тот же — масштаб копируется), иначе координаты панели и экрана разошлись бы.
+            RectTransform screenRect = panelCanvasRect != null ? panelCanvasRect : canvasRect;
+            Rect canvasLocal = screenRect != null ? screenRect.rect : new Rect(0f, 0f, Screen.width, Screen.height);
             Vector2 screen = new Vector2(canvasLocal.width, canvasLocal.height);
             if (screen.x <= 0f || screen.y <= 0f) screen = new Vector2(Screen.width, Screen.height);
 
             Rect area;
-            if (canvasRect != null)
+            if (screenRect != null)
             {
                 Vector3[] corners = new Vector3[4];
                 panel.Root.GetWorldCorners(corners);
-                Vector2 a = canvasRect.InverseTransformPoint(corners[0]);
-                Vector2 b = canvasRect.InverseTransformPoint(corners[2]);
+                Vector2 a = screenRect.InverseTransformPoint(corners[0]);
+                Vector2 b = screenRect.InverseTransformPoint(corners[2]);
                 area = Rect.MinMaxRect(Mathf.Min(a.x, b.x), Mathf.Min(a.y, b.y),
                                        Mathf.Max(a.x, b.x), Mathf.Max(a.y, b.y));
                 // Сдвиг начала координат в левый-нижний угол канваса.
@@ -690,6 +717,9 @@ namespace KazistovVvUI
             // восстанавливается сразу — иначе интерфейс «вылезал» бы поверх меню.
             canvasGo.SetActive(uiVisible);
 
+            // КАНВАС ПАНЕЛЕЙ — ДО первой панели: `MakeDock` строит панели уже в нём.
+            BuildPanelOverlay();
+
             RegisterCommands();
             callbacks = BuildCallbacks();
 
@@ -777,7 +807,12 @@ namespace KazistovVvUI
             // ЭТАП 3: сохранённая раскладка (PlayerPrefs) имеет приоритет над значениями по умолчанию.
             KvPanelLayout saved = KvLayoutStore.Load(key);
             KvDockPanel panel = gameObject.AddComponent<KvDockPanel>();
-            panel.Build(canvasRect, canvas, title, icon, side, thickness, key);
+            // ПАНЕЛИ СТРОЯТСЯ В СВОЁМ КАНВАСЕ (R6-1, третий круг): родитель и «владелец» — канвас
+            // панелей, а не оболочка. Размеры совпадают (тот же `CanvasScaler` и опорное
+            // разрешение), поэтому вся арифметика раскладки остаётся прежней.
+            RectTransform dockParent = panelCanvasRect != null ? panelCanvasRect : canvasRect;
+            Canvas dockOwner = panelCanvas != null ? panelCanvas : canvas;
+            panel.Build(dockParent, dockOwner, title, icon, side, thickness, key);
             EnsureDockRendersAboveOverlays(panel);
             if (saved != null)
             {
@@ -835,6 +870,107 @@ namespace KazistovVvUI
         /// внутриигровых оверлеев: панель — это интерфейс оператора, её не должен закрывать никто.
         /// </summary>
         public const int DockSortingOrder = 500;
+
+        /// <summary>
+        /// СОБСТВЕННЫЙ КАНВАС DOCK-ПАНЕЛЕЙ (R6-1, третий круг приёмки 12.11.2026).
+        ///
+        /// ЧТО БЫЛО. Панели строились в общем канвасе оболочки `KazistovVvCanvas`. Там их и
+        /// находил сторож оверлея: в AR и в шлеме он гасит РИСОВАНИЕ всего десктопного
+        /// интерфейса — раз в секунду, по имени канваса-предка. Панель настроек, открытая прямой
+        /// командой оператора, гасла вместе с ним. Отсюда наблюдение тестировщика: строка
+        /// «выбрана «Настройки и справка»» в журнале есть, панели нет, и НИ ОДНОЙ строки «ПАНЕЛИ:»
+        /// тоже нет — починка раскладки не запускалась, ведь флаг и прямоугольник были в порядке.
+        ///
+        /// ПОЧЕМУ ОТДЕЛЬНЫЙ КАНВАС, А НЕ ФЛАГ. Пока панели лежат в общем канвасе, у сторожа ровно
+        /// два выбора: оставить рисование ВСЕГО десктопного интерфейса (меню, тулбар, дерево,
+        /// статус — они закроют камеру AR, то есть вернут «жёлтый экран») либо погасить его
+        /// целиком вместе с панелью оператора. Третьего варианта у него нет. Отдельный канвас даёт
+        /// этот третий вариант: гасится и включается ТОЛЬКО он, и только по запросу оператора
+        /// (правило — `KvXrOverlayPolicy.ClassifyDockCanvas`).
+        ///
+        /// ПОЧЕМУ ПАРАМЕТРЫ МАСШТАБА КОПИРУЮТСЯ. Вся арифметика раскладки панелей (толщина,
+        /// прилипание, перетаскивание, ограничение по краям) считается в единицах РОДИТЕЛЬСКОГО
+        /// прямоугольника. Если бы масштаб отличался от оболочки, панель на 300 единиц стала бы на
+        /// экране другого размера — на планшете это сразу видно. Поэтому `CanvasScaler` канваса
+        /// панелей повторяет настройки оболочки один в один, включая пользовательский масштаб.
+        /// </summary>
+        private void BuildPanelOverlay()
+        {
+            if (panelCanvas != null) return;
+
+            GameObject go = new GameObject(KvXrOverlayPolicy.DockCanvasName, typeof(Canvas),
+                typeof(CanvasScaler), typeof(GraphicRaycaster));
+            go.transform.SetParent(transform, false);
+
+            panelCanvas = go.GetComponent<Canvas>();
+            panelCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            panelCanvas.sortingOrder = DockSortingOrder;
+
+            panelScaler = go.GetComponent<CanvasScaler>();
+            panelScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            panelScaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+            panelScaler.matchWidthOrHeight = 0.5f;
+            ApplyUiScale();
+
+            panelCanvasRect = (RectTransform)go.transform;
+            panelCanvasRect.sizeDelta = new Vector2(uiReferenceWidth, uiReferenceHeight);
+
+            // Видимость оболочки распространяется и на панели: TAB прячет интерфейс целиком.
+            go.SetActive(uiVisible);
+        }
+
+        /// <summary>Канвас dock-панелей оператора (для проверок и сторожа оверлея). Может быть null до сборки.</summary>
+        public Canvas PanelCanvas { get { return panelCanvas; } }
+
+        /// <summary>
+        /// Канвас ВСЕЙ оболочки (дерево, тулбар, меню, статус). Нужен проверкам и Е2Е, чтобы
+        /// эмулировать поведение сторожа оверлея: в AR/шлеме этот канвас штатно погашен, и панели
+        /// оператора обязаны оставаться видимыми даже тогда (находка R6-1).
+        /// </summary>
+        public Canvas RootCanvas { get { return canvas; } }
+
+        /// <summary>Прямоугольник канваса панелей (для проверок геометрии).</summary>
+        public RectTransform PanelCanvasRect { get { return panelCanvasRect; } }
+
+        /// <summary>
+        /// ВКЛЮЧИТЬ РИСОВАНИЕ ПАНЕЛЕЙ, ЕСЛИ ЕГО ВЫКЛЮЧИЛИ. Возвращает `true`, если что-то
+        /// действительно пришлось включить — это и попадает в журнал строкой «ПАНЕЛИ:».
+        ///
+        /// ЗАЧЕМ. Сторож оверлея гасит канвас панелей, пока запрошенных панелей нет (это правильно:
+        /// в AR десктопного интерфейса быть не должно). Но `ShowPanel` обязан ГАРАНТИРОВАТЬ, что
+        /// после его вызова рендерер панель видит, а не «отрапортовать успех по флагу». Поэтому
+        /// здесь включение идёт ДО проверки видимости, в том же вызове, без ожидания следующего
+        /// тика сторожа.
+        /// </summary>
+        private bool EnsurePanelCanvasRendering()
+        {
+            if (panelCanvas == null || panelCanvasRect == null) return false;
+
+            bool repaired = false;
+            GameObject go = panelCanvas.gameObject;
+            if (!go.activeSelf)
+            {
+                go.SetActive(true);
+                repaired = true;
+            }
+            if (!panelCanvas.enabled)
+            {
+                panelCanvas.enabled = true;
+                repaired = true;
+            }
+            // Родитель канваса панелей — объект оболочки. Если выключен РОДИТЕЛЬ, не рисуется
+            // ничего и никакая панель не поможет; его состояние — отдельное решение (TAB,
+            // стартовое меню), и здесь мы его насильно не включаем, а только сообщаем в журнал.
+            Transform parent = go.transform.parent;
+            if (parent != null && !parent.gameObject.activeInHierarchy)
+                QaLog("канвас панелей «" + KvXrOverlayPolicy.DockCanvasName +
+                      "» включён, но выключен его родитель «" + parent.gameObject.name +
+                      "» — панель не нарисуется, пока не показан интерфейс");
+            if (repaired)
+                QaLog("канвас панелей «" + KvXrOverlayPolicy.DockCanvasName +
+                      "» был погашен — рисование включено перед показом панели");
+            return repaired;
+        }
 
         private void SavePanelState(string key, KvDockPanel panel)
         {
@@ -912,10 +1048,12 @@ namespace KazistovVvUI
 
         private void ApplyUiScale()
         {
-            if (scaler == null) return;
             float scale = Mathf.Clamp(KvSettings.UiScale, 0.6f, 1.6f);
-            scaler.referenceResolution = new Vector2(uiReferenceWidth / scale,
-                uiReferenceHeight / scale);
+            Vector2 reference = new Vector2(uiReferenceWidth / scale, uiReferenceHeight / scale);
+            // Канвас панелей обязан масштабироваться ТАК ЖЕ, как оболочка: иначе панель на 300
+            // единиц займёт на экране другую долю, а раскладка считается в единицах канваса.
+            if (scaler != null) scaler.referenceResolution = reference;
+            if (panelScaler != null) panelScaler.referenceResolution = reference;
         }
 
         // ------------------------------------------------------------------ тема
@@ -933,6 +1071,9 @@ namespace KazistovVvUI
             rebuilding = true;
 
             if (canvas != null) Destroy(canvas.gameObject);
+            // Канвас панелей пересобирается вместе с оболочкой: масштаб интерфейса мог измениться,
+            // а панели обязаны масштабироваться ровно как оболочка (иначе раскладка «поедет»).
+            if (panelCanvas != null) Destroy(panelCanvas.gameObject);
             if (menuBar != null) Destroy(menuBar);
             if (toolbar != null) Destroy(toolbar);
             if (tree != null) Destroy(tree);
@@ -947,6 +1088,9 @@ namespace KazistovVvUI
             if (hotkeys != null) Destroy(hotkeys);
 
             canvas = null;
+            panelCanvas = null;
+            panelCanvasRect = null;
+            panelScaler = null;
             menuBar = null;
             toolbar = null;
             tree = null;
@@ -1868,24 +2012,53 @@ namespace KazistovVvUI
         /// </summary>
         public void TogglePanel(string id)
         {
-            if (IsPanelEffectivelyVisible(id)) SetPanel(id, false);
-            else ShowPanel(id);
+            if (IsPanelEffectivelyVisible(id))
+            {
+                // ЗАКРЫВАЕМ: снимаем признак «запрошена оператором» — иначе сторож оверлея
+                // продолжит держать канвас панелей включённым для панели, которой уже нет.
+                KvDockPanel closing = DockById(id);
+                if (closing != null) closing.MarkOperatorRequested(false);
+                SetPanel(id, false);
+            }
+            else
+            {
+                ShowPanel(id);
+            }
         }
 
         /// <summary>
-        /// ПОКАЗАТЬ ПАНЕЛЬ ГАРАНТИРОВАННО: включить флаг, при необходимости починить раскладку и
-        /// записать в журнал, что именно получилось. Геометрия — числа, а не слова: по этой строке
-        /// на устройстве сразу видно, уехала панель или её закрыл кто-то другой.
+        /// ПОКАЗАТЬ ПАНЕЛЬ ГАРАНТИРОВАННО: включить флаг, при необходимости починить РИСОВАНИЕ,
+        /// затем раскладку, и записать в журнал, что именно получилось. Геометрия и состояние
+        /// канваса — числа и факты, а не слова: по этой строке на устройстве сразу видно, уехала
+        /// панель, её погасил сторож или её закрыл кто-то другой.
+        ///
+        /// ПОРЯДОК ШАГОВ ВАЖЕН (третий круг приёмки, 12.11.2026). Сначала — признак «панель
+        /// запрошена оператором» и ВКЛЮЧЕНИЕ КАНВАСА, потом проверка видимости. В прежней версии
+        /// проверка шла сразу после флага, и на планшете в AR она отвечала «видна» (флаг есть,
+        /// прямоугольник в экране), хотя канвас был погашен сторожем: строка «ПАНЕЛИ:» не
+        /// печаталась вовсе, а на экране не появлялось ничего — ровно то, что вернулось из приёмки.
         /// </summary>
         public void ShowPanel(string id)
         {
-            SetPanel(id, true);
-            if (IsPanelEffectivelyVisible(id)) return;
-
             KvDockPanel panel = DockById(id);
+            if (panel != null) panel.MarkOperatorRequested(true);
+            SetPanel(id, true);
+
+            // ШАГ 1. РИСОВАНИЕ. Сторож десктопного оверлея в AR/шлеме гасит канвас панелей, пока
+            // запрошенных панелей нет. Мы только что её запросили — включаем ДО проверки видимости.
+            EnsurePanelCanvasRendering();
+
+            if (IsPanelEffectivelyVisible(id))
+            {
+                QaLog("панель «" + id + "» показана: " + DescribeDock(panel) +
+                      " · канвас «" + (panelCanvas != null ? panelCanvas.name : "нет") +
+                      "» включён, панель в экране");
+                return;
+            }
+
             if (panel == null) return;
 
-            // РАСКЛАДКА УЕХАЛА — ВОЗВРАЩАЕМ НА ШТАТНОЕ МЕСТО.
+            // ШАГ 2. РАСКЛАДКА УЕХАЛА — ВОЗВРАЩАЕМ НА ШТАТНОЕ МЕСТО.
             // Источник «уехавшей» раскладки — сохранённое в PlayerPrefs состояние с другого
             // разрешения/ориентации (планшет, телефон, другая плотность). Починить дешевле, чем
             // объяснять оператору, что панель «где-то есть».
@@ -1975,6 +2148,10 @@ namespace KazistovVvUI
         {
             uiVisible = visible;
             if (canvas != null) canvas.gameObject.SetActive(visible);
+            // Панели оператора — часть интерфейса: TAB прячет их вместе с оболочкой. Это НЕ
+            // отменяет признак «запрошена оператором»: при повторном показе интерфейса
+            // `ShowPanel` включит канвас снова.
+            if (panelCanvas != null) panelCanvas.gameObject.SetActive(visible);
         }
 
         // ------------------------------------------------------------------ дерево моделей

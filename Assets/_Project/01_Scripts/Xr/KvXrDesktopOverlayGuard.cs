@@ -48,6 +48,7 @@ namespace KazistovVvXr
         private int removedAnchors;
         private int keptVrObjects;
         private bool firstReportDone;
+        private bool operatorPanelReportDone;
 
         void Start()
         {
@@ -87,7 +88,27 @@ namespace KazistovVvXr
                     continue;
                 }
 
-                if (!BelongsToDesktopUi(c.transform)) continue;
+                // КАНВАС ПАНЕЛЕЙ ОПЕРАТОРА (R6-1, третий круг приёмки 12.11.2026). У него своё
+                // правило: он гасится как десктопный интерфейс, НО только пока в нём нет панели,
+                // которую оператор открыл командой. Иначе на планшете в AR команда «Настройки»
+                // выполнялась, а панели не было: канвас гасил именно этот сторож, и гасил бы
+                // снова каждый тик, сколько бы панель ни включали из команды.
+                //
+                // Вложенные канвасы панелей отдельно не трогаем вовсе: их судьбу решает корневой
+                // канвас панелей — под выключенным корнем не рисуется ничего, а «погашенный»
+                // вложенный канвас помешал бы панели, когда корень снова включат.
+                if (KvXrOperatorPanelCanvas.IsOperatorPanelCanvas(c))
+                {
+                    if (!KvXrOperatorPanelCanvas.IsDockRootCanvas(c)) continue;
+                    if (Decide(c.gameObject.name, true, HostsRequestedPanel(c),
+                               KvXrInputSource.HeadsetPresent) == KvXrOverlayDisposition.Keep)
+                    {
+                        ReportOperatorPanelsKept(c);
+                        continue;   // рисование и райкастер остаются: панель открыта по команде
+                    }
+                }
+                else if (Decide(c.gameObject.name, BelongsToDesktopUi(c.transform), false) ==
+                         KvXrOverlayDisposition.Keep) continue;
 
                 if (c.enabled) c.enabled = false;         // рисование выключено, логика продолжает работать
                 hiddenCanvases++;
@@ -128,6 +149,72 @@ namespace KazistovVvXr
                     " (иначе луч нажимал бы невидимые кнопки десктопного интерфейса)" +
                     " · команд в реестре достаточно для панели: " + (CountResolvableCommands() > 0 ? "да" : "НЕТ"));
             }
+        }
+
+        /// <summary>
+        /// РЕШЕНИЕ ПО ОДНОМУ КАНВАСУ — ЧИСТАЯ ФУНКЦИЯ (R6-1, третий круг приёмки 12.11.2026).
+        ///
+        /// ЗАЧЕМ ОТДЕЛЬНО ОТ `Guard()`. `Guard()` обходит сцену — в тесте без сцены его не
+        /// проверить. А решение «гасить или оставить» обязано быть проверяемым: именно здесь
+        /// ошиблись две предыдущие версии правки R6-1 (гасили канвас, в котором лежит открытая
+        /// оператором панель), и именно здесь теперь стоит правило, а не порядок строк в цикле.
+        ///
+        /// ЧТО ЗНАЧИТ `belongsToDesktopUi`. Канвас принадлежит десктопному интерфейсу — по своему
+        /// имени или по имени предка (`BelongsToDesktopUi`). Канвас панелей оператора проверяется
+        /// РАНЬШЕ этого признака: он тоже «десктопный», но у него отдельное правило.
+        /// </summary>
+        public static KvXrOverlayDisposition Decide(string canvasName, bool belongsToDesktopUi,
+                                                       bool hostsRequestedPanel,
+                                                       bool headsetPresent = false)
+        {
+            // Интерфейс шлема не трогаем никогда: это единственная панель управления в шлеме.
+            if (KvXrOverlayPolicy.IsVrInterface(canvasName)) return KvXrOverlayDisposition.Keep;
+
+            // Панели оператора: гасим, только пока оператор ничего не открывал, и всегда — в шлеме
+            // (там настройки открываются мировым окном, а экранная панель была бы десктопным
+            // оверлеем, который владелец запретил).
+            if (KvXrOverlayPolicy.IsDockCanvas(canvasName))
+                return KvXrOverlayPolicy.ClassifyDockCanvas(hostsRequestedPanel, headsetPresent);
+
+            return belongsToDesktopUi
+                ? KvXrOverlayDisposition.HideRendering
+                : KvXrOverlayDisposition.Keep;
+        }
+
+        /// <summary>
+        /// В КАНВАСЕ ЕСТЬ ПАНЕЛЬ, КОТОРУЮ ОПЕРАТОР ОТКРЫЛ КОМАНДОЙ.
+        ///
+        /// Условие двойное и оба слагаемых обязательны: `OperatorRequested` (панель запросили
+        /// ИМЕННО СЕЙЧАС, а не она пришла из сохранённой раскладки) и `Shown` (панель на экране).
+        /// Одного `Shown` мало: раскладка из `PlayerPrefs` включает панель дерева на старте, и по
+        /// такому признаку сторож оставил бы десктопный оверлей в шлеме — ровно то, что владелец
+        /// запретил.
+        /// </summary>
+        private static bool HostsRequestedPanel(Canvas canvas)
+        {
+            if (canvas == null) return false;
+            KazistovVvUI.KvDockPanel[] panels =
+                canvas.GetComponentsInChildren<KazistovVvUI.KvDockPanel>(true);
+            for (int i = 0; i < panels.Length; i++)
+            {
+                KazistovVvUI.KvDockPanel panel = panels[i];
+                if (panel == null) continue;
+                if (panel.OperatorRequested && panel.Shown) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// СТРОКА В ЖУРНАЛ О ПАНЕЛЯХ ОПЕРАТОРА. Печатается один раз, по появлению: иначе она
+        /// повторялась бы каждый тик сторожа. По этой строке на устройстве видно, что путь
+        /// «команда → панель» дошёл до рендерера, а не остановился на флаге (находка R6-1).
+        /// </summary>
+        private void ReportOperatorPanelsKept(Canvas canvas)
+        {
+            if (!logOnGuard || operatorPanelReportDone) return;
+            operatorPanelReportDone = true;
+            Debug.Log("[KvXr] ПАНЕЛИ: канвас «" + canvas.name + "» оставлен включённым — " +
+                      "в нём открытая по команде панель оператора (R6-1)");
         }
 
         /// <summary>

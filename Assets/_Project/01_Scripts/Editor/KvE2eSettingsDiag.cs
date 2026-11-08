@@ -289,6 +289,58 @@ public static class KvE2eSettingsDiag
                 Check("3.1б панель «Настройки» реально попадает в экран (R6-1)",
                       ui.IsPanelEffectivelyVisible("settings"),
                       ui.DescribeDock(ui.SettingsDock));
+
+                // R6-1, ТРЕТИЙ КРУГ (12.11.2026): ПРОВЕРКА ПРОТИВ ПРИЁМКИ НА УСТРОЙСТВЕ.
+                //
+                // ЧТО БЫЛО. Проверки «флаг + геометрия» на планшете отвечали «видна», хотя сторож
+                // оверлея погасил канвас оболочки и на экране не было ничего. В редакторе Е2Е при
+                // этом проходил 29/29 — потому что в редакторе сторож оверлея не работает.
+                // ЧТО ЗДЕСЬ. Поведение сторожа ЭМУЛИРУЕТСЯ: гасим `Canvas.enabled` оболочки (ровно
+                // то, что делает сторож в AR) и проверяем, что панель настроек всё равно видна —
+                // она живёт на своём канвасе. Так дефект ловится БЕЗ устройства.
+                Canvas shellBefore = ui.RootCanvas;
+                bool shellWasEnabled = shellBefore != null && shellBefore.enabled;
+                if (shellBefore != null) shellBefore.enabled = false;
+                ui.SetPanel("settings", false);
+                ui.ShowSettings(KvSettingsView.IndexOfTab("Интерфейс"));
+
+                bool panelCanvasAlive = ui.PanelCanvas != null && ui.PanelCanvas.enabled &&
+                                        ui.PanelCanvas.gameObject.activeInHierarchy;
+                Check("3.1в при погашенном канвасе оболочки панель оператора всё равно рисуется (R6-1, AR)",
+                      panelCanvasAlive && ui.IsPanelEffectivelyVisible("settings"),
+                      "канвас панелей: " + (ui.PanelCanvas != null
+                          ? ("«" + ui.PanelCanvas.name + "» включён=" + ui.PanelCanvas.enabled +
+                             " · порядок=" + ui.PanelCanvas.sortingOrder +
+                             " · активен в иерархии=" + ui.PanelCanvas.gameObject.activeInHierarchy)
+                          : "нет") +
+                      " · панель видна: " + (ui.IsPanelEffectivelyVisible("settings") ? "да" : "НЕТ"));
+
+                if (shellBefore != null && shellWasEnabled) shellBefore.enabled = true;
+
+                // 3.1г: ДОК-ПАНЕЛЬ И СОДЕРЖИМОЕ НАСТРОЕК ЛЕЖАТ В КАНВАСЕ ПАНЕЛЕЙ.
+                //
+                // Вопрос тестировщика из приёмки 12.11.2026 дословно: «проверь, что в AR-раскладке
+                // док-панель вообще создаётся (`KvSettingsView` есть в иерархии канваса?)». Это
+                // отдельная проверка, потому что «панель видна по флагу» и «панель есть в дереве
+                // объектов нужного канваса» — разные утверждения: первое верно и для объекта,
+                // выключенного вместе с предком.
+                //
+                // ВАЖНО, ЧТО ИМЕННО ПРОВЕРЯЕТСЯ. Сам компонент `KvSettingsView` висит на объекте
+                // МЕНЕДЖЕРА (он всегда там), а интерфейс настроек строится в тело dock-панели
+                // (`settings.Build(settingsDock.Body, …)`). Поэтому проверяется ФАКТ: корень
+                // dock-панели лежит в канвасе панелей, а в её теле построены строки.
+                bool dockInPanelCanvas = ui.SettingsDock != null && ui.PanelCanvas != null &&
+                                         ui.SettingsDock.Root != null &&
+                                         ui.SettingsDock.Root.IsChildOf(ui.PanelCanvas.transform);
+                bool contentBuilt = ui.SettingsDock != null && ui.SettingsDock.Body != null &&
+                                    ui.SettingsDock.Body.childCount > 0;
+                Check("3.1г док-панель «Настройки» и её содержимое лежат в канвасе панелей оператора (R6-1)",
+                      dockInPanelCanvas && contentBuilt,
+                      "канвас панелей: " + (ui.PanelCanvas != null ? "«" + ui.PanelCanvas.name + "»" : "нет") +
+                      " · панель настроек: " + (dockInPanelCanvas ? "внутри" : "СНАРУЖИ") +
+                      " · строк в теле: " + (ui.SettingsDock != null && ui.SettingsDock.Body != null
+                          ? ui.SettingsDock.Body.childCount.ToString() : "нет тела"));
+
                 Check("3.2 активна вкладка «Интерфейс»",
                       settingsView.ActiveTab == KvSettingsView.IndexOfTab("Интерфейс"),
                       "ActiveTab=" + settingsView.ActiveTab);

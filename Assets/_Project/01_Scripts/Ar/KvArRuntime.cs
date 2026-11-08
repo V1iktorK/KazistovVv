@@ -754,6 +754,13 @@ namespace KazistovVvAr
                 if (canvas.GetComponentInParent<KvXrGroupPanel>(true) != null) continue;
                 if (canvas.GetComponentInParent<KvXrStartMenu>(true) != null) continue;
                 if (canvas.GetComponentInParent<KvXrWindowHost>(true) != null) continue;
+                // КАНВАС ПАНЕЛЕЙ ОПЕРАТОРА (R6-1, 12.11.2026). Это не «посторонний канвас»:
+                // в нём живут панели, которые оператор открывает командой («Настройки» — и есть
+                // путь к переключателю VR/MR). Гасить его здесь значило бы воспроизвести тот же
+                // дефект с другой стороны: панель включена, канвас выключен. Судьбу этого канваса
+                // решает сторож оверлея по правилу `KvXrOverlayPolicy.ClassifyDockCanvas`, и правило
+                // у обоих сторожей ОДНО (`KvXrOperatorPanelCanvas`) — иначе они разойдутся.
+                if (KvXrOperatorPanelCanvas.IsOperatorPanelCanvas(canvas)) continue;
                 if (!canvas.enabled) continue;
                 canvas.enabled = false;
                 hidden++;

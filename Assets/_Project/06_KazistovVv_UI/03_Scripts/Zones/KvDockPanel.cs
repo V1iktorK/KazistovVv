@@ -47,6 +47,27 @@ namespace KazistovVvUI
         /// <summary>Плавающее окно (не пристыковано).</summary>
         public bool Floating { get { return Side == KvDockSide.Float; } }
 
+        /// <summary>
+        /// ПАНЕЛЬ ЗАПРОШЕНА ОПЕРАТОРОМ В ЭТОМ СЕАНСЕ (R6-1, третий круг приёмки 12.11.2026).
+        ///
+        /// ЗАЧЕМ ОТДЕЛЬНЫЙ ПРИЗНАК. `Shown` приходит ещё и из сохранённой раскладки `PlayerPrefs`:
+        /// панель может быть «показана» с прошлого запуска, и оператор её не открывал. А в AR и в
+        /// шлеме десктопный интерфейс штатно погашен сторожем. Если бы мы оставляли рисование по
+        /// одному `Shown`, то на планшете и в шлеме поверх камеры висел бы десктопный оверлей,
+        /// которого владелец как раз не хочет. Запрошенная же панель — прямое указание оператора,
+        /// её гасить нельзя ни при каких условиях.
+        ///
+        /// КТО СТАВИТ. Только `KazistovVvUIManager.ShowPanel/TogglePanel` — то есть путь команды.
+        /// Снятие автоматическое: как только панель скрыли, признак сбрасывается.
+        /// </summary>
+        public bool OperatorRequested { get; private set; }
+
+        /// <summary>Пометить панель как запрошенную оператором (или снять признак).</summary>
+        public void MarkOperatorRequested(bool requested)
+        {
+            OperatorRequested = requested;
+        }
+
         /// <summary>Геометрия панели изменилась — пересобрать раскладку.</summary>
         public event Action LayoutDirty;
 
@@ -279,6 +300,9 @@ namespace KazistovVvUI
         {
             if (root == null) return;
             root.gameObject.SetActive(value);
+            // СКРЫЛИ — ЗНАЧИТ НЕ ЗАПРОШЕНА: иначе сторож оверлея продолжал бы держать
+            // рисование десктопного канваса включённым из-за панели, которой на экране нет.
+            if (!value) OperatorRequested = false;
             Notify();
         }
 
