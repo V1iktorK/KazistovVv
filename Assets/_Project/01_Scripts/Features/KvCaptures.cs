@@ -24,12 +24,14 @@ namespace KazistovVvFeatures
     /// в конце кадра и пакуется в PNG. Так на картинке оказывается НАСТОЯЩИЙ текст интерфейсным
     /// шрифтом (в том числе CJK), без шрифтового растеризатора в коде.
     ///
-    /// ВИДЕО: используется Unity Recorder из Package Manager (`com.unity.recorder`, в проекте
-    /// уже разрешён — `Library/PackageCache/com.unity.recorder@…`): `RecorderController` +
-    /// `MovieRecorderSettings` с `CoreEncoderSettings` (H.264, MP4). Это редакторский API,
-    /// поэтому вызов идёт под `#if UNITY_EDITOR`; в сборке (и если рекордер недоступен)
-    /// включается ЧЕСТНЫЙ РЕЗЕРВ — последовательность PNG-кадров в подпапке записи с
-    /// манифестом (FPS/разрешение/битрейт), а оператор получает понятное сообщение.
+    /// ВИДЕО: запись MP4 через Unity Recorder (`com.unity.recorder`) — но НЕ напрямую.
+    ///
+    /// P4-4 (12.11.2026). Раньше вызов рекордера стоял здесь под `#if UNITY_EDITOR`. После
+    /// разделения проекта на сборки так нельзя: рантайм-сборка `KazistovVv.Runtime` не имеет
+    /// права ссылаться на редакторную. Обращение идёт через МОСТ (`RecorderStartHook` /
+    /// `RecorderStopHook`), который назначает `01_Scripts/Editor/KvRecorderBridge.cs`.
+    /// В собранном APK моста нет — и включается ЧЕСТНЫЙ РЕЗЕРВ: последовательность PNG-кадров в
+    /// подпапке записи с манифестом (FPS/разрешение/битрейт) и понятным сообщением оператору.
     /// Разрешение, FPS и битрейт — ПУБЛИЧНЫЕ параметры (инспектор/код/настройки).
     /// </summary>
     public class KvCaptureService : MonoBehaviour
@@ -325,10 +327,9 @@ namespace KazistovVvFeatures
             bool ok = false;
             externalRecorder = false;
 
-#if UNITY_EDITOR
-            ok = StartRecorderMovie(Path.Combine(Folder, baseName));
+// Мост к Unity Recorder (в APK его нет — сработает резерв кадров PNG).
+            ok = TryStartExternalRecorder(Path.Combine(Folder, baseName));
             externalRecorder = ok;
-#endif
             if (!ok)
             {
                 // Резерв: последовательность PNG-кадров (MP4 требует Unity Recorder).
@@ -365,9 +366,7 @@ namespace KazistovVvFeatures
             recording = false;
             float seconds = Time.realtimeSinceStartup - recordStartedAt;
 
-#if UNITY_EDITOR
-            if (externalRecorder) StopRecorderMovie();
-#endif
+            if (externalRecorder) TryStopExternalRecorder();
             string tail = externalRecorder
                 ? " · файл: " + recordPath
                 : " · кадров: " + videoFrames + " в " + recordPath;
@@ -437,85 +436,70 @@ namespace KazistovVvFeatures
             File.WriteAllText(Path.Combine(dir, "recording.json"), json);
         }
 
-        // ------------------------------------------------------------------ Unity Recorder (редактор)
-
-#if UNITY_EDITOR
-        private UnityEditor.Recorder.RecorderController recorderController;
-        private UnityEditor.Recorder.RecorderControllerSettings recorderSettings;
+        // ------------------------------------------------------------------ мост к Unity Recorder
 
         /// <summary>
-        /// Запись MP4 средствами Unity Recorder (ТЗ: «использовать Unity Recorder из Package Manager»).
-        /// Разрешение/FPS/битрейт берутся из публичных полей этого компонента.
+        /// МОСТ К UNITY RECORDER (P4-4, 12.11.2026).
+        ///
+        /// ЧТО БЫЛО. Код рекордера лежал ПРЯМО ЗДЕСЬ под `#if UNITY_EDITOR` и обращался к
+        /// `UnityEditor.Recorder` из рантайм-скрипта. Это работало только потому, что весь код
+        /// проекта жил в предопределённой `Assembly-CSharp`, которой Unity в редакторе добавляет
+        /// ссылку на `UnityEditor`. Со сборками (`KazistovVv.Runtime`) такой ссылки нет и быть не
+        /// может: рантайм-сборка не имеет права ссылаться на редакторную.
+        ///
+        /// ЧТО СТАЛО. Здесь только ТОЧКИ ВХОДА (делегаты). Их назначает редакторная сборка
+        /// (`01_Scripts/Editor/KvRecorderBridge.cs`) при загрузке домена. В собранном APK делегаты
+        /// пусты — и это не «заглушка»: штатный резерв (кадры PNG + манифест) уже реализован ниже
+        /// и включается ровно так же, как раньше при недоступном рекордере.
         /// </summary>
-        private bool StartRecorderMovie(string pathWithoutExtension)
+        public static Func<KvRecorderRequest, bool> RecorderStartHook;
+
+        /// <summary>Остановить запись, начатую `RecorderStartHook` (назначается редактором).</summary>
+        public static Action RecorderStopHook;
+
+        /// <summary>Есть ли рекордер в этом окружении (в APK — нет, и это нормально).</summary>
+        public static bool RecorderAvailable
         {
+            get { return RecorderStartHook != null && RecorderStopHook != null; }
+        }
+
+        /// <summary>Начать запись MP4 через мост; false — моста нет (включится резерв кадров).</summary>
+        private bool TryStartExternalRecorder(string pathWithoutExtension)
+        {
+            Func<KvRecorderRequest, bool> hook = RecorderStartHook;
+            if (hook == null) return false;
             try
             {
-                recorderSettings = ScriptableObject.CreateInstance<
-                    UnityEditor.Recorder.RecorderControllerSettings>();
-                recorderSettings.SetRecordModeToManual();
-                recorderSettings.FrameRate = Mathf.Clamp(videoFps, 1, 120);
-                recorderSettings.FrameRatePlayback = UnityEditor.Recorder.FrameRatePlayback.Constant;
-                recorderSettings.CapFrameRate = true;
-
-                var movie = ScriptableObject.CreateInstance<UnityEditor.Recorder.MovieRecorderSettings>();
-                movie.name = "KazistovVv Movie";
-                movie.Enabled = true;
-                movie.OutputFile = pathWithoutExtension;
-                movie.FrameRate = recorderSettings.FrameRate;
-                movie.FrameRatePlayback = UnityEditor.Recorder.FrameRatePlayback.Constant;
-                movie.CapFrameRate = true;
-
-                var encoder = new UnityEditor.Recorder.Encoder.CoreEncoderSettings();
-                encoder.Codec = UnityEditor.Recorder.Encoder.CoreEncoderSettings.OutputCodec.MP4;
-                encoder.EncodingQuality =
-                    UnityEditor.Recorder.Encoder.CoreEncoderSettings.VideoEncodingQuality.High;
-                encoder.TargetBitRate = Mathf.Clamp(videoBitrateKbps / 1000f, 0.1f, 100f);  // Мбит/с
-                movie.EncoderSettings = encoder;
-
-                var input = new UnityEditor.Recorder.Input.GameViewInputSettings();
-                input.OutputWidth = videoWidth > 0 ? videoWidth : 0;
-                input.OutputHeight = videoHeight > 0 ? videoHeight : 0;
-                movie.ImageInputSettings = input;
-
-                recorderSettings.AddRecorderSettings(movie);
-
-                recorderController = new UnityEditor.Recorder.RecorderController(recorderSettings);
-                recorderController.PrepareRecording();
-                if (!recorderController.StartRecording())
-                {
-                    Debug.LogWarning("[Capture] Unity Recorder не запустился — включён резервный режим кадров");
-                    recorderController = null;
-                    return false;
-                }
-                return true;
+                KvRecorderRequest request = new KvRecorderRequest();
+                request.pathWithoutExtension = pathWithoutExtension;
+                request.width = videoWidth;
+                request.height = videoHeight;
+                request.fps = videoFps;
+                request.bitrateKbps = videoBitrateKbps;
+                return hook(request);
             }
             catch (Exception e)
             {
                 Debug.LogWarning("[Capture] Unity Recorder недоступен (" + e.Message +
                                  ") — включён резервный режим кадров PNG");
-                recorderController = null;
                 return false;
             }
         }
 
-        private void StopRecorderMovie()
+        /// <summary>Остановить запись через мост (если она была начата им).</summary>
+        private void TryStopExternalRecorder()
         {
+            Action hook = RecorderStopHook;
+            if (hook == null) return;
             try
             {
-                if (recorderController != null && recorderController.IsRecording())
-                    recorderController.StopRecording();
+                hook();
             }
             catch (Exception e)
             {
                 Debug.LogWarning("[Capture] остановка рекордера: " + e.Message);
             }
-            finally
-            {
-                recorderController = null;
-            }
         }
-#endif
 
         private void OnDisable()
         {

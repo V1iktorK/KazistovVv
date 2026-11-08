@@ -1,0 +1,33 @@
+{
+  "name": "KazistovVv.Tests.PlayMode",
+  "rootNamespace": "",
+  "references": [
+    "KazistovVv.Runtime",
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner",
+    "Unity.XR.ARFoundation",
+    "Unity.XR.ARSubsystems",
+    "Unity.XR.CoreUtils",
+    "Unity.XR.Management",
+    "Unity.XR.OpenXR",
+    "Unity.XR.OpenXR.Features.PICOSupport",
+    "Unity.InputSystem",
+    "Unity.TextMeshPro",
+    "UnityEngine.UI",
+    "Unity.RenderPipelines.Core.Runtime",
+    "Unity.RenderPipelines.HighDefinition.Runtime",
+    "Unity.RenderPipelines.Universal.Runtime",
+    "Unity.InferenceEngine"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
