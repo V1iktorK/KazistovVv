@@ -456,12 +456,20 @@ public static class DshDesktopUiDiag
 
     private static bool HasFeature(string id)
     {
-        // Соответствует реальным case-обработчикам KazistovVvUIManager.SetFeatureValue
-        // (проверено сверкой списка case со списком ниже).
+        // Соответствует реальным case-обработчикам KazistovVvUIManager (`GetFeature` /
+        // `ApplyVisualization`), проверено сверкой списка case со списком ниже.
+        //
+        // P3-1 (11.11.2026). ЧТО БЫЛО. Здесь, как и в самом менеджере, числились существующими
+        // `ui.toolbar.layout` и `ui.toolbar.compact`, хотя обработчиков у них нет ни в одном
+        // switch (раскладка и компактность тулбара идут своими путями — `SetToolbarLayout` и
+        // `SetToolbarCompact`), и в схеме настроек таких переключателей тоже нет.
+        // ЧЕМ ЭТО ГРОЗИЛО. Диагностика подтверждала существование функций, которых нет: список
+        // ниже — это утверждение «у этих id есть обработчик», и оно было неправдой, то есть
+        // проверка защищала не то, что проверяла.
+        // ТЕПЕРЬ список совпадает с менеджером: мёртвых id нет.
         return id == "vis.workspace" || id == "vis.limits" || id == "vis.metrics" ||
                id == "tool.flashlight" || id == "tree.autorefresh" ||
                id == "scene.phantoms" || id == "ui.gamepadhud" ||
-               id == "ui.toolbar.layout" || id == "ui.toolbar.compact" ||
                id == "tree" || id == "properties" || id == "settings" ||
                id == "hotkeys" || id == "metrics" || id == "limits";
     }
