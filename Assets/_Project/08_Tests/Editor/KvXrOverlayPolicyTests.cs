@@ -18,6 +18,7 @@ namespace KazistovVvTests
     /// интерфейс гасится КАК РИСОВАНИЕ, а не как объект, а «убрать совсем» разрешено ТОЛЬКО
     /// для компонента-якоря, в котором логики нет.
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvXrOverlayPolicyTests
     {
         /// <summary>
@@ -201,3 +202,4 @@ namespace KazistovVvTests
         }
     }
 }
+

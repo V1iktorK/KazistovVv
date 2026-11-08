@@ -65,6 +65,27 @@ namespace TrajectoryCore
             skipped.Clear();
         }
 
+        /// <summary>
+        /// СБРОС СТАТИЧЕСКИХ СЛОВАРЕЙ МЕЖДУ ПРОГОНАМИ (P2-9, 11.11.2026).
+        ///
+        /// ЧТО БЫЛО. Словари ключуются `Renderer`-ами СЦЕНЫ, а `Clear()` звался только из
+        /// `KvCollisionOptimizer`. Ни выход из PlayMode, ни смена сцены их не чистили.
+        ///
+        /// ЧЕМ ЭТО ГРОЗИЛО. Между прогонами (домен не перезагружается) в словарях оставались
+        /// ссылки на уничтоженные рендереры: `KvCollisionOptimizer` считал объекты
+        /// «уже размеченными», прокси-геометрия для НОВОЙ сцены не считалась — предохранитель
+        /// зазоров молча работал по пустому набору, то есть «можно» там, где нельзя.
+        ///
+        /// ТЕПЕРЬ словари очищаются в самой ранней точке старта — до первого `Awake` сцены.
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics()
+        {
+            boxes.Clear();
+            capsules.Clear();
+            skipped.Clear();
+        }
+
         public static void SetBox(Renderer r, ObstacleBox box)
         {
             if (r == null) return;

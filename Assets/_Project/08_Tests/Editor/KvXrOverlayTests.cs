@@ -23,6 +23,7 @@ namespace KazistovVvTests
     /// на экране» — без устройства и без кадра это была бы выдумка. Проверяется логика,
     /// на которой эти действия построены.
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvXrOverlayTests
     {
         // ============================================================ 1. РАСКЛАДКА ПАНЕЛИ У РУКИ
@@ -384,3 +385,4 @@ namespace KazistovVvTests
         }
     }
 }
+

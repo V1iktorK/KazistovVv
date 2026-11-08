@@ -21,9 +21,16 @@ using NUnit.Framework;
 using TrajectoryCore;
 using UnityEngine;
 
+// P2-8 (11.11.2026): класс `PostureControl` помечен [Obsolete] с причиной (Step() не подключён
+// к контуру управления, подключение меняет поведение движения и ждёт решения владельца).
+// Тесты ниже — единственное место, где он ещё используется: они проверяют МАТЕМАТИКУ, и
+// гасить предупреждение CS0618 здесь честнее, чем убирать проверку решения системы 3×3.
+#pragma warning disable 0618
+
 namespace KazistovVvTests
 {
     /// <summary>Решение системы 3×3 внутри постура-контроля.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvPostureControlTests
     {
         /// <summary>
@@ -222,3 +229,4 @@ namespace KazistovVvTests
         }
     }
 }
+

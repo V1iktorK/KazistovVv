@@ -156,12 +156,41 @@ namespace KazistovVvXr
         {
             get
             {
-                float max = Mathf.Max(0.01f, KvXrSettings.GetSmoothSpeed());
+                float max = Mathf.Max(0.01f, cachedSmoothSpeed);
                 return Mathf.Clamp01(smoothVelocity.magnitude / max);
             }
         }
 
         private Vector3 smoothVelocity;
+
+        // ------------------------------------------------------------------ кэш настроек (P2-3)
+        //
+        // ЧТО БЫЛО. `Update` → `HandleSmooth`/`HandleTeleport` читали настройки из `PlayerPrefs`
+        // прямо в кадре: мёртвая зона стика, скорость, разгон, дальность телепорта, способ
+        // перемещения — до пяти обращений `PlayerPrefs.GetFloat/GetInt` на кадр. На Android
+        // `PlayerPrefs` — это файл в `persistentDataPath`; чтение каждого ключа в кадре 72 Гц
+        // давало неровный кадр ровно во время ходьбы.
+        //
+        // ЧЕМ ЭТО ГРОЗИЛО. Рывки при ходьбе оператор воспринимает как «шлем тормозит», а в VR это
+        // ещё и путь к укачиванию; плюс тратился бюджет кадра, который нужен рендеру.
+        //
+        // ТЕПЕРЬ настройки читаются один раз и перечитываются ПО СОБЫТИЮ: `OnEnable` и
+        // `KvXrSettingsChanged.SettingsChanged` (эти же точки уже были в файле).
+        private KvXrMoveMode cachedMoveMode = (KvXrMoveMode)KvXrSettings.DefaultMoveMode;
+        private float cachedSmoothSpeed = KvXrSettings.DefaultSmoothSpeed;
+        private float cachedMoveAcceleration = KvXrSettings.DefaultMoveAcceleration;
+        private float cachedWalkDeadzone = KvXrSettings.DefaultWalkDeadzone;
+        private float cachedTeleportDistance = KvXrSettings.DefaultTeleportDistance;
+
+        /// <summary>Снять настройки перемещения из хранилища (единственное место чтения в этом файле).</summary>
+        private void ReloadMovementSettings()
+        {
+            cachedMoveMode = KvXrSettings.GetMoveMode();
+            cachedSmoothSpeed = KvXrSettings.GetSmoothSpeed();
+            cachedMoveAcceleration = KvXrSettings.GetMoveAcceleration();
+            cachedWalkDeadzone = KvXrSettings.GetWalkDeadzone();
+            cachedTeleportDistance = KvXrSettings.GetTeleportDistance();
+        }
 
         void Awake()
 
@@ -173,6 +202,7 @@ namespace KazistovVvXr
         void OnEnable()
         {
             KvXrSettingsChanged.SettingsChanged += OnSettingsChanged;
+            ReloadMovementSettings();
         }
 
         void OnDisable()
@@ -190,7 +220,8 @@ namespace KazistovVvXr
         {
             // Смена способа перемещения в настройках должна убирать метку телепорта немедленно,
             // иначе она остаётся висеть в воздухе при плавном ходе — выглядит как дефект.
-            if (KvXrSettings.GetMoveMode() != KvXrMoveMode.Teleport && teleportMarker != null)
+            ReloadMovementSettings();
+            if (cachedMoveMode != KvXrMoveMode.Teleport && teleportMarker != null)
                 teleportMarker.SetActive(false);
         }
 
@@ -211,7 +242,7 @@ namespace KazistovVvXr
             Quaternion rigYaw = Quaternion.Euler(0f, rigRoot.eulerAngles.y, 0f);
 
             HandleTurn();
-            if (KvXrSettings.GetMoveMode() == KvXrMoveMode.Teleport)
+            if (cachedMoveMode == KvXrMoveMode.Teleport)
                 HandleTeleport(rigYaw);
             else
                 HandleSmooth(rigYaw);
@@ -395,7 +426,7 @@ namespace KazistovVvXr
             }
 
             Vector3 dir = handRot * Vector3.forward;
-            float maxDistance = KvXrSettings.GetTeleportDistance();
+            float maxDistance = cachedTeleportDistance;   // из кэша настроек, а не из PlayerPrefs (P2-3)
             teleportValid = AimGroundPoint(handPos, dir, maxDistance,
                 out Vector3 ground, out Vector3 normal);
 
@@ -508,21 +539,23 @@ namespace KazistovVvXr
         {
             // СТИК ХОДА — тот же, что и у телепорта (MoveStick): по умолчанию левый, как в играх.
             Vector2 stick = MoveStick;
-            float deadzone = KvXrSettings.GetWalkDeadzone();
+            // НАСТРОЙКИ ХОДА — ИЗ КЭША (P2-3): раньше здесь было три обращения к `PlayerPrefs`
+            // в каждом кадре хода; теперь они сняты по событию (`ReloadMovementSettings`).
+            float deadzone = cachedWalkDeadzone;
             Vector2 deadzoned = ApplyDeadzone(stick, deadzone);
 
             // ЦЕЛЕВАЯ СКОРОСТЬ: направление по взгляду оператора, величина — доля отклонения стика.
             Vector3 forward = rigYaw * Vector3.forward;
             Vector3 right = rigYaw * Vector3.right;
             Vector3 move = forward * deadzoned.y + right * deadzoned.x;
-            float speed = KvXrSettings.GetSmoothSpeed();
+            float speed = cachedSmoothSpeed;
             Vector3 targetVelocity = move.sqrMagnitude > 1e-6f
                 ? move.normalized * (speed * Mathf.Clamp01(deadzoned.magnitude))
                 : Vector3.zero;
 
             // РАЗГОН/ТОРМОЖЕНИЕ (05.11.2026): мгновенная скорость — второй источник дискомфорта
             // после поворота. `MoveTowards` даёт постоянное ускорение и мягкий останов.
-            float acceleration = KvXrSettings.GetMoveAcceleration();
+            float acceleration = cachedMoveAcceleration;
             smoothVelocity = Vector3.MoveTowards(smoothVelocity, targetVelocity,
                 acceleration * Mathf.Min(Time.deltaTime, MaxTurnFrameSeconds));
             if (smoothVelocity.sqrMagnitude < 1e-6f) return;
@@ -581,9 +614,13 @@ namespace KazistovVvXr
             teleportMarker.transform.position = point + Vector3.up * 0.01f;
             teleportMarker.transform.rotation = Quaternion.identity;
 
-            var renderer = teleportMarker.GetComponent<Renderer>();
-            if (renderer != null && renderer.sharedMaterial != null)
-                renderer.sharedMaterial.color = valid ? validMarkerColor : invalidMarkerColor;
+            // P2-7 / R1-2 (11.11.2026). ЧТО БЫЛО: цвет писался в `renderer.sharedMaterial`, а сам
+            // материал метки присваивался через `renderer.material` — то есть в копию копии,
+            // которую никто не уничтожал. Цвет «валидно/невалидно» менялся на каждом кадре
+            // прицеливания телепорта, и каждый такой кадр работал с материалом-сиротой.
+            // ЧТО СТАЛО: материал один, он наш, и цвет пишется в НЕГО, а не в поиск по рендереру.
+            if (markerMaterial != null)
+                markerMaterial.color = valid ? validMarkerColor : invalidMarkerColor;
         }
 
         /// <summary>
@@ -606,13 +643,18 @@ namespace KazistovVvXr
             var renderer = go.GetComponent<Renderer>();
             if (renderer != null)
             {
-                Material material = KvRenderPipelineShaders.CreateUnlit("Материал_метки_телепорта", validMarkerColor);
-                if (material != null) renderer.material = material;
+                markerMaterial = KvRenderPipelineShaders.CreateUnlit("Материал_метки_телепорта", validMarkerColor);
+                // sharedMaterial: материал создан нами и он один — копия на рендерер не нужна
+                // (P2-7 / R1-2). Цвет меняется в поле `markerMaterial`, а не через рендерер.
+                if (markerMaterial != null) renderer.sharedMaterial = markerMaterial;
                 renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 renderer.receiveShadows = false;
             }
             return go;
         }
+
+        /// <summary>Материал метки телепорта — создан нами, цвет меняется в нём (P2-7 / R1-2).</summary>
+        private Material markerMaterial;
 
         private Transform FindHead()
         {

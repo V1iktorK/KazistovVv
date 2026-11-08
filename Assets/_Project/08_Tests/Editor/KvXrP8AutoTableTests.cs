@@ -15,6 +15,7 @@ namespace KazistovVvTests
     /// 0,95 × 2,368 + 0,10 = 2,3496 м — МЕНЬШЕ вылета 2,368 м: стол был уже максимально
     /// достигаемой точки на 18 мм. Тест падает на любой формуле, которая уменьшает вылет.
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvXrP8AutoTableTests
     {
         /// <summary>Вылет 6-осевого робота сцены, метры (KvReachMath / журнал зон достижимости).</summary>
@@ -78,3 +79,4 @@ namespace KazistovVvTests
         }
     }
 }
+

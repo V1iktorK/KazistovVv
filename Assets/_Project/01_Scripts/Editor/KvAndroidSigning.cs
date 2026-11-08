@@ -34,13 +34,24 @@ namespace KazistovVvXrEditor
         private const string MenuRoot = "KazistovVv/Устройство/";
 
         /// <summary>
-        /// ПРЕЖНИЙ ПАРОЛЬ, КОТОРЫЙ ЛЕЖАЛ ОТКРЫТЫМ ТЕКСТОМ В ЭТОМ ФАЙЛЕ.
+        /// ПАРОЛЬ ХРАНИЛИЩА БОЛЬШЕ НЕ ЛЕЖИТ В ЭТОМ ФАЙЛЕ (удалено 11.11.2026).
         ///
-        /// Оставлен ТОЛЬКО чтобы старые сборки и записи в `EditorPrefs` продолжали работать
-        /// без переучивания владельца, и чтобы тест мог проверить, что в коде его больше нет
-        /// в виде присваивания. Для сборки он НЕ используется: см. `ResolvePassword`.
+        /// ЧТО БЫЛО. Здесь стояла приватная константа с ПАРОЛЕМ ДЕЙСТВУЮЩЕГО КЛЮЧА
+        /// подписи — прямо в ОТСЛЕЖИВАЕМОМ исходнике, да ещё и как последний шаг `ResolvePassword()`.
+        /// Сам keystore при этом лежал в истории git (blob `ae0263e`). Вместе это означало: любой,
+        /// у кого есть репозиторий, может выпускать обновления от имени владельца.
+        ///
+        /// ПОЧЕМУ УДАЛЕНО, А НЕ «ПОМЕЧЕНО УСТАРЕВШИМ». Метка `[Obsolete]` не прячет строку: пароль
+        /// остаётся в файле и в истории. Единственное лечение — убрать значение и заставить сборку
+        /// ЧЕСТНО падать, если владелец не передал пароль.
+        ///
+        /// ЧТО ТЕПЕРЬ. Пароль берётся ТОЛЬКО из переменной окружения `KAZISTOVVV_KEYPASS` или из
+        /// `EditorPrefs` (пункт меню 9). Нет пароля — сборка не начнётся, и в сообщении будет
+        /// написано, что именно задать.
+        ///
+        /// ЧТО СДЕЛАТЬ ВЛАДЕЛЬЦУ (это НЕ задача агента): ключ считать утёкшим, выпустить новый
+        /// keystore, а старый удалить из истории (`git filter-repo`).
         /// </summary>
-        private const string LegacyPassword = "KazistovVv2026";
 
         /// <summary>Имя переменной окружения с паролем хранилища.</summary>
         public const string PasswordEnvironmentVariable = "KAZISTOVVV_KEYPASS";
@@ -73,10 +84,10 @@ namespace KazistovVvXrEditor
         /// <summary>
         /// СТРАШИВАЕМ, А НЕ ХРАНИМ.
         ///
-        /// Порядок: переменная окружения → `EditorPrefs` → встроенный «прежний» пароль. Последний
-        /// шаг оставлен, чтобы подпись не сломалась у владельца на этой машине в день правки;
-        /// в CI и на любой другой машине первые два шага обязательны, иначе сборка честно скажет,
-        /// что пароля нет.
+        /// Порядок: переменная окружения → `EditorPrefs`. Встроенного значения БОЛЬШЕ НЕТ (см.
+        /// комментарий выше): последний шаг раньше возвращал пароль из исходника, и это делало
+        /// секрет общедоступным. Возвращает `null`, если пароля нет нигде, — и вызывающий обязан
+        /// это обработать, а не подставить что-нибудь похожее.
         /// </summary>
         public static string ResolvePassword()
         {
@@ -86,15 +97,15 @@ namespace KazistovVvXrEditor
             string fromPrefs = EditorPrefs.GetString(PasswordPrefsKey, "");
             if (!string.IsNullOrEmpty(fromPrefs)) return fromPrefs;
 
-            return LegacyPassword;
+            return null;
         }
 
-        /// <summary>Пароль, который увидит сборка (используется настройкой ниже).</summary>
+        /// <summary>Пароль, который увидит сборка (может быть null — тогда подпись невозможна).</summary>
         public static string Password { get { return ResolvePassword(); } }
 
         /// <summary>
         /// ОТКУДА ВЗЯЛСЯ ПАРОЛЬ — для журнала и для теста. Возвращает «окружение» / «EditorPrefs» /
-        /// «встроенный (устаревший)» / «нет». Значение самого пароля наружу не отдаётся.
+        /// «нет». Значение самого пароля наружу не отдаётся.
         /// </summary>
         public static string PasswordSource()
         {
@@ -102,8 +113,6 @@ namespace KazistovVvXrEditor
                 return "окружение";
             if (!string.IsNullOrEmpty(EditorPrefs.GetString(PasswordPrefsKey, "")))
                 return "EditorPrefs";
-            if (!string.IsNullOrEmpty(LegacyPassword))
-                return "встроенный (устаревший)";
             return "нет";
         }
 
@@ -117,23 +126,36 @@ namespace KazistovVvXrEditor
             else EditorPrefs.SetString(PasswordPrefsKey, password);
         }
 
-        [MenuItem(MenuRoot + "8. Подпись сборки: собственный ключ", false, 73)]
-        public static void Configure()
+        /// <summary>
+        /// ПОПЫТАТЬСЯ НАСТРОИТЬ ПОДПИСЬ. Возвращает false и ПРИЧИНУ, если не вышло.
+        ///
+        /// ВЫДЕЛЕНО ИЗ `Configure()` 11.11.2026. Раньше `Configure()` был `void` и при неудаче
+        /// просто писал ошибку и выходил. Сборка при этом продолжалась с `useCustomKeystore = 1`
+        /// и без паролей, и падала сообщением
+        ///     UnityException: Unable to sign the Android application / No keystore passwords…
+        /// которое указывает на ПАРОЛИ, хотя причиной чаще был отсутствующий ФАЙЛ ключа. Теперь
+        /// причину можно вернуть вызывающему и показать одну понятную строку.
+        /// </summary>
+        public static bool TryConfigure(out string error)
         {
+            error = null;
+
             string password = ResolvePassword();
             if (string.IsNullOrEmpty(password))
             {
-                Debug.LogError("[KvSign] пароль хранилища не задан. Задайте переменную окружения " +
-                               PasswordEnvironmentVariable + " или сохраните пароль в EditorPrefs " +
-                               "(меню «" + MenuRoot + "9»). Сборка НЕ будет подписана.");
-                return;
+                error = "пароль хранилища ключей не задан. Задайте переменную окружения " +
+                        PasswordEnvironmentVariable + " (её видит и CI) либо сохраните пароль в " +
+                        "EditorPrefs вызовом KvAndroidSigning.SavePasswordToPrefs(...) из пункта " +
+                        "меню/скрипта. Встроенного пароля в коде БОЛЬШЕ НЕТ — он удалён как утёкший.";
+                return false;
             }
+
             if (!System.IO.File.Exists(KeystorePath))
             {
-                Debug.LogError("[KvSign] нет файла хранилища ключей: " + KeystorePath +
-                               ". Он больше не хранится в репозитории специально — положите его локально " +
-                               "или задайте путь переменной " + KeystoreEnvironmentVariable + ".");
-                return;
+                error = "нет файла хранилища ключей: " + KeystorePath +
+                        ". Он намеренно не хранится в репозитории — положите файл локально " +
+                        "или задайте путь переменной " + KeystoreEnvironmentVariable + ".";
+                return false;
             }
 
             PlayerSettings.Android.useCustomKeystore = true;
@@ -150,6 +172,35 @@ namespace KazistovVvXrEditor
                       " · alias=" + PlayerSettings.Android.keyaliasName +
                       " · пароль из: " + PasswordSource() +
                       " · пакет=" + PlayerSettings.applicationIdentifier);
+            return true;
+        }
+
+        /// <summary>
+        /// НАСТРОИТЬ ПОДПИСЬ ИЗ ПУНКТА МЕНЮ: ошибка — в журнал, диалог не нужен.
+        /// </summary>
+        [MenuItem(MenuRoot + "8. Подпись сборки: собственный ключ", false, 73)]
+        public static void Configure()
+        {
+            string error;
+            if (!TryConfigure(out error))
+                Debug.LogError("[KvSign] " + error);
+        }
+
+        /// <summary>
+        /// НАСТРОИТЬ ПОДПИСЬ ПЕРЕД СБОРКОЙ И УПАСТЬ, ЕСЛИ НЕЛЬЗЯ.
+        ///
+        /// ЗАЧЕМ БРОСАТЬ (11.11.2026). Сборка без настроенной подписи не «соберётся как-нибудь»:
+        /// она упадёт в Gradle сообщением про пароли. Лучше остановиться ДО неё и назвать
+        /// настоящую причину — тогда CI-задача `android-build` и `Tools/ci-local.ps1 -Build`
+        /// дают владельцу инструкцию, а не загадку.
+        /// </summary>
+        public static void ConfigureOrThrow()
+        {
+            string error;
+            if (TryConfigure(out error))
+                return;
+            throw new UnityEditor.Build.BuildFailedException(
+                "[KvSign] подпись не настроена, сборка остановлена. " + error);
         }
 
         /// <summary>

@@ -21,6 +21,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Подпись режима «камера / интерфейс».</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvModeIndicatorTests
     {
         /// <summary>
@@ -112,3 +113,4 @@ namespace KazistovVvTests
         }
     }
 }
+

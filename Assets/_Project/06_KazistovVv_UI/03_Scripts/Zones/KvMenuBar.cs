@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -132,6 +133,10 @@ namespace KazistovVvUI
             CloseMenu();
             openMenu = menu;
             BuildDropdown(menu);
+            // Отпечаток запоминается сразу: иначе первый же `Refresh()` (десять раз в секунду)
+            // счёл бы состояние «новым» и пересобрал меню ещё раз — ровно та работа, от которой
+            // мы избавляемся (P2-10).
+            lastMenuFingerprint = MenuFingerprint(menu);
             if (dropdown != null)
             {
                 dropdown.gameObject.SetActive(true);
@@ -149,6 +154,7 @@ namespace KazistovVvUI
         public void CloseMenu()
         {
             openMenu = "";
+            lastMenuFingerprint = null;   // меню закрыто — сравнивать не с чем (P2-10)
             if (dropdown != null) dropdown.gameObject.SetActive(false);
             if (blocker != null) blocker.gameObject.SetActive(false);
         }
@@ -334,10 +340,38 @@ namespace KazistovVvUI
             return y + rowH + 1f;
         }
 
-        /// <summary>Перерисовать галки и доступность пунктов меню.</summary>
+        /// <summary>
+        /// ПЕРЕРИСОВАТЬ ГАЛКИ И ДОСТУПНОСТЬ ПУНКТОВ МЕНЮ — ТОЛЬКО ПРИ ИЗМЕНЕНИИ (P2-10, 11.11.2026).
+        ///
+        /// ЧТО БЫЛО. Оболочка зовёт `Refresh()` десять раз в секунду (`statusInterval` = 0.1 с), и
+        /// каждый вызов при открытом меню делал `BuildDropdown` ЦЕЛИКОМ: `Destroy` всех строк,
+        /// затем `Instantiate` новых игровых объектов, текстов и кнопок. То есть десять раз в
+        /// секунду выбрасывался и создавался весь выпадающий список.
+        ///
+        /// ЧЕМ ЭТО ГРОЗИЛО. 72 Гц — это 13,9 мс на кадр, а пересборка UI-иерархии с
+        /// `SetVerticesDirty` на каждом элементе съедала кадр целиком: меню «дёргалось», нажатие
+        /// иногда терялось (строка под курсором успевала быть уничтоженной), а мусор от
+        /// `Destroy`/`Instantiate` десять раз в секунду давал подвисания сборщика.
+        ///
+        /// ТЕПЕРЬ сначала считается ОТПЕЧАТОК состояния меню (идентификаторы, доступность,
+        /// галки). Совпал — пересборки нет вовсе. Отпечаток считается по уже готовым свойствам
+        /// команд, без создания объектов.
+        /// </summary>
         public void Refresh()
         {
-            if (openMenu.Length > 0) BuildDropdown(openMenu);
+            if (openMenu.Length > 0)
+            {
+                string fingerprint = MenuFingerprint(openMenu);
+                if (dropdown == null || dropdownRows.Count == 0 || fingerprint != lastMenuFingerprint)
+                {
+                    BuildDropdown(openMenu);
+                    lastMenuFingerprint = fingerprint;
+                }
+            }
+            else
+            {
+                lastMenuFingerprint = null;
+            }
 
             for (int i = 0; i < menuButtons.Count; i++)
             {
@@ -347,6 +381,29 @@ namespace KazistovVvUI
                 if (menuTexts[i] != null)
                     menuTexts[i].color = open ? KvTheme.TextMain : KvTheme.TextDim;
             }
+        }
+
+        private string lastMenuFingerprint;
+
+        /// <summary>
+        /// ОТПЕЧАТОК СОСТОЯНИЯ ОТКРЫТОГО МЕНЮ. Чистая логика чтения (ничего не создаёт и не
+        /// меняет): по нему `Refresh` решает, нужна ли пересборка. Идентификатор команды входит
+        /// в отпечаток, поэтому добавление/удаление команды тоже видно.
+        /// </summary>
+        public static string MenuFingerprint(string menu)
+        {
+            var sb = new StringBuilder();
+            sb.Append(menu);
+            foreach (KvCommand c in KvCommands.All)
+            {
+                if (string.IsNullOrEmpty(c.MenuPath)) continue;
+                string[] parts = c.MenuPath.Split('/');
+                if (parts.Length < 2 || parts[0] != menu) continue;
+                sb.Append('|').Append(c.Id)
+                  .Append(c.Enabled ? '1' : '0')
+                  .Append(c.Checked ? '1' : '0');
+            }
+            return sb.ToString();
         }
 
         /// <summary>Перекрасить под текущую тему.</summary>

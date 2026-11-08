@@ -231,7 +231,8 @@ public class SCARAController : RobotController
 
         Vector3 axis = verticalAxis.sqrMagnitude > 0.001f ? verticalAxis : resolvedBase.up;
         Vector3 basePos = resolvedBase.position;
-        float settingsSpeed = SettingsData.Instance != null ? SettingsData.Instance.robotSpeed : 1f;
+        // P1-8: одна точка получения скорости + предупреждение, если настройки не найдены.
+        float settingsSpeed = SettingsData.RobotSpeedOrWarn();
         float speedScale = Mathf.Max(0.05f, maxSpeed) * Mathf.Max(0.05f, movementSpeedScale) *
                            Mathf.Max(0.05f, settingsSpeed);
         // Плавность: экспоненциальный шаг к аналитическому решению.
@@ -295,7 +296,7 @@ public class SCARAController : RobotController
 
         // Приращение локтя и куда встанет звено 2 после доворота.
         float d2 = Mathf.DeltaAngle(bend, q2);
-        Vector3 arm2 = RotateAround(p3 - p2, axis, d2 * Mathf.Deg2Rad);
+        Vector3 arm2 = RotateAround(p3 - p2, axis, d2);
         Vector3 w = (p2 - p1) + arm2;
 
         // Доворот базы: совместить (звено1 + новое звено2) с целью.
@@ -326,9 +327,19 @@ public class SCARAController : RobotController
         return Vector3.SignedAngle(a, b, axis);
     }
 
-    private static Vector3 RotateAround(Vector3 v, Vector3 axis, float radians)
+    /// <summary>
+    /// ПОВОРОТ ВЕКТОРА ВОКРУГ ОСИ НА УГОЛ В ГРАДУСАХ (P1-18, 11.11.2026).
+    ///
+    /// ЧТО БЫЛО. Параметр назывался `radians`, а внутри умножался на `Mathf.Rad2Deg`, при этом
+    /// вызывающий уже передавал ГРАДУСЫ (`d2 * Mathf.Deg2Rad` — компенсирующий множитель «туда и
+    /// обратно»). Имя параметра лгало сразу в двух местах: следующий, кто передал бы сюда радианы
+    /// «как написано», получил бы ошибку в 57 раз — то есть звено уехало бы в сторону.
+    ///
+    /// Теперь имя совпадает со смыслом, а компенсирующий `Deg2Rad` убран из вызова.
+    /// </summary>
+    private static Vector3 RotateAround(Vector3 v, Vector3 axis, float degrees)
     {
-        return Quaternion.AngleAxis(radians * Mathf.Rad2Deg, axis) * v;
+        return Quaternion.AngleAxis(degrees, axis) * v;
     }
 
     /// <summary>

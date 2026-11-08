@@ -11,6 +11,7 @@ namespace KazistovVv.Tests
     /// кто-то удалит переключатель, коллизии, E-STOP, поиск или виньетку — тест скажет это
     /// раньше владельца.
     /// </summary>
+        [Category(KazistovVvTests.KvTestCategories.Fast)]
     public class KvXrVrControlsTests
     {
         private static string ProjectRoot
@@ -228,3 +229,4 @@ namespace KazistovVv.Tests
         }
     }
 }
+

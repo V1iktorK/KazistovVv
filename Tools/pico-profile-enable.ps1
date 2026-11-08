@@ -24,13 +24,37 @@
       powershell -ExecutionPolicy Bypass -File Tools\pico-profile-enable.ps1
 #>
 param(
-    [string]$Project = "C:\KazistovVv_Build",
-    [string]$Unity = "C:\Program Files\Unity\Hub\Editor\6000.5.6f1\Editor\Unity.exe",
+    [string]$Project = (Split-Path -Parent $PSScriptRoot),
+    [string]$Unity = "",
     [string]$LogName = "s34-pico-profile-enable.log",
     [int]$TimeoutMinutes = 20
 )
 
 $ErrorActionPreference = 'Continue'
+
+# ================================================================================================
+# ПУТЬ К UNITY — ИЗ ПРОЕКТА, А НЕ ЖЁСТКИЙ (P4-12, 12.11.2026).
+#
+# ЧТО БЫЛО. Версия движка была ВПИСАНА в скрипт: "C:\Program Files\Unity\Hub\Editor\6000.5.6f1\...".
+# После обновления Unity скрипт искал несуществующий каталог и падал «не найден Unity», хотя проект
+# уже собирался другой версией. Версия проекта и так записана в `ProjectSettings\ProjectVersion.txt`
+# — второго источника быть не должно.
+#
+# ЧТО СТАЛО. Путь по умолчанию пустой и ВЫЧИСЛЯЕТСЯ из ProjectVersion.txt; явный `-Unity` главнее.
+# ================================================================================================
+if (-not $Unity) {
+    $versionFile = Join-Path $Project 'ProjectSettings\ProjectVersion.txt'
+    if (Test-Path $versionFile) {
+        $found = Select-String -Path $versionFile -Pattern 'm_EditorVersion:\s*(\S+)'
+        if ($found) {
+            $Unity = Join-Path $env:ProgramFiles ("Unity\Hub\Editor\" + $found.Matches[0].Groups[1].Value + "\Editor\Unity.exe")
+        }
+    }
+    if (-not $Unity -or -not (Test-Path $Unity)) {
+        Write-Host "ОШИБКА: Unity.exe не найден; версия из ProjectVersion.txt: $(if (Test-Path $versionFile) { (Get-Content $versionFile -TotalCount 1) } else { 'файла нет' }). Задайте путь ключом -Unity."
+        exit 1
+    }
+}
 $logs = Join-Path $Project 'Logs'
 New-Item -ItemType Directory -Path $logs -Force | Out-Null
 $logPath = Join-Path $logs $LogName

@@ -22,6 +22,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Настройки сборки Android/шлема: то, без чего APK не заработает.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvBuildConfigTests
     {
         private static string Root
@@ -188,12 +189,17 @@ namespace KazistovVvTests
         public void CustomManifestIsNotEnabledUnexpectedly()
         {
             string raw = Field("useCustomMainManifest");
-            if (raw == null) Assert.Pass("поля нет — используется стандартный манифест");
 
-            Assert.AreEqual("0", raw,
+            // P4-1 (11.11.2026). ЧТО БЫЛО: `if (raw == null) Assert.Pass(...)`. NUnit считает
+            // `Assert.Pass` ПРОЙДЕННЫМ, поэтому гейт по «пропущено» этого не видел: тест мог
+            // «зеленеть», ничего не проверив (урок E-16 в новой одежде).
+            // ЧТО СТАЛО: отсутствие поля — законное состояние («используется стандартный манифест»),
+            // и это проверяется как ФАКТ: поле обязано либо отсутствовать, либо быть "0".
+            Assert.IsTrue(raw == null || raw == "0",
                 "включён свой главный манифест (useCustomMainManifest = " + raw + "): пост-обработчик " +
                 "KvPicoManifestMetaData может не сработать, и метаданные PICO (сквозной вид, " +
                 "разрешения) не попадут в APK");
         }
     }
 }
+

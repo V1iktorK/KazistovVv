@@ -7,6 +7,7 @@ using UnityEngine.XR.ARSubsystems;
 using UnityEngine.UI;
 using UnityEngine.Android;
 using KazistovVvXr;
+using KazistovVvUI;
 
 namespace KazistovVvAr
 {
@@ -86,9 +87,28 @@ namespace KazistovVvAr
         public KvArTouchInput touch;
         public KvArUi ui;
 
+        /// <summary>Сетка найденных плоскостей и выбор самого большого стола (06.11.2026).</summary>
+        public KvArPlaneVisualizer planeVisualizer;
+
+        /// <summary>Сторож камеры (окно «ДОСТУП К КАМЕРЕ»).</summary>
+        private KvArCameraGate cameraGate;
+
+        /// <summary>Сколько секунд трекинга без единой плоскости считаем сбоем обнаружения.</summary>
+        public float planeWatchdogSeconds = 15f;
+
+        /// <summary>Сколько раз за сессию можно перезапускать подсистему AR из-за пустых плоскостей.</summary>
+        public int maxPlaneRestarts = 2;
+
         private float nextStateLog;
         private int lastPlanes = -1;
         private bool pcUiLogged;
+
+        private float planeEmptySince;
+        private bool planeWatchdogLogged;
+        private int planeRestarts;
+        private float nextAspectCheck;
+        private bool aspectLogged;
+        private int aspectRestarts;
         private bool lastPlaced;
         private float fpsSmoothed;
 
@@ -106,8 +126,15 @@ namespace KazistovVvAr
             Debug.Log("[KvXr] " + KvXrPlatformModeSelector.Describe(KvXrPlatformMode.Ar,
                 false, true, true, KvXrPlatformModeSelector.WorldScale));
 
-            Application.targetFrameRate = Mathf.Clamp(targetFrameRate, 20, 120);
-            QualitySettings.vSyncCount = 0;
+            // ОРИЕНТАЦИЯ: ПК-вид планшета — только горизонтально. Без этого при повороте
+            // устройства Android мог оставить портретную поверхность и экран превращался в
+            // узкую полосу с синими полями (проверено на планшете 06.11.2026).
+            Screen.orientation = ScreenOrientation.LandscapeLeft;
+            Screen.autorotateToPortrait = false;
+            Screen.autorotateToPortraitUpsideDown = false;
+            Screen.autorotateToLandscapeLeft = true;
+            Screen.autorotateToLandscapeRight = true;
+            Debug.Log("[KvAr] ЭКРАН: ориентация закреплена горизонтально (ПК-вид планшета)");
 
             // ЭКРАН НЕ ДОЛЖЕН ГАСНУТЬ: у планшета сон экрана останавливает ARCore-трекинг,
             // и владелец видел «не могу двигать экраном» — камера замирала вместе с экраном.
@@ -131,6 +158,8 @@ namespace KazistovVvAr
             EnsureCameraPermission();
 
             ResolveReferences();
+            EnsurePlaneVisualizer();
+            ApplyPlaneDetection();     // горизонтальные И вертикальные плоскости поиском
 
             // СТОРОЖ СЕССИИ: в сцене ArMain сохранены старые 8 с и 3 сброса (поле сериализовано).
             // Ставим новые значения в рантайме: ARCore на однотонной поверхности инициализируется
@@ -153,6 +182,7 @@ namespace KazistovVvAr
             // отдаёт кадры, и резервный живой предпросмотр, если ARCore не смог (06.11.2026).
             if (GetComponent<KvArCameraGate>() == null)
                 gameObject.AddComponent<KvArCameraGate>();
+            cameraGate = GetComponent<KvArCameraGate>();
 
             // УБРАТЬ ПОСТОРОННИЕ КАНВАСЫ: жёлтая заливка поверх камеры может быть
             // world-space канвасом проекта, который сторож десктопного интерфейса не гасит.
@@ -173,6 +203,15 @@ namespace KazistovVvAr
                           " · отключено VR-компонентов: " + DisabledComponents);
                 Debug.Log("[KvAr] ЦЕЛЬ: " + Application.targetFrameRate +
                           " кадр/с · разрешение экрана " + Screen.width + "×" + Screen.height);
+
+                // P4-19 (п.4, 11.11.2026). ЧТО БЫЛО: в журнале запуска не было НИ устройства, НИ
+                // фактического графического API. Из-за этого «чёрный экран» на планшете нельзя было
+                // отличить от «на устройство поставлен APK для шлема»: оба случая выглядят одинаково.
+                // ЧТО СТАЛО: печатается модель устройства и тот API, которым реально рисует Unity
+                // (у шлема — Vulkan, у планшета — OpenGLES3; несовпадение видно сразу).
+                Debug.Log("[KvAr] УСТРОЙСТВО: " + SystemInfo.deviceModel + " · " +
+                          SystemInfo.operatingSystem + " · графика: " + SystemInfo.graphicsDeviceType +
+                          " («" + SystemInfo.graphicsDeviceName + "»)");
             }
         }
 
@@ -183,6 +222,23 @@ namespace KazistovVvAr
             if (ui != null) BuildScreenButtons();
             EnsureGyroFallback();
             if (logOnStart) StartCoroutine(LogReadyWhenSessionStarts());
+        }
+
+        /// <summary>
+        /// ПОВЕРХНОСТИ: включить сетку найденных плоскостей и выбор самого большого стола.
+        /// Владелец 06.11.2026: «полноценно работающий AR, автоопределение поверхностей».
+        /// </summary>
+        private void EnsurePlaneVisualizer()
+        {
+            if (GetComponent<KvArPlaneVisualizer>() == null)
+                gameObject.AddComponent<KvArPlaneVisualizer>();
+            planeVisualizer = GetComponent<KvArPlaneVisualizer>();
+            if (planeVisualizer == null) return;
+            planeVisualizer.planeManager = planeManager;
+            planeVisualizer.arCamera = arCamera;
+            if (placement != null) placement.planeVisualizer = planeVisualizer;
+            Debug.Log("[KvAr] ПОВЕРХНОСТИ: сетка плоскостей включена · зелёный — самый большой стол, " +
+                      "робот встанет на него по кнопке «Поставить»");
         }
 
         /// <summary>
@@ -260,6 +316,9 @@ namespace KazistovVvAr
         {
             if (!Ready) return;
             DiagnoseYellowOnce();
+            CheckPlaneDetection();
+            CheckDisplayAspect();
+            CheckCameraGate();
             fpsSmoothed = Mathf.Lerp(fpsSmoothed <= 0f ? 1f / Mathf.Max(0.0001f, Time.unscaledDeltaTime) : fpsSmoothed,
                 1f / Mathf.Max(0.0001f, Time.unscaledDeltaTime), 0.1f);
 
@@ -270,6 +329,202 @@ namespace KazistovVvAr
             }
 
             UpdateStatusLine();
+        }
+
+        /// <summary>
+        /// ВОЗВРАТ ИЗ ФОНА. ARCore после сворачивания приложения часто отдаёт ПУСТОЙ набор
+        /// плоскостей и сам не восстанавливается: в журнале планшета 07.11.2026 было 19 минут
+        /// «SessionTracking · кадр/с 30 · плоскостей 0», помогала только переустановка. На
+        /// возврате перезакрепляем ориентацию окна и заново включаем обнаружение поверхностей.
+        /// </summary>
+        void OnApplicationPause(bool paused)
+        {
+            if (paused) return;
+            Screen.orientation = ScreenOrientation.LandscapeLeft;
+            ApplyPlaneDetection();
+            planeEmptySince = 0f;
+            planeWatchdogLogged = false;
+            aspectLogged = false;
+            Debug.Log("[KvAr] ВОЗВРАТ ИЗ ФОНА: ориентация перезакреплена, обнаружение поверхностей " +
+                      "включено · сессия " + KvArSessionController.DescribeState(ARSession.state));
+        }
+
+        /// <summary>ВКЛЮЧИТЬ ОБНАРУЖЕНИЕ ПОВЕРХНОСТЕЙ (горизонтальные + вертикальные).</summary>
+        private void ApplyPlaneDetection()
+        {
+            if (planeManager == null) return;
+            if (!planeManager.enabled) planeManager.enabled = true;
+            planeManager.requestedDetectionMode =
+                PlaneDetectionMode.Horizontal | PlaneDetectionMode.Vertical;
+        }
+
+        /// <summary>
+        /// ЭКРАН «ДОСТУП К КАМЕРЕ / ПРОДОЛЖИТЬ» НЕ ДОЛЖЕН ВИСЕТЬ (07.11.2026). Факт планшета:
+        /// окно осталось на экране минутами, хотя кадры шли и трекинг работал — владельцу
+        /// приходилось нажимать кнопку при каждом запуске. Как только трекинг идёт 20 с, окно
+        /// снимается само (внутренний таймер сторожа камеры при этом остаётся).
+        /// </summary>
+        private void CheckCameraGate()
+        {
+            if (cameraGate == null || !cameraGate.AwaitingContinue) return;
+            bool tracking = sessionController != null &&
+                            sessionController.State == ARSessionState.SessionTracking;
+            if (!tracking)
+            {
+                gateWaitingSince = 0f;
+                return;
+            }
+            if (gateWaitingSince <= 0f)
+            {
+                gateWaitingSince = Time.unscaledTime;
+                return;
+            }
+            if (Time.unscaledTime - gateWaitingSince < 20f) return;
+            gateWaitingSince = 0f;
+            cameraGate.ConfirmNow("трекинг идёт 20 с — камера доказана кадрами");
+        }
+
+        private float gateWaitingSince;
+
+        /// <summary>
+        /// СТОРОЖ ОБНАРУЖЕНИЯ ПЛОСКОСТЕЙ. Факт с планшета 07.11.2026 (журнал устройства): при
+        /// `SessionTracking` и 30 кадр/с плоскости не появлялись минутами, а нативная часть ARCore
+        /// писала `VIO_OUTPUT_NOT_TRACKING` и `VisualInertialState is kNotTracking. Wait.` — то есть
+        /// ARCore работает ТОЛЬКО по инерции и карту не строит (мало движения/света/текстуры).
+        /// Поэтому: (1) в журнал идут числа (`currentDetectionMode`, `notTrackingReason`),
+        /// (2) обнаружение плоскостей перевключается, (3) подсистема перезапускается ТОЛЬКО если
+        /// она реально остановлена — вслепую сбрасывать AR нельзя, это стирает карту VIO и мешает
+        /// ARCore, (4) владельцу показывается подсказка, что делать.
+        /// </summary>
+        private void CheckPlaneDetection()
+        {
+            if (planeManager == null || sessionController == null) return;
+            bool tracking = sessionController.State == ARSessionState.SessionTracking;
+            int count = planeManager.trackables.count;
+
+            if (!tracking || count > 0)
+            {
+                if (planeEmptySince > 0f && count > 0 && planeWatchdogLogged)
+                {
+                    Debug.Log("[KvAr] ПОВЕРХНОСТИ: обнаружение восстановлено · плоскостей " + count +
+                              " (перезапусков подсистемы " + planeRestarts + ")");
+                }
+                planeEmptySince = 0f;
+                planeWatchdogLogged = false;
+                return;
+            }
+
+            if (planeEmptySince <= 0f)
+            {
+                planeEmptySince = Time.unscaledTime;
+                return;
+            }
+            if (Time.unscaledTime - planeEmptySince < Mathf.Max(3f, planeWatchdogSeconds)) return;
+
+            planeEmptySince = Time.unscaledTime;
+            LogPlaneDiagnosis("плоскостей нет " + planeWatchdogSeconds.ToString("0") + " с при трекинге");
+            ApplyPlaneDetection();
+
+            bool running = planeManager.subsystem != null && planeManager.subsystem.running;
+            if (!running)
+            {
+                if (planeRestarts < Mathf.Max(1, maxPlaneRestarts))
+                {
+                    planeRestarts++;
+                    Debug.LogWarning("[KvAr] ПОВЕРХНОСТИ: подсистема ОСТАНОВЛЕНА — перезапускаю " +
+                                     "AR (попытка " + planeRestarts + " из " + maxPlaneRestarts + ")");
+                    ResetArSubsystem();
+                }
+                return;
+            }
+
+            // Подсистема работает, но поверхностей нет: не сбрасываем AR вслепую.
+            if (!planeWatchdogLogged)
+            {
+                planeWatchdogLogged = true;
+                Debug.LogWarning("[KvAr] ПОВЕРХНОСТИ: подсистема работает, поверхностей нет — " +
+                                 "ARCore не построил карту. Что делать: медленно поводить " +
+                                 "планшетом над столом, добавить света, поверхность должна быть " +
+                                 "с текстурой и без бликов");
+            }
+            if (ui != null)
+                ui.SetHint("ARCore ещё строит карту: медленно поводите планшетом над столом · " +
+                           "нужен свет и текстурная поверхность");
+        }
+
+        /// <summary>ДИАГНОСТИКА ПЛОСКОСТЕЙ В ЖУРНАЛ: числа, а не «не работает».</summary>
+        private void LogPlaneDiagnosis(string why)
+        {
+            var sb = new StringBuilder();
+            sb.Append("[KvAr] ПОВЕРХНОСТИ: ДИАГНОСТИКА (").Append(why).Append(")");
+            sb.Append(" · сессия ").Append(KvArSessionController.DescribeState(ARSession.state));
+            sb.Append(" · причина нетрекинга: ").Append(ARSession.notTrackingReason);
+            sb.Append(" · менеджер включён: ").Append(planeManager != null && planeManager.enabled ? "да" : "НЕТ");
+            bool running = planeManager != null && planeManager.subsystem != null &&
+                           planeManager.subsystem.running;
+            sb.Append(" · подсистема: ").Append(running ? "работает" : "ОСТАНОВЛЕНА");
+            if (planeManager != null)
+            {
+                sb.Append(" · запрошено: ").Append(planeManager.requestedDetectionMode);
+                sb.Append(" · применяется: ").Append(planeManager.currentDetectionMode);
+                sb.Append(" · трекаблов: ").Append(planeManager.trackables.count);
+            }
+            sb.Append(" · экран ").Append(Screen.width).Append("×").Append(Screen.height);
+            if (arCamera != null)
+                sb.Append(" · камера ").Append(arCamera.pixelWidth).Append("×").Append(arCamera.pixelHeight);
+            Debug.Log(sb.ToString());
+        }
+
+        /// <summary>
+        /// СТОРОЖ КАРТИНКИ: пропорции экрана и камеры. Дефект планшета (кадры tablet-pcui8.png
+        /// 05.11 и tablet-ar-surfaces1.png 06.11): приложение оказывалось УЗКОЙ ВЕРТИКАЛЬНОЙ
+        /// ПОЛОСОЙ по центру, по бокам — размытый фон, тулбар обрезан: Android держал портретное
+        /// окно активности. Здесь пропорции пишутся в журнал, ориентация перезакрепляется и при
+        /// явном расхождении один раз перезапускается подсистема AR.
+        /// </summary>
+        private void CheckDisplayAspect()
+        {
+            if (arCamera == null) return;
+            if (Time.unscaledTime < nextAspectCheck) return;
+            nextAspectCheck = Time.unscaledTime + 2f;
+
+            float screenAspect = Screen.height > 0 ? Screen.width / (float)Screen.height : 0f;
+            float cameraAspect = arCamera.pixelHeight > 0
+                ? arCamera.pixelWidth / (float)arCamera.pixelHeight : 0f;
+            float deviation = screenAspect > 0.01f && cameraAspect > 0.01f
+                ? Mathf.Abs(cameraAspect - screenAspect) / screenAspect : 0f;
+
+            // Портретное окно или чужие пропорции — вернуть горизонтальную ориентацию.
+            if (screenAspect < 1f) Screen.orientation = ScreenOrientation.LandscapeLeft;
+
+            if (!aspectLogged || deviation > 0.05f)
+            {
+                aspectLogged = true;
+                Debug.Log("[KvAr] ЭКРАН: пропорции · экран " + Screen.width + "×" + Screen.height +
+                          " (" + screenAspect.ToString("0.000") + ") · камера " +
+                          arCamera.pixelWidth + "×" + arCamera.pixelHeight + " (" +
+                          cameraAspect.ToString("0.000") + ") · расхождение " +
+                          (deviation * 100f).ToString("0.0") + "% · ориентация " + Screen.orientation);
+            }
+
+            if (deviation > 0.15f && aspectRestarts < 1)
+            {
+                aspectRestarts++;
+                Debug.LogWarning("[KvAr] ЭКРАН: пропорции камеры не совпадают с экраном — " +
+                                 "перезапуск подсистемы AR, чтобы картинка заняла весь экран");
+                ResetArSubsystem();
+            }
+        }
+
+        /// <summary>ПЕРЕЗАПУСК ПОДСИСТЕМЫ AR (`session.Reset()` — тот же путь, что у сторожа сессии).</summary>
+        private void ResetArSubsystem()
+        {
+            if (session == null)
+            {
+                Debug.LogWarning("[KvAr] ПОВЕРХНОСТИ: сессии AR нет — перезапуск невозможен");
+                return;
+            }
+            session.Reset();
         }
 
         // ---------------------------------------------------------------- настройка
@@ -508,6 +763,74 @@ namespace KazistovVvAr
         }
 
         /// <summary>
+        /// ОЧИСТКА РАБОЧЕГО ПРОСТРАНСТВА (06.11.2026, запрос владельца).
+        /// Удаляет ВСЁ, что создано в AR: столы, роботов, точки и траектории; снимает якорь и
+        /// возвращает мир к камере. Вызывается из окна подтверждения (кнопка «Очистить» /
+        /// «Правка → Очистить рабочее пространство»), поэтому случайного удаления нет.
+        /// </summary>
+        public void ClearWorkspace()
+        {
+            Debug.Log("[KvAr] ОЧИСТКА: начало — убираю столы, роботов, точки, траектории и якорь");
+
+            if (ui != null) ui.ClosePanels();
+
+            TrajectoryFlowController flow = UnityEngine.Object.FindAnyObjectByType<TrajectoryFlowController>();
+            if (flow != null)
+            {
+                flow.ResetFlow("очистка рабочего пространства");
+                Debug.Log("[KvAr] ОЧИСТКА: траектория и точки сброшены");
+            }
+
+            // ШАБЛОНЫ РОБОТОВ НЕ ТРОГАЕМ: иначе после очистки не из чего будет создать нового.
+            ObjectSpawner spawner = UnityEngine.Object.FindAnyObjectByType<ObjectSpawner>();
+            var templates = new System.Collections.Generic.HashSet<GameObject>();
+            if (spawner != null)
+            {
+                RobotController[] templateRobots = spawner.RefreshRobotTemplates();
+                for (int i = 0; i < templateRobots.Length; i++)
+                    if (templateRobots[i] != null) templates.Add(templateRobots[i].gameObject);
+            }
+
+            int destroyed = 0;
+            RobotController[] robots = UnityEngine.Object.FindObjectsByType<RobotController>(
+                FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            for (int i = 0; i < robots.Length; i++)
+            {
+                RobotController robot = robots[i];
+                if (robot == null || templates.Contains(robot.gameObject)) continue;
+                UnityEngine.Object.Destroy(robot.gameObject);
+                destroyed++;
+            }
+
+            RegisteredObject[] objects = UnityEngine.Object.FindObjectsByType<RegisteredObject>(
+                FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            for (int i = 0; i < objects.Length; i++)
+            {
+                RegisteredObject item = objects[i];
+                if (item == null) continue;
+                UnityEngine.Object.Destroy(item.gameObject);
+                destroyed++;
+            }
+
+            if (world != null) world.Clear("очистка рабочего пространства");
+            if (touch != null)
+            {
+                touch.ClearSelection();
+                touch.ResetView();
+            }
+            KvArUi.ResetCreatedTableCounter();
+
+            if (placement != null) placement.RePlace();
+            if (ui != null)
+            {
+                ui.HideMessage();
+                ui.SetHint("Рабочее пространство очищено — наведите камеру на стол и нажмите «Поставить»");
+            }
+            Debug.Log("[KvAr] ОЧИСТКА: готово · удалено объектов " + destroyed +
+                      " · якорь снят, мир вернулся к камере");
+        }
+
+        /// <summary>
         /// ПРАВЫЙ РЯД БЫСТРЫХ ДЕЙСТВИЙ ПЛАНШЕТА (ПК-вид). Всё остальное — меню, инструменты и
         /// дерево проекта в `KvArUi`; здесь только то, чего нет в ПК-меню: постановка мира,
         /// пересборка, панель ВСЕХ команд и сброс вида.
@@ -733,33 +1056,58 @@ namespace KazistovVvAr
                 nextCountTime = Time.unscaledTime + 1f;
                 uiRobots = UnityEngine.Object.FindObjectsByType<RobotController>(
                     FindObjectsInactive.Exclude, FindObjectsSortMode.None).Length;
-                uiTables = KvArUi.CreatedTableCount;
+                // СТОЛЫ — ФАКТИЧЕСКИ СУЩЕСТВУЮЩИЕ, А НЕ «СКОЛЬКО СОЗДАНО» (07.11.2026).
+                // Дефект: после удаления объектов строка показывала «Столов: 8» при пустом мире,
+                // потому что раньше печатался счётчик созданий `KvArUi.CreatedTableCount`.
+                uiTables = CountExistingTables();
+                if (touch != null) touch.ClearSelectionIfGone();
             }
 
+            bool tableFound = planeVisualizer != null && planeVisualizer.BestTable != null;
             string left = "Готово · Робот: " + (robotPlaced ? "поставлен" : (uiRobots > 0 ? uiRobots + " в сцене" : "нет")) +
                           " · Столов: " + uiTables +
-                          " · Плоскости: " + planes;
+                          " · Плоскости: " + planes +
+                          " · Стол: " + (tableFound ? "найден" : "нет");
             string right = "Камера: " + (cameraOk ? "вкл" : "ждём") +
                            " · Трекинг: " + (tracking ? "да" : "ждём") +
                            " · " + fpsSmoothed.ToString("0") + " кадр/с";
             ui.SetFooter(left, right);
 
+            // Подсказку о постановке ведёт `KvArPlacement` (у него есть состояние и площади);
+            // здесь не перебиваем её, иначе на экране «две разные инструкции».
             if (touch != null && !string.IsNullOrEmpty(touch.SelectedLabel))
             {
                 ui.SetHint("Выбрано: " + touch.SelectedLabel);
             }
-            else if (!placed)
+            else if (placed)
             {
-                ui.SetHint("Поднимите планшет и наведите камеру на стол · затем «Поставить»");
-            }
-            else
-            {
-                ui.SetHint("Коснитесь стола для точки · «Команды» — все функции программы");
+                ui.SetHint("Коснитесь объекта для выбора · «Очистить» — новое рабочее пространство");
             }
         }
         private static string Yes(UnityEngine.Object target)
         {
             return target != null ? "есть" : "НЕТ";
+        }
+
+        /// <summary>
+        /// СКОЛЬКО СТОЛОВ РЕАЛЬНО СТОИТ В МИРЕ. Считаем по объектам сцены (`RegisteredObject`,
+        /// имя «Стол…»), а не по счётчику созданий: иначе после удаления/очистки строка врёт.
+        /// </summary>
+        public static int CountExistingTables()
+        {
+            RegisteredObject[] objects = UnityEngine.Object.FindObjectsByType<RegisteredObject>(
+                FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            int tables = 0;
+            for (int i = 0; i < objects.Length; i++)
+            {
+                RegisteredObject item = objects[i];
+                if (item == null) continue;
+                string name = string.IsNullOrEmpty(item.DisplayName) ? item.name : item.DisplayName;
+                if (name == null) continue;
+                if (name.IndexOf("стол", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                tables++;
+            }
+            return tables;
         }
 
         /// <summary>СТРОКА-ДОКАЗАТЕЛЬСТВО О РЕЖИМЕ (для теста и отчёта).</summary>

@@ -222,7 +222,7 @@ S-профиля, ни `SafetyGate.Approve`; зазор проверяется �
 ### 6.5 Секреты в репозитории
 
 `keystore/kazistovvv.keystore` **отслеживается git** (коммит `6ec73fd`), а пароль рядом зашит в
-`KvAndroidSigning.cs:41` (`Password = "KazistovVv2026"`). `.gitignore` правило `keystore/` не покрывает.
+`KvAndroidSigning.cs:41` (`Password = "<удалено 11.11.2026 как утёкшее>"`). `.gitignore` правило `keystore/` не покрывает.
 Не правил: удаление файла из истории — решение владельца (нужен `filter-repo` или ротация ключа).
 
 ### 6.6 Порядок `Update` для ENTER не закреплён (гипотеза)

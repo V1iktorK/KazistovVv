@@ -29,6 +29,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Документы не отстают от факта: числа и статусы пунктов.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvDocsConsistencyTests
     {
         /// <summary>
@@ -176,3 +177,4 @@ namespace KazistovVvTests
         }
     }
 }
+

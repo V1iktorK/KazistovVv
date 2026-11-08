@@ -154,11 +154,24 @@ public class FreeFlyCameraController : MonoBehaviour
     private bool gKeyWasDown;
     // Кадр последнего переключения фонарика — второе срабатывание в том же кадре игнорируется.
     private int lastFlashToggleFrame = -1;
+
+    // Защёлки фронта клавиш Z/X (лазеры): `wasPressedThisFrame` в Input System истинен ДВА кадра
+    // подряд, поэтому одно нажатие давало два переключения (P1-13, 11.11.2026).
+    private bool zKeyWasDown;
+    private bool xKeyWasDown;
     private AimIndicator aimIndicator;
-#pragma warning disable 0618 // TrajectoryPlannerController помечен [Obsolete] — мёртвый код (аудит §5.7)
-    private TrajectoryPlannerController plannerController;
-#pragma warning restore 0618
+    // P3-7 (11.11.2026). ЧТО БЫЛО. Здесь стояли `#pragma warning disable 0618`, поле
+    // `private TrajectoryPlannerController plannerController;` и `#pragma warning restore 0618`.
+    // Поле НИКОГДА не присваивалось (единственное чтение — `if (plannerController != null)`),
+    // поэтому ветка ниже была недостижима, а сама директива глушила предупреждение о том, что
+    // тип помечен мёртвым. ТЗ (P3-7) прямо разрешает убрать эту мёртвую пару поле+ветка.
+    // ЧЕМ ЭТО ГРОЗИЛО. Читающий код считал, что планировщик E2–E5 здесь работает, и искал
+    // отказы «планировщика» не в том месте; предупреждение компилятора об этом молчало.
     private TrajectoryFlowController flowController;
+    // Предупреждение «legacy-осей мыши нет» пишется один раз (P3-4): иначе строка в журнале
+    // повторялась бы каждый кадр и её перестали бы читать.
+    private bool legacyMouseAxesWarned;
+
     private RobotController selectedRobot;
 
     /// <summary>Подавить старую прямую телеоперацию кликом (движение — только через поток выбора).</summary>
@@ -332,19 +345,22 @@ public class FreeFlyCameraController : MonoBehaviour
         return edge;
     }
 
+    /// <summary>
+    /// Кнопка мыши УДЕРЖИВАЕТСЯ. Сначала новая система ввода, затем legacy-откат —
+    /// как у всех клавиатурных хелперов этого класса (см. `IsKeyPressed`).
+    ///
+    /// P3-13 (11.11.2026). ЧТО БЫЛО. Порядок был ПЕРЕВЁРНУТ: первым шёл legacy `Input.GetMouseButton`,
+    /// и при успехе метод возвращал `true` сразу. При `activeInputHandler = Both` (а это настройка
+    /// проекта) legacy отвечает ВСЕГДА, поэтому ветка `Mouse.current` не исполнялась НИКОГДА —
+    /// вместе с восемью обёртками `try { … } catch { }`, написанными ради неё. То есть код
+    /// существовал, но был мёртв, и «откат на новую систему» не работал.
+    /// ЧЕМ ЭТО ГРОЗИЛО. На устройстве, где legacy-мышь не отдаёт нажатий (Android/планшет),
+    /// осмотр и прицел теряли кнопку — а выглядело это как «мышь иногда не работает», потому что
+    /// правильная ветка была недостижима.
+    /// ТЕПЕРЬ порядок выровнен: новое API первым, legacy — откат.
+    /// </summary>
     private bool IsMouseButtonPressed(int button)
     {
-        try
-        {
-            if (Input.GetMouseButton(button))
-            {
-                return true;
-            }
-        }
-        catch
-        {
-        }
-
         if (Mouse.current != null)
         {
             switch (button)
@@ -371,19 +387,17 @@ public class FreeFlyCameraController : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Кнопка мыши нажата ИМЕННО в этом кадре.
+    ///
+    /// P3-13 (11.11.2026). Тот же перевёрнутый порядок, что был в `IsMouseButtonPressed` и
+    /// `ReadMouseDelta`: сначала legacy `Input.GetMouseButtonDown` с немедленным возвратом, и
+    /// только потом `Mouse.current`. При `activeInputHandler = Both` вторая ветка не исполнялась
+    /// НИКОГДА, поэтому на платформе без legacy-мыши (Android/планшет) не работало подтверждение
+    /// точки по ЛКМ — «кнопка не нажимается», без сообщения. Выровнено: новое API первым.
+    /// </summary>
     private bool IsMouseButtonDownThisFrame(int button)
     {
-        try
-        {
-            if (Input.GetMouseButtonDown(button))
-            {
-                return true;
-            }
-        }
-        catch
-        {
-        }
-
         if (Mouse.current != null)
         {
             switch (button)
@@ -399,7 +413,15 @@ public class FreeFlyCameraController : MonoBehaviour
                     break;
             }
         }
-        return false;
+
+        try
+        {
+            return Input.GetMouseButtonDown(button);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     /// <summary>Нажатие «в этом кадре» через legacy Input (откат, если клавиатуру не отдал Input System).</summary>
@@ -431,8 +453,27 @@ public class FreeFlyCameraController : MonoBehaviour
         return false;
     }
 
+    /// <summary>
+    /// Смещение мыши за кадр. Сначала новая система ввода, затем legacy-откат.
+    ///
+    /// P3-13 (11.11.2026). ЧТО БЫЛО. Порядок был ПЕРЕВЁРНУТ: первым читался legacy
+    /// `Input.GetAxisRaw("Mouse X"/"Mouse Y")`, и при НЕНУЛЕВОМ результате метод возвращал его,
+    /// не глядя на `Mouse.current`. При `activeInputHandler = Both` legacy-оси есть всегда, значит
+    /// ветка `Mouse.current.delta` не исполнялась никогда.
+    /// ЧЕМ ЭТО ГРОЗИЛО. На платформе без legacy-осей (Android/планшет) осмотр камеры «прилипал»:
+    /// нулевая legacy-ось — и до нового API очередь не доходила; а чувствительность при `Both`
+    /// бралась из другой системы, чем у клавиш (клавиши уже читались новым API первым).
+    /// ТЕПЕРЬ порядок выровнен с остальными хелперами класса.
+    /// </summary>
     private Vector2 ReadMouseDelta()
     {
+        Vector2 delta = Vector2.zero;
+        if (Mouse.current != null)
+        {
+            delta = Mouse.current.delta.ReadValue();
+            if (delta.sqrMagnitude > 0f) return delta * lookSensitivity;
+        }
+
         try
         {
             Vector2 legacyDelta = new Vector2(Input.GetAxisRaw("Mouse X"), Input.GetAxisRaw("Mouse Y"));
@@ -443,11 +484,17 @@ public class FreeFlyCameraController : MonoBehaviour
         }
         catch
         {
+            // P3-4: пустой catch здесь значил «обе ветки промолчали». На платформе без legacy-осей
+            // это штатный отказ (осей просто нет), поэтому пишем предупреждение ОДИН раз, а не
+            // каждый кадр: иначе журнал перестаёт быть читаемым и предупреждение обесценивается.
+            if (!legacyMouseAxesWarned)
+            {
+                legacyMouseAxesWarned = true;
+                Debug.LogWarning("[FreeFlyCamera] legacy-оси мыши недоступны (Android/планшет) — " +
+                                 "обзор идёт только через новую систему ввода");
+            }
         }
-
-        return Mouse.current != null
-            ? Mouse.current.delta.ReadValue() * lookSensitivity
-            : Vector2.zero;
+        return delta * lookSensitivity;
     }
 
     void Awake()
@@ -892,8 +939,15 @@ public class FreeFlyCameraController : MonoBehaviour
         }
 
         // Переключение рук-лазеров (toggle) клавишами Z / X.
-        if (IsKeyPressed(KeyCode.Z)) leftHandEnabled = !leftHandEnabled;
-        if (IsKeyPressed(KeyCode.X)) rightHandEnabled = !rightHandEnabled;
+        //
+        // P1-13 (11.11.2026). ЧТО БЫЛО: здесь стоял `IsKeyPressed`, то есть `wasPressedThisFrame`,
+        // который в Input System 1.20 истинен ДВА кадра подряд — лазер включался и в том же
+        // нажатии выключался («включается со второго раза»). Для фонарика (G) это уже было
+        // исправлено защёлкой `KeyToggleEdge`, а лазеры — основная телеоперация — остались на
+        // старом фронте. ЧЕМ ЭТО ГРОЗИЛО: оператор нажимает Z, чтобы включить красный лазер, и
+        // видит, что «ничего не произошло», хотя прицел уже сбит.
+        if (KeyToggleEdge(KeyCode.Z, ref zKeyWasDown)) leftHandEnabled = !leftHandEnabled;
+        if (KeyToggleEdge(KeyCode.X, ref xKeyWasDown)) rightHandEnabled = !rightHandEnabled;
 
         // F: смотрит ли «шарик» лазера (точка прицела) на робота.
         //   попал в робота  → он становится выбранным;
@@ -1109,8 +1163,14 @@ public class FreeFlyCameraController : MonoBehaviour
         }
 
         // Планировщик траекторий (P — план, 1/2/3 — исполнить, F9 — автотест).
-        if (plannerController != null && !pointMoveMode)
-            plannerController.UpdateAim(aimPoint, aimHitSurface);
+        // P3-7 (11.11.2026). ЧТО БЫЛО. Здесь стояла ветка
+        // `if (plannerController != null && !pointMoveMode) plannerController.UpdateAim(...)`.
+        // Поле `plannerController` никогда не присваивалось, поэтому ветка не исполнялась ни
+        // разу: мёртвый вызов мёртвого класса под заглушённым предупреждением 0618.
+        // ЧЕМ ЭТО ГРОЗИЛО. Прицел «обновлял планировщик» только на бумаге: клавиши P/1/2/3/F9
+        // не работали вовсе, а искать причину шли в эту недостижимую строку. Рабочий путь —
+        // `TrajectoryFlowController` (см. `flowController.UpdateAim` ниже).
+        // Ветка удалена по прямому разрешению ТЗ (P3-7), замена — поток выбора.
 
         // Поток выбора «два лазера»: ОДНА кнопка действия — ЛКМ (её смысл определяется
         // тем, какой лазер включён: Z — красный, X — зелёный).
@@ -1562,35 +1622,42 @@ public class FreeFlyCameraController : MonoBehaviour
         }
 
         // 1) Иначе — активный (выбранный F / деревом) робот.
-        RobotController selectedRobot = FindActiveRobot();
+        //
+        // P1-14 (11.11.2026). ЧТО БЫЛО: здесь объявлялась ЛОКАЛЬНАЯ переменная с тем же именем,
+        // что поле класса, — она затеняла поле. Поле `selectedRobot` (за ним стоит публичное
+        // свойство `SelectedRobot`) в этом пути оставалось `null`, хотя оператор только что выбрал
+        // робота кликом. ЧЕМ ЭТО ГРОЗИЛО: панель свойств и внешние проверки «какой робот выбран»
+        // показывали «робот не выбран» при живом выборе.
+        RobotController candidate = FindActiveRobot();
 
         // 2) Затем — робот, на которого смотрит прицел.
-        if (selectedRobot == null)
+        if (candidate == null)
         {
-            selectedRobot = aimHitSurface
+            candidate = aimHitSurface
                 ? FindPreferredRobotController(FindAnyRobotTransformNearAim())
                 : null;
         }
-        if (selectedRobot == null)
+        if (candidate == null)
         {
-            selectedRobot = FindRobotNearRay(transform.position, transform.forward, laserLength);
+            candidate = FindRobotNearRay(transform.position, transform.forward, laserLength);
         }
-        if (selectedRobot == null)
+        if (candidate == null)
         {
             RobotController[] robots = Object.FindObjectsByType<RobotController>(FindObjectsInactive.Include);
-            if (robots.Length > 0) selectedRobot = robots[0];
+            if (robots.Length > 0) candidate = robots[0];
         }
 
-        if (selectedRobot == null) return;
+        if (candidate == null) return;
 
-        SelectRobotAsPrimary(selectedRobot);
+        selectedRobot = candidate;          // поле класса — публичное свойство теперь не врёт
+        SelectRobotAsPrimary(candidate);
 
         Vector3 posTarget = aimHitSurface
             ? aimPoint
-            : GetRobotTcpPosition(selectedRobot);
+            : GetRobotTcpPosition(candidate);
 
-        selectedRobot.SetTarget(posTarget);
-        Debug.Log($"[DesktopTeleoperation] Target pos={posTarget} assigned to {selectedRobot.name}.");
+        candidate.SetTarget(posTarget);
+        Debug.Log($"[DesktopTeleoperation] Target pos={posTarget} assigned to {candidate.name}.");
     }
 
     /// <summary>Делает робота основным (единственным активным).</summary>

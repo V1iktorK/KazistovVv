@@ -1,142 +1,410 @@
-name: Unity EditMode tests and console gate
+name: CI
 
 # ================================================================================================
-#  ЧТО ЭТО ДАЁТ (добавлено 30.10.2026, сессия S44).
+#  ЕДИНЫЙ КОНВЕЙЕР ПРОВЕРОК (переписан 11.11.2026 по итогам аудита).
 #
-#  ДО СИХ ПОР ВСЕ ПРОВЕРКИ ЗАПУСКАЛИСЬ РУКАМИ и жили только на машине владельца. Цена такого
-#  подхода уже измерена аудитом S43: гейт «чистой консоли» ШЕСТЬ раз был зелёным при реальных
-#  исключениях, потому что никто не смотрел на вердикт внимательно. Здесь то же самое, но
-#  автоматически и на каждом коммите.
+#  ЧТО БЫЛО НЕ ТАК В ПРЕЖНЕЙ ВЕРСИИ — и почему это не мелочи:
 #
-#  ЧТО ЗАПУСКАЕТСЯ:
-#    1) разбор логов прошлых прогонов проекта — дёшево, без Unity, ловит регресс форматов;
-#    2) EditMode-тесты в batchmode через GameCI;
-#    3) гейт «чистой консоли» (Tools/ci-console-check.ps1 -AnalyzeOnly) по логу прогона тестов:
-#       ошибки компиляции и исключения ПРИЛОЖЕНИЯ валят сборку — теперь и в CI тоже.
+#   1) ТРИГГЕРЫ НЕ ВКЛЮЧАЛИ РАБОЧУЮ ВЕТКУ. Стояло `branches: [Cline, main, master]`, а вся
+#      работа идёт в `Develop`. То есть конвейер НЕ ЗАПУСКАЛСЯ НИ РАЗУ на настоящих изменениях:
+#      «CI настроен» было правдой только на бумаге. Теперь — все ветки.
 #
-#  ЧЕГО ЗДЕСЬ НЕТ И ПОЧЕМУ:
-#    • сборки APK — на раннере нет ни Android SDK версии из проекта, ни лицензии на неё,
-#      а сборка идёт ~70 минут (см. §32). APK собирается только на машине владельца;
-#    • PlayMode-тестов — они требуют графики и на раннере без GPU висят (измерено: ~40 минут,
-#      см. KvFlowPlayModeTests.cs:25-40). Это отдельная задача с графическим раннером.
+#   2) НА PULL REQUEST ТЕСТЫ ПРОПУСКАЛИСЬ, А ГЕЙТ ПАДАЛ. Условие
+#      `github.event_name != 'pull_request' || vars.RUN_UNITY_TESTS == 'true'` отключало job на
+#      каждом PR, а итоговый гейт трактует `skipped` как провал. Итог: ЛЮБОЙ pull request
+#      гарантированно красный, и красный цвет перестают читать. Теперь тесты на PR идут, если
+#      настроена лицензия; если лицензии нет — гейт падает с ЯВНЫМ объяснением, что проверить
+#      не удалось (это по-прежнему провал, но осмысленный).
+#
+#   3) НЕ ПУБЛИКОВАЛСЯ ОТЧЁТ ТЕСТОВ. Падение в CI приходилось разбирать по логу. Теперь
+#      NUnit-XML превращается в аннотации прямо в PR (dorny/test-reporter).
+#
+#   4) НЕ БЫЛО ПРОВЕРОК ГИГИЕНЫ РЕПОЗИТОРИЯ. `Tools/repo-guards.ps1` ловит артефакты сборки в
+#      индексе, остатки-файлы внутри Assets (Unity импортирует их как ассеты), .meta без ассета,
+#      не-ASCII в путях (Android-сборка падает на кириллице) и ключи подписи в git.
+#
+#   5) НЕ БЫЛО СБОРКИ И PLAY-MODE. Причины честные (нет GPU, нет Android SDK, сборка ~70 минут),
+#      поэтому они не «включены всегда», а ВЫНЕСЕНЫ в ночной конвейер и в ручной запуск.
+#      Ключевое: они не притворяются выполненными — см. итоговый гейт.
+#
+#  СЕКРЕТЫ (Settings → Secrets and variables → Actions):
+#    UNITY_LICENSE      — содержимое .ulf (Personal/Pro). Достаточно одного этого.
+#    UNITY_EMAIL +
+#    UNITY_PASSWORD     — альтернатива для активации по логину.
+#    ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASS, ANDROID_KEYALIAS_NAME,
+#    ANDROID_KEYALIAS_PASS — нужны ТОЛЬКО job сборки APK.
+#  ПЕРЕМЕННЫЕ (Settings → Variables):
+#    RUN_ANDROID_BUILD=true — разрешить job сборки APK.
+#    RUN_PLAYMODE=true      — разрешить job PlayMode (нужен раннер с графикой).
 # ================================================================================================
 
 on:
   push:
-    branches: [Cline, main, master]
+    branches: ['**']
   pull_request:
-    branches: [Cline, main, master]
+  schedule:
+    # Ночной прогон: полный EditMode + PlayMode + сборка APK (см. nightly.yml).
+    - cron: '0 3 * * *'
   workflow_dispatch:
+    inputs:
+      run_playmode:
+        description: 'Запустить PlayMode-тесты (нужен раннер с графикой)'
+        type: boolean
+        default: false
+      run_android_build:
+        description: 'Собрать APK (долго; нужен Android SDK и ключ подписи)'
+        type: boolean
+        default: false
+
+# Минимальные права: конвейеру нужно только читать код и писать аннотации/отчёты.
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+# Новый push в ту же ветку отменяет предыдущий прогон: экономит раннеры и время ожидания.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
-  # Версия Unity берётся из ProjectSettings/ProjectVersion.txt; вторая копия — картинка с лицензией.
-  UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-  UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
-  UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+  # Версия Unity берётся ИЗ ПРОЕКТА, а не из второй картинки: иначе CI проверял бы не тот движок.
+  UNITY_VERSION: '6000.5.6f1'
 
 jobs:
-  # ------------------------------------------------------------------ 1. Быстрые проверки без Unity
+  # ==============================================================================================
+  # 1. ПРОВЕРКИ БЕЗ UNITY. Дёшево, быстро, и именно здесь ловятся «зелёные впустую» дефекты.
+  # ==============================================================================================
   static-checks:
-    name: "Проверки без Unity (PowerShell-разбор .ps1, гейт по истории)"
+    name: "Сторожа репозитория и скриптов (без Unity)"
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Полная история не нужна, но и глубина 1 ломает сравнение веток — берём 20.
+          fetch-depth: 20
 
-      - name: "Разбор всех Tools\\*.ps1 (BOM и синтаксис)"
+      - name: "Версия Unity в проекте совпадает с версией конвейера"
+        shell: pwsh
+        run: |
+          $line = Select-String -Path 'ProjectSettings/ProjectVersion.txt' -Pattern 'm_EditorVersion:\s*(\S+)'
+          if (-not $line) { Write-Host "::error::ProjectSettings/ProjectVersion.txt без m_EditorVersion"; exit 1 }
+          $actual = $line.Matches[0].Groups[1].Value
+          Write-Host "версия проекта: $actual · версия конвейера: $env:UNITY_VERSION"
+          if ($actual -ne $env:UNITY_VERSION) {
+            Write-Host "::error file=ProjectSettings/ProjectVersion.txt::версия в проекте ($actual) не совпадает с версией конвейера ($env:UNITY_VERSION) — CI проверял бы не тот движок"
+            exit 1
+          }
+
+      - name: "Все Tools/*.ps1 разбираются и имеют BOM"
         shell: pwsh
         run: |
           $fail = $false
-          Get-ChildItem Tools/*.ps1 | ForEach-Object {
-            $bytes = [System.IO.File]::ReadAllBytes($_.FullName)
+          $files = Get-ChildItem Tools/*.ps1 -ErrorAction SilentlyContinue
+          if (-not $files) { Write-Host "скриптов нет — шаг пропущен"; exit 0 }
+          foreach ($f in $files) {
+            $bytes = [System.IO.File]::ReadAllBytes($f.FullName)
             $hasBom = ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
             if (-not $hasBom) {
-              Write-Host "::error file=$($_.Name)::нет BOM — Windows PowerShell 5.1 прочитает кириллицу как ANSI (дефект A19/E-11)"
+              Write-Host "::error file=Tools/$($f.Name)::нет BOM — Windows PowerShell 5.1 прочитает кириллицу как ANSI (дефект A19/E-11)"
               $fail = $true
             }
             $errors = $null
-            $null = [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$errors)
+            $null = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$errors)
             if ($errors -and $errors.Count -gt 0) {
-              Write-Host "::error file=$($_.Name)::ошибка разбора: $($errors[0].Message)"
+              Write-Host "::error file=Tools/$($f.Name)::ошибка разбора: $($errors[0].Message) (строка $($errors[0].Extent.StartLineNumber))"
               $fail = $true
             }
           }
           if ($fail) { exit 1 }
-          Write-Host "Все скрипты Tools/*.ps1 с BOM и разбираются."
+          Write-Host "Все Tools/*.ps1 с BOM и разбираются."
 
-      - name: "Гейт по последнему логу проекта (без запуска Unity)"
+      - name: "Сторожа репозитория (артефакты, .meta, не-ASCII, секреты)"
+        shell: pwsh
+        run: pwsh -File Tools/repo-guards.ps1 -ProjectPath "${{ github.workspace }}"
+
+      - name: "Гейт «чистой консоли» по последнему сохранённому логу (если он есть)"
         shell: pwsh
         run: |
-          # -AnalyzeOnly читает готовый лог. Логи обновляются на машине владельца и лежат в
-          # репозитории только если их туда положили, поэтому отсутствие лога — не провал.
-          $log = Get-ChildItem Logs/*.log -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          if (-not $log) { Write-Host "Логов нет — шаг пропущен (гейт работает на машине владельца)"; exit 0 }
+          # -AnalyzeOnly читает готовый лог: логи обновляются на машине владельца, поэтому их
+          # отсутствие — не провал, а честное «проверять было нечем».
+          $log = Get-ChildItem Logs/*.log -ErrorAction SilentlyContinue |
+                 Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $log) { Write-Host "Логов в репозитории нет — шаг пропущен (гейт работает на машине владельца)"; exit 0 }
           powershell -ExecutionPolicy Bypass -File Tools/ci-console-check.ps1 -AnalyzeOnly -LogFile "$($log.FullName)" -LogName "$($log.Name)"
 
-  # ------------------------------------------------------------------ 2. EditMode-тесты в Unity
+  # ==============================================================================================
+  # 2. EDITMODE-ТЕСТЫ. Основной автоматический страж логики (~1150 тестов).
+  # ==============================================================================================
   editmode-tests:
-    name: "EditMode-тесты (Unity ${{ matrix.unityVersion }})"
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    # Без лицензии шаг Unity упадёт на активации; держим его нужным, но честно объясняем в логе.
-    if: ${{ github.event_name != 'pull_request' || vars.RUN_UNITY_TESTS == 'true' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        # Одна версия — та, что в ProjectVersion.txt. Матрица оставлена, чтобы добавить вторую
-        # (например, для проверки перед обновлением движка) без правки структуры.
-        unityVersion: ["6000.5.6f1"]
-        testMode: ["EditMode"]
-
+    name: "EditMode-тесты"
+    runs-on: windows-latest
+    timeout-minutes: 90
+    # ЗАВИСИМОСТИ ОТ static-checks НЕТ СПЕЦИАЛЬНО (11.11.2026). Раньше было `needs:
+    # [static-checks]`, и одна гигиеническая придирка (лишний файл в Assets) ОТМЕНЯЛА прогон
+    # 1179 тестов: сигналы были связаны там, где это не нужно. Теперь обе проверки идут
+    # параллельно, а сводит их итоговый гейт — он и падает, если провалилась любая.
     steps:
       - uses: actions/checkout@v4
         with:
           lfs: true
 
-      - name: "Кэш Library"
+      - name: "Кэш Library — ТОЛЬКО ПОДМНОЖЕСТВО (P4-5)"
         uses: actions/cache@v4
         with:
-          path: Library
-          key: Library-${{ matrix.unityVersion }}-${{ hashFiles('Packages/packages-lock.json') }}-${{ hashFiles('ProjectSettings/ProjectVersion.txt') }}
+          # P4-5 (12.11.2026). ЧТО БЫЛО: кэшировался ВЕСЬ каталог `Library` — 25,5 ГБ при лимите
+          # кэша GitHub Actions 10 ГБ НА РЕПОЗИТОРИЙ. Такой кэш физически не может сохраниться:
+          # каждый прогон начинался с холодного импорта, то есть «кэш настроен» было неправдой.
+          # ЧТО СТАЛО: кэшируется только то, что реально экономит время и укладывается в лимит —
+          # скачанные пакеты и база артефактов импорта. Полный `Library` не кэшируется НАМЕРЕННО.
+          path: |
+            Library/PackageCache
+            Library/ArtifactDB
+            Library/ScriptAssemblies
+            Library/ShaderCache
+          key: Library-subset-${{ runner.os }}-${{ env.UNITY_VERSION }}-${{ hashFiles('Packages/packages-lock.json', 'Packages/manifest.json', 'ProjectSettings/ProjectVersion.txt') }}
           restore-keys: |
-            Library-${{ matrix.unityVersion }}-
+            Library-subset-${{ runner.os }}-${{ env.UNITY_VERSION }}-
+            Library-subset-${{ runner.os }}-
 
-      - name: "Проверка наличия лицензии"
+      - name: "Есть ли лицензия Unity"
         id: license
-        shell: bash
+        shell: pwsh
         run: |
-          if [ -z "${{ secrets.UNITY_LICENSE }}" ] && [ -z "${{ secrets.UNITY_EMAIL }}" ]; then
-            echo "present=false" >> $GITHUB_OUTPUT
-            echo "::warning::Лицензия Unity не настроена (секреты UNITY_LICENSE или UNITY_EMAIL+UNITY_PASSWORD). Шаг тестов пропущен — это НЕ успешная проверка."
-          else
-            echo "present=true" >> $GITHUB_OUTPUT
-          fi
+          $hasLicense = -not [string]::IsNullOrWhiteSpace("${{ secrets.UNITY_LICENSE }}")
+          $hasCreds = (-not [string]::IsNullOrWhiteSpace("${{ secrets.UNITY_EMAIL }}")) -and
+                      (-not [string]::IsNullOrWhiteSpace("${{ secrets.UNITY_PASSWORD }}"))
+          if ($hasLicense -or $hasCreds) {
+            "present=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            Write-Host "лицензия настроена"
+          } else {
+            "present=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            Write-Host "::error::Лицензия Unity не настроена (секреты UNITY_LICENSE либо UNITY_EMAIL+UNITY_PASSWORD). Тесты НЕ будут выполнены, и это провал, а не успех."
+          }
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+
+      - name: "Провалить явно, если лицензии нет"
+        if: steps.license.outputs.present != 'true'
+        shell: pwsh
+        run: |
+          Write-Host "::error::Настройте секреты (Settings → Secrets and variables → Actions) и перезапустите."
+          exit 1
 
       - name: "EditMode-тесты"
         id: tests
-        if: steps.license.outputs.present == 'true'
         uses: game-ci/unity-test-runner@v4
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
-          unityVersion: ${{ matrix.unityVersion }}
-          testMode: ${{ matrix.testMode }}
-          artifactsPath: test-results-${{ matrix.testMode }}
+          unityVersion: ${{ env.UNITY_VERSION }}
+          testMode: EditMode
+          artifactsPath: test-results-editmode
           githubToken: ${{ secrets.GITHUB_TOKEN }}
           checkName: "EditMode итог"
-          customParameters: -nographics
+          coverageOptions: 'generateAdditionalMetrics;generateTestReferences'
+          # P4-6 (12.11.2026): на каждый коммит — только быстрые тесты. Полный набор (включая Slow)
+# идёт ночью (.github/workflows/nightly.yml) и вручную. Категории — см. KvTestCategories.cs.
+          # Проверка полноты разметки: KvP4FixTests.P4_6_TestFixtures_AreCategorised.
+          customParameters: -nographics -testCategory Fast
 
-      - name: "Публикация результатов тестов"
+      - name: "Отчёт тестов в аннотациях PR"
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: "EditMode (NUnit)"
+          path: 'test-results-editmode/**/*.xml'
+          reporter: dotnet-nunit
+          fail-on-error: false
+          list-suites: all
+          list-tests: failed
+
+      - name: "Публикация артефактов тестов"
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-${{ matrix.testMode }}
-          path: test-results-${{ matrix.testMode }}
+          name: test-results-editmode
+          path: test-results-editmode
           if-no-files-found: warn
+          retention-days: 14
 
-  # ------------------------------------------------------------------ 3. Итог
+      # ================================================================================
+      # ПОКРЫТИЕ КОДА (P4-7, 12.11.2026).
+      #
+      # ЧТО БЫЛО. Пакета `com.unity.testtools.codecoverage` в проекте не было вовсе, хотя
+      # `coverageOptions` в шаге тестов уже передавались: параметр уходил в никуда, отчёта не
+      # появлялось ни разу. «Покрытие включено» было неправдой.
+      # ЧТО СТАЛО. Пакет добавлен в `Packages/manifest.json`, а отчёт публикуется артефактом.
+      # ЦЕЛЬ — НЕ ПРОЦЕНТ, а поиск НЕПОКРЫТЫХ участков (папки Input/Integration/Recording/Spatial/UI/VR).
+      # ================================================================================
+      - name: "Публикация отчёта покрытия"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-editmode
+          path: |
+            CodeCoverage/Report
+            CodeCoverage/*.xml
+          if-no-files-found: warn
+          retention-days: 14
+
+  # ==============================================================================================
+  # 3. PLAY-MODE И Е2Е. Требуют графики: на раннере без GPU прогон ПОВИСАЕТ (измерено ~40 минут,
+  #    см. KvFlowPlayModeTests.cs:25-40). Поэтому — вручную или ночью, и только на раннере с GPU.
+  # ==============================================================================================
+  playmode-tests:
+    name: "PlayMode + Е2Е (нужен раннер с графикой)"
+    runs-on: windows-latest
+    timeout-minutes: 120
+    needs: [editmode-tests]
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.run_playmode) || vars.RUN_PLAYMODE == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: "Кэш Library — ТОЛЬКО ПОДМНОЖЕСТВО (P4-5)"
+        uses: actions/cache@v4
+        with:
+          path: |
+            Library/PackageCache
+            Library/ArtifactDB
+            Library/ScriptAssemblies
+            Library/ShaderCache
+          key: Library-subset-${{ runner.os }}-${{ env.UNITY_VERSION }}-${{ hashFiles('Packages/packages-lock.json', 'ProjectSettings/ProjectVersion.txt') }}
+          restore-keys: |
+            Library-subset-${{ runner.os }}-${{ env.UNITY_VERSION }}-
+
+      - name: "PlayMode-тесты"
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: ${{ env.UNITY_VERSION }}
+          testMode: PlayMode
+          artifactsPath: test-results-playmode
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          checkName: "PlayMode итог"
+
+      - name: "Е2Е: панель «Настройки» и переключатель VR/MR"
+        shell: pwsh
+        run: |
+          # Прогон без -nographics: Е2Е поднимает настоящую сцену и строит настоящий uGUI.
+          # Он сам завершает редактор кодом возврата (0 — прошло, 2 — провалы).
+          $unity = 'C:\Program Files\Unity\Hub\Editor\${{ env.UNITY_VERSION }}\Editor\Unity.exe'
+          if (-not (Test-Path $unity)) {
+            Write-Host "::warning::Unity не найден на раннере по пути $unity — шаг пропущен"
+            exit 0
+          }
+          & $unity -batchmode -projectPath "${{ github.workspace }}" `
+                   -executeMethod KvE2eSettingsDiag.Run `
+                   -logFile "${{ github.workspace }}\Logs\e2e-settings.log"
+          $code = $LASTEXITCODE
+          Write-Host "код возврата Е2Е: $code"
+          if ($code -ne 0) { Write-Host "::error::Е2Е провален (код $code), разбор — в Logs/e2e-settings.log"; exit 1 }
+
+      - name: "Публикация отчётов PlayMode и Е2Е"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-playmode
+          path: |
+            test-results-playmode
+            Logs/e2e-settings.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  # ==============================================================================================
+  # 4. СБОРКА APK. ~70 минут и нужен Android SDK + ключ подписи, поэтому только вручную/ночью.
+  # ==============================================================================================
+  android-build:
+    name: "Сборка APK — ${{ matrix.title }}"
+    runs-on: windows-latest
+    timeout-minutes: 180
+    needs: [editmode-tests]
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.run_android_build) || vars.RUN_ANDROID_BUILD == 'true' }}
+    # ============================================================================================
+    # ДВА ВАРИАНТА СБОРКИ ИЗ ОДНОГО КОДА (P4-19 п.2, 12.11.2026).
+    #
+    # ЧТО БЫЛО. Конвейер собирал ОДИН APK и публиковал его под одним именем. У проекта же два
+    # варианта, и это не прихоть: на планшете Redmi Pad 2 Pro Unity 6.5/Vulkan НЕ ВЫВОДИТ КАДРЫ
+    # (чёрный экран при живом процессе), а на шлеме PICO с GLES3 не активируется VR-дисплей.
+    # То есть «собрали APK» ещё не значит «собрали тот APK».
+    #
+    # ЧТО СТАЛО. Матрица по графическому API: шлем (Vulkan) и планшет (GLES3). Имена артефактов
+    # разные, и подписано, для какого устройства каждый — спутать невозможно.
+    # ============================================================================================
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - gfx: headset
+            title: "шлем PICO (Vulkan)"
+            name: KazistovVv-VR-vulkan
+            gfxEnv: ""
+          - gfx: tablet
+            title: "планшет/телефон (GLES3)"
+            name: KazistovVv-AR-gles3
+            gfxEnv: "gl"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: "Кэш Library — ТОЛЬКО ПОДМНОЖЕСТВО (P4-5)"
+        uses: actions/cache@v4
+        with:
+          path: |
+            Library/PackageCache
+            Library/ArtifactDB
+            Library/ScriptAssemblies
+            Library/ShaderCache
+          key: Library-subset-android-${{ matrix.gfx }}-${{ runner.os }}-${{ env.UNITY_VERSION }}-${{ hashFiles('Packages/packages-lock.json', 'ProjectSettings/ProjectVersion.txt') }}
+          restore-keys: |
+            Library-subset-${{ runner.os }}-${{ env.UNITY_VERSION }}-
+
+      - name: "Собрать APK — ${{ matrix.title }}"
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          # Ключ подписи берётся из секретов и НЕ кладётся в репозиторий (см. repo-guards).
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          ANDROID_KEYALIAS_NAME: ${{ secrets.ANDROID_KEYALIAS_NAME }}
+          ANDROID_KEYALIAS_PASS: ${{ secrets.ANDROID_KEYALIAS_PASS }}
+          # ВАРИАНТ ГРАФИЧЕСКОГО API: `KvXrTools` читает эту переменную и вызывает SetGraphicsAPIs.
+          # Пусто — Vulkan (шлем), `gl` — OpenGLES3 (планшет). Тот же контракт, что у
+          # `Tools/xr-build-apk-ascii.ps1 -Gfx`.
+          KAZISTOVVV_GFX: ${{ matrix.gfxEnv }}
+        with:
+          unityVersion: ${{ env.UNITY_VERSION }}
+          targetPlatform: Android
+          androidExportType: androidPackage
+          buildName: ${{ matrix.name }}
+          versioning: None
+
+      - name: "Публикация APK — ${{ matrix.name }}"
+        uses: actions/upload-artifact@v4
+        with:
+          # РАЗНЫЕ ИМЕНА АРТЕФАКТОВ: раньше оба варианта затирали один и тот же файл, и
+          # «поставил не тот APK» было неотличимо от «чёрного экрана» по коду.
+          name: ${{ matrix.name }}-apk
+          path: build
+          if-no-files-found: error
+          retention-days: 7
+
+  # ==============================================================================================
+  # 5. ИТОГОВЫЙ ГЕЙТ. Правило проекта: «пропущено» — НЕ успех. Иначе зелёная галочка врёт.
+  # ==============================================================================================
   gate:
     name: "Итог проверок"
     runs-on: ubuntu-latest
@@ -145,45 +413,50 @@ jobs:
     steps:
       - name: "Свести вердикт"
         run: |
-          echo "static-checks: ${{ needs.static-checks.result }}"
+          echo "static-checks:  ${{ needs.static-checks.result }}"
           echo "editmode-tests: ${{ needs.editmode-tests.result }}"
 
-          if [ "${{ needs.static-checks.result }}" = "failure" ]; then
-            echo "::error::Проверки без Unity провалены"
-            exit 1
-          fi
-          if [ "${{ needs.static-checks.result }}" = "cancelled" ]; then
-            echo "::error::Проверки без Unity отменены — это не успех"
-            exit 1
-          fi
-
-          if [ "${{ needs.editmode-tests.result }}" = "failure" ]; then
-            echo "::error::EditMode-тесты провалены"
-            exit 1
-          fi
-
-          # ==================================================================================
-          # ПРОПУЩЕННЫЕ ТЕСТЫ — НЕ УСПЕХ (исправлено 30.10.2026, S44).
+          # ==============================================================================
+          # ПРАВИЛО ПРОЕКТА: «ПРОПУЩЕНО» — НЕ УСПЕХ.
           #
-          # ЧТО БЫЛО. Шаг тестов пропускался, когда лицензия Unity не настроена, — и итоговый
-          # гейт при этом оставался ЗЕЛЁНЫМ. То есть при отсутствии тестов сборка объявлялась
-          # успешной, и «зелёная галочка» не значила ничего. Это ровно та же ошибка, из-за
-          # которой в проекте жили 13 замаскированных `Assert.Ignore` (урок E-16): «пропущено»
-          # выглядело как «хорошо».
+          # История (S44). Гейт оставался ЗЕЛЁНЫМ, когда тесты не запускались: отсутствие
+          # секретов лицензии превращало прогон в «skipped», а skipped не считался провалом.
+          # Человек видел зелёную галочку и считал ветку проверенной, хотя не выполнилось
+          # НИ ОДНОГО теста. Теперь оба «пустых» исхода названы провалом ЯВНО, отдельными
+          # проверками — а не только внутри цикла, чтобы отказ был виден в логе первой строкой.
           #
-          # ЧТО СТАЛО. Пропуск (result = skipped) — ЯВНЫЙ ПРОВАЛ гейта с объяснением, что нужно
-          # сделать. Лучше честный красный крестик, чем зелёный, за которым ничего нет.
-          # ==================================================================================
+          # ВАЖНО (11.11.2026): проверка сделана и на уровне ШАГА лицензии (`exit 1`, когда
+          # секретов нет). Раньше job считался success при пропущенном шаге тестов, и гейт
+          # этого не видел вовсе — исправление S44 закрыло только job-level skip.
+          # ==============================================================================
           if [ "${{ needs.editmode-tests.result }}" = "skipped" ]; then
             echo "::error::EditMode-тесты ПРОПУЩЕНЫ, а не пройдены. Сборка НЕ проверена."
             echo "::error::Причина почти всегда одна: не настроены секреты UNITY_LICENSE (или UNITY_EMAIL + UNITY_PASSWORD)."
             echo "::error::Настройте секреты в Settings → Secrets and variables → Actions. Пока их нет, зелёный вердикт был бы ложью."
             exit 1
           fi
-
           if [ "${{ needs.editmode-tests.result }}" = "cancelled" ]; then
-            echo "::error::EditMode-тесты отменены — сборка не проверена"
+            echo "::error::EditMode-тесты ОТМЕНЕНЫ — сборка не проверена."
             exit 1
           fi
 
-          echo "Все проверки выполнены и не провалены."
+          status=0
+          for job in "static-checks:${{ needs.static-checks.result }}" \
+                     "editmode-tests:${{ needs.editmode-tests.result }}"; do
+            name="${job%%:*}"; result="${job##*:}"
+            case "$result" in
+              success) echo "  ✅ $name" ;;
+              skipped)
+                echo "::error::$name ПРОПУЩЕН, а не пройден — сборка НЕ проверена. Это провал."
+                status=1 ;;
+              cancelled)
+                echo "::error::$name отменён — сборка не проверена."
+                status=1 ;;
+              *)
+                echo "::error::$name провален ($result)."
+                status=1 ;;
+            esac
+          done
+
+          if [ "$status" -ne 0 ]; then exit 1; fi
+          echo "Все обязательные проверки выполнены и не провалены."

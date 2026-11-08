@@ -2013,7 +2013,19 @@ public class TrajectoryFlowController : MonoBehaviour
     /// Добирает конфигурации-фантомы до want: зеркалим уже найденную позу
     /// (плечо / локоть / запястье) и доводим CCD до ТОЙ ЖЕ точки TCP (допуск 6 мм).
     /// Так фантомов стабильно 2–8 (ТЗ), а не 2–3. SCARA не трогаем — у неё своя аналитика.
+    ///
+    /// P3-6 (11.11.2026). ЧТО БЫЛО. Метод не вызывается НИОТКУДА (проверено поиском по всему
+    /// `Assets`): внутри — настоящая IK-доводка `validator.SolveIk(..., 120, 0.004f)`, то есть
+    /// «добивка фантомов до 8» была заявлена, но не работала. Фантомов всё равно 2–8, только
+    /// добивает их другой механизм — `AddSeedRequest` + `TopUpPlanQueue` (фазы «уникальные» и
+    /// «добивка похожими путями» в `FinishGeneration`).
+    /// ЧЕМ ЭТО ГРОЗИЛО. Читающий код верил, что здесь есть рабочий добор ветвей IK, и правил
+    /// не тот механизм; расхождение «обещание ↔ факт» ничем не сигнализировалось.
+    /// ТЕПЕРЬ: метка с причиной. Подключать его к потоку НЕ стал намеренно — это меняет
+    /// поведение планировщика (число и состав вариантов), то есть решение владельца.
     /// </summary>
+    [System.Obsolete("P3-6: не вызывается ниоткуда; добор вариантов идёт через AddSeedRequest и " +
+        "TopUpPlanQueue. Подключение меняет поведение планировщика — решение владельца.")]
     private List<IkSolution> TopUpVariants(List<IkSolution> source, double[] goalQ,
                                            int want, double[] ranges)
     {
@@ -2252,11 +2264,23 @@ public class TrajectoryFlowController : MonoBehaviour
             if (rc != null) rc.ClearTarget();
     }
 
+    /// <summary>
+    /// СПИСОК РОБОТОВ ДЛЯ «У ВСЕХ НЕТ ЦЕЛИ» — ИЗ КЭША, А НЕ ОБХОДОМ СЦЕНЫ (P2-1, 11.11.2026).
+    ///
+    /// ЧТО БЫЛО. Здесь стоял `Object.FindObjectsByType&lt;RobotController&gt;` на КАЖДЫЙ вызов, а
+    /// вызывает этот путь `Update` (пока фаза не «робот едет») — то есть полный обход сцены
+    /// каждый кадр, вместе с аллокацией массива.
+    ///
+    /// ЧЕМ ЭТО ГРОЗИЛО. На 72 Гц бюджет кадра 13,9 мс; обход сцены в потоке траекторий отбирал
+    /// его у планировщика и рендера, и кадр «столбило» именно во время наведения.
+    ///
+    /// ТЕПЕРЬ список берётся из `RobotSceneCache` (обновление по событию и не чаще раза в секунду),
+    /// набор роботов прежний — только активные и включённые.
+    /// </summary>
     private void RefreshRobotList()
     {
         allRobots.Clear();
-        RobotController[] robots = Object.FindObjectsByType<RobotController>(FindObjectsInactive.Exclude);
-        foreach (RobotController rc in robots)
+        foreach (RobotController rc in RobotSceneCache.Active)
             if (rc != null) allRobots.Add(rc);
     }
 
@@ -2368,8 +2392,14 @@ public class TrajectoryFlowController : MonoBehaviour
         // траекторий просто не включалась, как владелец и говорил.
         //
         // ЧТО СТАЛО. Выключенные тоже находятся. Фантомы при этом НЕ попадают в список:
-        // у них HideInHierarchy, и проверка ниже их отбрасывает (строка с hideFlags).
-        RobotController[] robots = Object.FindObjectsByType<RobotController>(FindObjectsInactive.Include);
+        // у них HideInHierarchy, и `RobotSceneCache.Visible` их отбрасывает при сборке.
+        //
+        // P2-1 (11.11.2026). РАНЬШЕ ЗДЕСЬ БЫЛ ПОЛНЫЙ ОБХОД СЦЕНЫ В КАЖДОМ КАДРЕ НАВЕДЕНИЯ
+        // (`Object.FindObjectsByType<RobotController>`), плюс такой же обход в `HoldAllRobots`.
+        // Два обхода сцены за кадр выбирали бюджет 72 Гц, и прицел «залипал» во время наведения.
+        // ТЕПЕРЬ список берётся из кэша `RobotSceneCache` (инвалидация — по событию реестра сцены,
+        // по загрузке сцены и по возрасту записи), отбор робота ниже не изменился.
+        List<RobotController> robots = RobotSceneCache.Visible;
         RobotController best = null;
         float bestScore = float.MaxValue;
         foreach (RobotController rc in robots)

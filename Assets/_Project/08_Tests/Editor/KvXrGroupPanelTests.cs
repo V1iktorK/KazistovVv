@@ -21,6 +21,7 @@ namespace KazistovVvTests
     ///   • запасное положение панели — У ПОЯСА, вне центрального поля зрения (владелец запретил
     ///     показ перед глазами прямо, но и «панели нет вовсе» не годится).
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvXrGroupPanelTests
     {
         /// <summary>
@@ -456,3 +457,4 @@ namespace KazistovVvTests
         }
     }
 }
+

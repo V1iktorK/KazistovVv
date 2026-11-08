@@ -25,6 +25,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Хранилище на диске: отказы не роняют приложение, путь не теряется.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvStorageResilienceTests
     {
         /// <summary>
@@ -143,3 +144,4 @@ namespace KazistovVvTests
         }
     }
 }
+

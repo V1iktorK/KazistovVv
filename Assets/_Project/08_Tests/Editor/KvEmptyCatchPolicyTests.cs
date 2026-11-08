@@ -17,6 +17,18 @@
 //
 //  ГРАНИЦА ЧЕСТНОСТИ: тест НЕ требует убрать пустые `catch` из реестра — их правка без нужды только
 //  добавит шума в журнал. Он требует ОСОЗНАННОСТИ: либо объясни, либо не добавляй.
+//
+//  ---------------------------------------------------------------------------------------------
+//  P3-4 (11.11.2026). ЧТО БЫЛО. Тест обходил ТОЛЬКО `01_Scripts`, а вторая половина проекта —
+//  оболочка интерфейса `06_KazistovVv_UI/03_Scripts` — не сканировалась ВООБЩЕ. Замерено: 14
+//  пустых `catch` жили именно там (`KvMouseCursor` — 5, `KazistovVvUIManager` — 4, `KvTreeView`,
+//  `KvVirtualCursor`, `KvKeyboardNav`, `KvLayoutStore` — по одному).
+//  ЧЕМ ЭТО ГРОЗИЛО. Правило «ошибка не проглатывается» выполнялось ровно на той половине кода,
+//  которую проверяли, — и зеленело. А самая операторская часть (курсор, ввод в интерфейсе,
+//  сохранение раскладки) молчала об отказах, и ни один тест этого не видел: пустой `catch` там
+//  был не исключением, а нормой.
+//  ТЕПЕРЬ обходятся ОБА корня, у каждого законного случая в оболочке есть своя причина в реестре,
+//  а не «найдено вручную 30.10.2026».
 // ================================================================================================
 
 using System.Collections.Generic;
@@ -28,6 +40,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Пустые `catch`: законный резерв или проглоченная ошибка.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvEmptyCatchPolicyTests
     {
         /// <summary>
@@ -56,12 +69,34 @@ namespace KazistovVvTests
             { "FeatureHub.cs", "опрос состояния ввода: клавиатура может отсутствовать" },
             { "WorkspaceVisualizer.cs", "оформление сетки: необязательный параметр" },
             { "KvCaptures.cs", "снимок экрана: отказ камеры не должен ломать запись" },
-            { "DshPlayModeRunner.cs", "вспомогательный логгер: файл недоступен — строка всё равно идёт в Debug.Log" },
+
+            // ---- ОБОЛОЧКА ИНТЕРФЕЙСА (`06_KazistovVv_UI/03_Scripts`) — проверено 11.11.2026 (P3-4).
+            // Причины конкретные, а не «необязательная настройка»: в каждом случае ниже рядом
+            // стоит ВТОРАЯ, работающая ветка, и пустой перехват означает именно «эта не сработала».
+            // Всё, что не подходило под это правило, ИСПРАВЛЕНО: `KvMouseCursor` (5 перехватов) и
+            // `KazistovVvUIManager` (4) теперь пишут в журнал и считают `ReapplyCount`.
+            { "KvKeyboardNav.cs", "резерв новой/старой системы ввода в CtrlHeld: отказ новой ветки — норма, ниже сразу идёт legacy с возвратом false" },
+            { "KvVirtualCursor.cs", "резерв новой/старой системы ввода для позиции мыши: ниже сразу берётся legacy Input.mousePosition" },
+            { "KvTreeView.cs", "резерв новой/старой системы ввода при переименовании узла: legacy читается только когда Keyboard.current == null" },
+            { "KvLayoutStore.cs", "PlayerPrefs.Save при недоступном хранилище: значения уже в памяти, перетаскивание окна падать не должно" },
         };
 
-        private static string ScriptsRoot
+        /// <summary>
+        /// КОРНИ, КОТОРЫЕ ОБХОДЯТСЯ. P3-4 (11.11.2026): раньше здесь был ОДИН корень —
+        /// `01_Scripts`. Оболочка интерфейса (`06_KazistovVv_UI/03_Scripts`) не проверялась вовсе,
+        /// а именно там жили 13 пустых перехватов из замеренных 14. Правило, которое выполняется
+        /// на половине кода, — это не правило, а его видимость.
+        /// </summary>
+        private static string[] ScriptsRoots
         {
-            get { return Path.Combine(Application.dataPath, "_Project", "01_Scripts"); }
+            get
+            {
+                return new[]
+                {
+                    Path.Combine(Application.dataPath, "_Project", "01_Scripts"),
+                    Path.Combine(Application.dataPath, "_Project", "06_KazistovVv_UI", "03_Scripts"),
+                };
+            }
         }
 
         /// <summary>
@@ -108,30 +143,72 @@ namespace KazistovVvTests
         /// <summary>
         /// НОВЫХ ПУСТЫХ `CATCH` НЕТ. Пустой `catch` без объяснения — это «ошибка проглочена».
         /// Оператор не узнает, что файл не сохранился, а мы — что что-то не работает.
+        ///
+        /// P3-4 (11.11.2026): обходятся ОБА корня (`ScriptsRoots`), а не только `01_Scripts`.
         /// </summary>
         [Test]
         public void NoNewEmptyCatchOutsideRegistry()
         {
-            Assert.IsTrue(Directory.Exists(ScriptsRoot), "нет папки скриптов: " + ScriptsRoot);
-
             var offenders = new List<string>();
-            foreach (string file in Directory.GetFiles(ScriptsRoot, "*.cs", SearchOption.AllDirectories))
-            {
-                string name = Path.GetFileName(file);
-                // Тесты и диагностика не считаются: там пустой catch — часть инструмента проверки.
-                if (name.EndsWith("Tests.cs")) continue;
-                if (name.Contains("Diag")) continue;
+            int scanned = 0;
 
-                if (!HasEmptyCatch(File.ReadAllText(file))) continue;
-                if (AllowedEmptyCatchFiles.ContainsKey(name)) continue;
-                offenders.Add(name);
+            foreach (string root in ScriptsRoots)
+            {
+                Assert.IsTrue(Directory.Exists(root), "нет папки скриптов: " + root);
+
+                foreach (string file in Directory.GetFiles(root, "*.cs", SearchOption.AllDirectories))
+                {
+                    scanned++;
+                    string name = Path.GetFileName(file);
+                    // Тесты и диагностика не считаются: там пустой catch — часть инструмента проверки.
+                    if (name.EndsWith("Tests.cs")) continue;
+                    if (name.Contains("Diag")) continue;
+
+                    if (!HasEmptyCatch(File.ReadAllText(file))) continue;
+                    if (AllowedEmptyCatchFiles.ContainsKey(name)) continue;
+                    // В имя попадает корень: одноимённые файлы в разных корнях — разные файлы.
+                    offenders.Add(Path.GetFileName(Path.GetDirectoryName(file)) + "/" + name);
+                }
             }
+
+            // СТРАХОВКА ОТ ВАКУУМА (E-16): обход обязан был увидеть заметное число файлов,
+            // иначе «0 нарушителей» означало бы «0 просмотренных».
+            Assert.Greater(scanned, 100,
+                "просмотрено всего " + scanned + " файлов — обход почти ничего не проверил (P3-4)");
 
             Assert.AreEqual(0, offenders.Count,
                 "в этих файлах есть ПУСТОЙ `catch` без объяснения — ошибка проглатывается молча: " +
                 string.Join(", ", offenders.ToArray()) +
                 ". Объясните в комментарии к catch (в журнал / значение по умолчанию) либо, если " +
                 "отказ законен, внесите файл в AllowedEmptyCatchFiles с причиной");
+        }
+
+        /// <summary>
+        /// ОБОЛОЧКА ИНТЕРФЕЙСА ДЕЙСТВИТЕЛЬНО СКАНИРУЕТСЯ (P3-4, 11.11.2026).
+        ///
+        /// ЗАЧЕМ ОТДЕЛЬНЫЙ ТЕСТ. Основная проверка зелёная и тогда, когда корень оболочки забыли
+        /// добавить снова: файлов меньше, нарушителей ноль. Этот тест падает, если корень
+        /// `06_KazistovVv_UI/03_Scripts` пропал из обхода или в нём не нашлось ни одного `.cs`.
+        /// </summary>
+        [Test]
+        public void UiShellRootIsScanned()
+        {
+            string shellRoot = Path.Combine(Application.dataPath, "_Project", "06_KazistovVv_UI", "03_Scripts");
+            Assert.IsTrue(Directory.Exists(shellRoot), "нет папки оболочки интерфейса: " + shellRoot);
+
+            int uiFiles = Directory.GetFiles(shellRoot, "*.cs", SearchOption.AllDirectories).Length;
+            Assert.Greater(uiFiles, 20,
+                "в оболочке найдено " + uiFiles + " файлов — обход корня потерял смысл");
+
+            var roots = new List<string>(ScriptsRoots);
+            Assert.Contains(shellRoot, roots,
+                "корень оболочки интерфейса не входит в обход (P3-4): правило снова проверяет " +
+                "только половину кода");
+
+            // И сам файл оболочки, где перехваты ИСПРАВЛЕНЫ, обязан быть в обходе по имени:
+            // если его переименуют, запись реестра станет мёртвой (проверяется ниже, в реестре).
+            Assert.IsNotNull(FindFile("KazistovVvUIManager.cs"),
+                "обход не находит KazistovVvUIManager.cs — значит корень оболочки не читается");
         }
 
         /// <summary>
@@ -156,12 +233,19 @@ namespace KazistovVvTests
                 "реестр законных пустых catch устарел: " + string.Join("; ", stale.ToArray()));
         }
 
+        /// <summary>
+        /// ПУТЬ К ФАЙЛУ ПО ИМЕНИ — в ЛЮБОМ из корней (P3-4: корней два, а не один).
+        /// </summary>
         private static string FindFile(string fileName)
         {
-            if (!Directory.Exists(ScriptsRoot)) return null;
-            foreach (string path in Directory.GetFiles(ScriptsRoot, fileName, SearchOption.AllDirectories))
-                return path;
+            foreach (string root in ScriptsRoots)
+            {
+                if (!Directory.Exists(root)) continue;
+                foreach (string path in Directory.GetFiles(root, fileName, SearchOption.AllDirectories))
+                    return path;
+            }
             return null;
         }
     }
 }
+

@@ -72,6 +72,7 @@ namespace KazistovVvTests
     /// утверждения аналитические (Within с запасом), состояние PlayerPrefs изолировано.
     /// </summary>
     [TestFixture]
+        [Category(KvTestCategories.Fast)]
     public class KvEnergyOptimalTests
     {
         /// <summary>Градусы → радианы (в модели вращательные оси считаются в рад/с).</summary>
@@ -1134,3 +1135,4 @@ namespace KazistovVvTests
         }
     }
 }
+

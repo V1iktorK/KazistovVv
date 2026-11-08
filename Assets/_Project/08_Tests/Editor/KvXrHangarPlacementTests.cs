@@ -22,6 +22,7 @@ namespace KazistovVvTests
     ///   • КАНАЛЫ КАРТЫ МАСКИ при переводе материалов с HDRP на URP не путаются — иначе
     ///     металл становится похож на пластик молча, без единой ошибки в журнале.
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvXrHangarPlacementTests
     {
         /// <summary>Центр стендов так, как их ставит `KvXrSceneContent`: впереди оператора на 3,2 м.</summary>
@@ -270,3 +271,4 @@ namespace KazistovVvTests
         }
     }
 }
+

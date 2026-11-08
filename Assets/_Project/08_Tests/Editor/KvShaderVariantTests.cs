@@ -34,6 +34,7 @@ namespace KazistovVvTests
     /// Тесты 1–3 написаны ДО правки и на текущем состоянии обязаны падать (правило [K5]).
     /// Ни одного GameObject, ни одной записи в настройки, ни зависимости от времени.
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvShaderVariantTests
     {
         private const string GlobalSettingsPath = "Assets/Settings/UniversalRenderPipelineGlobalSettings.asset";
@@ -210,3 +211,4 @@ namespace KazistovVvTests
         }
     }
 }
+

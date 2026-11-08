@@ -31,6 +31,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Мёртвый код: помечен, обоснован, не привязан к сценам.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvDeadCodeTests
     {
         /// <summary>
@@ -204,3 +205,4 @@ namespace KazistovVvTests
         }
     }
 }
+

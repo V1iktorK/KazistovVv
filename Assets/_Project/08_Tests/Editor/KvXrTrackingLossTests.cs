@@ -27,6 +27,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Отказы отслеживания: модель скрывается, а не висит в воздухе.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvXrTrackingLossTests
     {
         // ---------------------------------------------------------------- 1. НЕТ ОТСЛЕЖИВАНИЯ
@@ -171,3 +172,4 @@ namespace KazistovVvTests
         }
     }
 }
+

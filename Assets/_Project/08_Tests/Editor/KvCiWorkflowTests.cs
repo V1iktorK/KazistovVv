@@ -27,6 +27,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Конфигурация CI: пропуск не равен успеху, версия и кэш на месте.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvCiWorkflowTests
     {
         private static string Root
@@ -173,3 +174,4 @@ namespace KazistovVvTests
         }
     }
 }
+

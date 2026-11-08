@@ -69,6 +69,12 @@ public class SixAxisController : RobotController
     // TCP-прокси: у CAD-мешей пивот часто в начале координат модели, поэтому
     // реальная точка инструмента берётся как центр меша фланца.
     private Transform tcpProxy;
+
+    /// <summary>
+    /// РЕШЕНИЕ «НУЖЕН ЛИ TCP-ПРОКСИ» УЖЕ ПРИНЯТО (P2-12, 11.11.2026). `null` в `tcpProxy` —
+    /// законный ответ «прокси не нужен», и повторять этот расчёт каждый кадр незачем.
+    /// </summary>
+    private bool tcpProxyResolved;
     private bool refsReported;
     private bool meshesFixed;
 
@@ -97,7 +103,33 @@ public class SixAxisController : RobotController
         for (int i = 0; i < n; i++)
             SetJointAngle(i, (float)preferredSeed[i]);
     }
-    private readonly Quaternion[] rollbackPose = new Quaternion[6];
+    // БУФЕР ОТКАТА РАСТЁТ ПОД ЧИСЛО ОСЕЙ (P1-18, 11.11.2026).
+    //
+    // ЧТО БЫЛО: `new Quaternion[6]`, а цикл отката шёл до `Mathf.Min(count - 1, b + 1)` по
+    // `jointTransforms.Length`. Для робота с 7+ осями `pose[i]` бросал `IndexOutOfRangeException`
+    // ВНУТРИ механизма защиты от самостолкновения — то есть предохранитель падал именно тогда,
+    // когда срабатывал. ЧЕМ ЭТО ГРОЗИЛО: вместо отката в безопасную позу — исключение в `Update`,
+    // робот остаётся в позе, где звенья пересеклись.
+    private Quaternion[] rollbackPose = new Quaternion[8];
+
+    /// <summary>БУФЕР ОТКАТА НЕ МЕНЬШЕ ЧИСЛА ОСЕЙ (см. `rollbackPose`, P1-18).</summary>
+    private void EnsureRollbackBuffer(int jointCount)
+    {
+        if (jointCount > 0 && rollbackPose.Length < jointCount)
+            rollbackPose = new Quaternion[jointCount];
+    }
+
+    /// <summary>
+    /// БЕЗОПАСНЫЙ ВЕРХНИЙ ИНДЕКС ОТКАТА (P1-18): не больше числа осей и не больше длины буфера.
+    /// Вынесено в чистую функцию, чтобы это правило проверялось тестом без сцены.
+    /// </summary>
+    public static int SafeRollbackHigh(int candidateHigh, int poseLength, int jointCount)
+    {
+        int hi = candidateHigh;
+        if (jointCount > 0) hi = Mathf.Min(hi, jointCount - 1);
+        if (poseLength > 0) hi = Mathf.Min(hi, poseLength - 1);
+        return hi;
+    }
 
     // Кэш DH-осей: q0 — «нулевая» поза сустава (при старте/первом решении),
     // u = q0*axisLocal — ось измерения/возврата в локальных координатах.
@@ -198,9 +230,23 @@ public class SixAxisController : RobotController
 
         // Пивот меша фланца может быть в начале координат модели (кривой FBX) —
         // тогда IK «тянет» робота к точке у основания. Делаем TCP-прокси на кончике.
-        if (tcpProxy == null && endEffector != null)
+        //
+        // P2-12 (11.11.2026). ЧТО БЫЛО: условие `tcpProxy == null && endEffector != null` — а
+        // `CreateTcpProxy` штатно возвращает `null`, когда пивот УЖЕ на геометрии (частый случай).
+        // Тогда на СЛЕДУЮЩЕМ кадре `tcpProxy` снова `null`, и `ResolveRobotReferences` (зовётся из
+        // `Update` каждый кадр) опять делал две `GetComponent` внутри `CreateTcpProxy` — то есть
+        // поиск компонентов, который НИКОГДА не завершится успехом.
+        //
+        // ЧЕМ ЭТО ГРОЗИЛО. Две `GetComponent` на кадр на каждого робота — мелочь по отдельности,
+        // но это кадровый путь 72 Гц, и он выполнялся всегда, хотя ответ уже был известен в
+        // первом кадре.
+        //
+        // ТЕПЕРЬ решение «прокси не нужен» запоминается флагом и повторно не вычисляется:
+        // пересчёт будет только при смене фланца (см. `ResetTcpProxyDecision`).
+        if (!tcpProxyResolved && endEffector != null)
         {
             tcpProxy = CreateTcpProxy(endEffector);
+            tcpProxyResolved = true;
             if (tcpProxy != null)
             {
                 tcp = tcpProxy;
@@ -271,6 +317,17 @@ public class SixAxisController : RobotController
     private Transform IkTip
     {
         get { return tcpProxy != null ? tcpProxy : endEffector; }
+    }
+
+    /// <summary>
+    /// ИНВАЛИДАЦИЯ РЕШЕНИЯ О TCP-ПРОКСИ (P2-12). Решение кэшируется флагом `tcpProxyResolved`,
+    /// поэтому у кэша обязана быть точка сброса: фланец заменили, модель пересобрали, сцену
+    /// перезагрузили. Внутри класса сброса не требуется (модель не меняется), но снаружи —
+    /// после подмены геометрии — его нужно вызвать, иначе новый фланец останется без прокси.
+    /// </summary>
+    public void ResetTcpProxyDecision()
+    {
+        tcpProxyResolved = false;
     }
 
     /// <summary>Ищет «настоящую» ось AxisN (приоритет — точное имя, не меш AxisN_2).</summary>
@@ -376,10 +433,29 @@ public class SixAxisController : RobotController
         }
     }
 
+    /// <summary>
+    /// ПАСПОРТНЫЕ ПРЕДЕЛЫ СУСТАВОВ (градусы) — применяются ТОЛЬКО когда своих нет.
+    ///
+    /// ИСПРАВЛЕНО 11.11.2026. Раньше присваивания этих значений стояли ПОСЛЕ `if` без `else`,
+    /// то есть выполнялись ВСЕГДА: любые лимиты, выставленные оператором в инспекторе,
+    /// уничтожались на первом кадре. Для приложения управления роботом это ложь о безопасности —
+    /// по лимитам считают `ApplyJointLimits()` и `ReachabilityOracle`, и все трое роботов
+    /// работали по чужим пределам без единой строки в журнале.
+    /// </summary>
+    private static readonly Vector2[] FactoryJointLimits =
+    {
+        new Vector2(-170f, 170f),
+        new Vector2(-90f, 150f),
+        new Vector2(-70f, 225f),
+        new Vector2(-180f, 180f),
+        new Vector2(-120f, 120f),
+        new Vector2(-180f, 180f)
+    };
+
     private void InitializeJointLimits()
     {
         // Если массив пуст/мал ИЛИ все лимиты нулевые (битые значения из инспектора) —
-        // заполняем рабочими дефолтами.
+        // заполняем рабочими дефолтами. ВО ВСЕХ ОСТАЛЬНЫХ СЛУЧАЯХ ЗАДАННЫЕ ЛИМИТЫ НЕ ТРОГАЕМ.
         bool allZero = jointLimits != null && jointLimits.Length >= 6;
         if (allZero)
         {
@@ -388,16 +464,63 @@ public class SixAxisController : RobotController
                 if (jointLimits[i].x != 0f || jointLimits[i].y != 0f) { allZero = false; break; }
             }
         }
-        if (jointLimits == null || jointLimits.Length < 6 || allZero)
-            jointLimits = new Vector2[6];
 
-        jointLimits[0] = new Vector2(-170f, 170f);
-        jointLimits[1] = new Vector2(-90f, 150f);
-        jointLimits[2] = new Vector2(-70f, 225f);
-        jointLimits[3] = new Vector2(-180f, 180f);
-        jointLimits[4] = new Vector2(-120f, 120f);
-        jointLimits[5] = new Vector2(-180f, 180f);
+        bool needsDefaults = jointLimits == null || jointLimits.Length < 6 || allZero;
+        if (needsDefaults)
+        {
+            jointLimits = new Vector2[FactoryJointLimits.Length];
+            System.Array.Copy(FactoryJointLimits, jointLimits, FactoryJointLimits.Length);
+            Debug.LogWarning("[SixAxis] пределы суставов не заданы — применены ПАСПОРТНЫЕ: " +
+                             DescribeJointLimits(jointLimits));
+        }
+        else
+        {
+            // Не молчим и в этом случае: строка с ФАКТИЧЕСКИМИ пределами нужна наладчику,
+            // чтобы отличить «работает по своим» от «снова по паспорту».
+            Debug.Log("[SixAxis] пределы суставов из инспектора: " + DescribeJointLimits(jointLimits));
+        }
     }
+
+    /// <summary>
+    /// Пределы суставов одной строкой — для журнала и тестов. Формат фиксирован, потому что по
+    /// нему наладчик сверяет фактические пределы с паспортными.
+    /// </summary>
+    public static string DescribeJointLimits(Vector2[] limits)
+    {
+        if (limits == null || limits.Length == 0) return "пределы не заданы";
+        var sb = new System.Text.StringBuilder("пределы суставов:");
+        int count = Mathf.Min(limits.Length, 6);
+        for (int i = 0; i < count; i++)
+        {
+            sb.Append(" J").Append(i + 1).Append(' ')
+              .Append(limits[i].x.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))
+              .Append("…")
+              .Append(limits[i].y.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))
+              .Append("°");
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// НУЖНЫ ЛИ ПАСПОРТНЫЕ ПРЕДЕЛЫ вместо заданных. Чистая функция (без сцены) — чтобы правило
+    /// «свои лимиты не затираются» проверялось тестом, а не глазами.
+    /// </summary>
+    public static bool NeedsFactoryJointLimits(Vector2[] limits)
+    {
+        if (limits == null || limits.Length < 6) return true;
+        for (int i = 0; i < 6; i++)
+            if (limits[i].x != 0f || limits[i].y != 0f) return false;
+        return true;
+    }
+
+    /// <summary>Паспортные пределы (копия) — для тестов и настройки робота.</summary>
+    public static Vector2[] GetFactoryJointLimits()
+    {
+        var copy = new Vector2[FactoryJointLimits.Length];
+        System.Array.Copy(FactoryJointLimits, copy, FactoryJointLimits.Length);
+        return copy;
+    }
+
 
     // ------------------------------------------------------------------
     //  DH-кэш осей
@@ -669,10 +792,13 @@ public class SixAxisController : RobotController
         if (Vector3.Distance(smoothedTargetPosition, targetPosition) < 0.0005f)
             smoothedTargetPosition = targetPosition;
 
+        EnsureRollbackBuffer(n);
         SnapshotPose(rollbackPose, n);
         ApplyPreferredSeed(); // сначала переводим робота в выбранную ветвь IK, затем CCD
 
-        float settingsSpeed = SettingsData.Instance != null ? SettingsData.Instance.robotSpeed : 1f;
+        // P1-8: скорость берётся из одного места и её отсутствие НЕ подменяется молча (см.
+        // SettingsData.RobotSpeedOrWarn) — иначе заданные оператором 0.2 превращаются в 1.0.
+        float settingsSpeed = SettingsData.RobotSpeedOrWarn();
         int iterations = Mathf.Max(1, Mathf.RoundToInt(ikIterations * Mathf.Max(0.25f, settingsSpeed)));
         iterations = Mathf.Min(iterations, 40);
 
@@ -730,6 +856,7 @@ public class SixAxisController : RobotController
         // пачки «Самостолкновение звеньев 0 и 3 — движение приостановлено» подряд.
         int lo = selectiveRollback ? Mathf.Max(0, a - 1) : 0;
         int hi = selectiveRollback ? Mathf.Min(count - 1, b + 1) : count - 1;
+        hi = SafeRollbackHigh(hi, pose != null ? pose.Length : 0, count);   // P1-18: без выхода за буфер
         for (int i = lo; i <= hi; i++)
         {
             if (i < 0 || i >= count) continue;

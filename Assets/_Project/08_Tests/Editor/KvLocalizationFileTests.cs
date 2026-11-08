@@ -28,6 +28,7 @@ namespace KazistovVvTests
     ///
     /// Ни одного GameObject, ни одной записи, ни зависимости от времени.
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvLocalizationFileTests
     {
         private static string LanguageFolder
@@ -334,3 +335,4 @@ namespace KazistovVvTests
         }
     }
 }
+

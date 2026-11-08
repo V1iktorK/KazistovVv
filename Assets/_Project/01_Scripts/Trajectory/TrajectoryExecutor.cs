@@ -82,9 +82,41 @@ public class TrajectoryExecutor : MonoBehaviour
         gate = g;
     }
 
+    /// <summary>
+    /// ГОДЕН ЛИ ПЛАН К ИСПОЛНЕНИЮ: длины `Times` и `Path` обязаны совпадать (P1-10, 11.11.2026).
+    ///
+    /// ЧТО БЫЛО. `Play` и `SafetyGate.Approve` проверяли только `Path`. `MotionTiming.RescaleToSpeed`
+    /// при `Times == null` просто выходил, оставляя поле пустым, и `Update` разыменовывал
+    /// `active.Times` → `NullReferenceException` В САМОМ ЦИКЛЕ ДВИЖЕНИЯ. Для оператора это
+    /// выглядело как «робот дёрнулся и остановился», причина — в консоли, которой у него нет.
+    ///
+    /// ЧЕМ ЭТО ГРОЗИЛО. Исключение посреди исполнения обходит `Stop(reason)`: статус остаётся
+    /// «в движении», а `running` — `true`, при этом кадры уже не считаются. Робот стоит, а система
+    /// считает, что едет.
+    ///
+    /// Теперь такой план отклоняется ДО пуска с понятным сообщением.
+    /// </summary>
+    public static bool HasUsableTimeline(PlannedTrajectory t)
+    {
+        if (t == null) return false;
+        if (t.Path == null || t.Path.Length == 0) return false;
+        return t.Times != null && t.Times.Length == t.Path.Length;
+    }
+
     public bool Play(PlannedTrajectory t)
     {
         if (validator == null || !validator.Ready || t == null) return false;
+
+        // П1-10: план без времён (или с несовпадающей длиной) не запускаем — иначе NRE в Update.
+        if (!HasUsableTimeline(t))
+        {
+            StatusText = "Отказ: в плане нет времён под длину пути (" +
+                         (t.Path != null ? t.Path.Length : 0) + " точек, " +
+                         (t.Times != null ? t.Times.Length : 0) + " времён)";
+            Debug.LogWarning("[Safety] " + StatusText);
+            return false;
+        }
+
         gate?.NotifyState();
         if (gate != null && !gate.Approve(t, validator, out SafetyReason reason))
         {

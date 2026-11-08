@@ -30,6 +30,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Свойства кинематики инструмента, верные при любых входных данных.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvKinematicsInvariantsTests
     {
         /// <summary>
@@ -183,3 +184,4 @@ namespace KazistovVvTests
         }
     }
 }
+

@@ -24,6 +24,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Расчёт масштаба виртуального стола под реальный.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvMrScaleFitTests
     {
         // Реальный стол владельца (решение [D7]): 100 × 70 см, высота 78 см.
@@ -174,3 +175,4 @@ namespace KazistovVvTests
         }
     }
 }
+

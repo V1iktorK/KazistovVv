@@ -21,6 +21,7 @@ namespace KazistovVvTests
     ///
     /// ЧЕГО ЗДЕСЬ НЕТ: «видно ли это в шлеме» — это ваш взгляд и строки журнала.
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvXrS40Tests
     {
         // ============================================================ 1. РЕЖИМ УПРАВЛЕНИЯ
@@ -217,7 +218,9 @@ namespace KazistovVvTests
         /// Дефект 23.10.2026: панель привязывала переключатель к ПОСЛЕДНЕМУ индексу, поэтому
         /// переключатель оказывался у «Руки луча», а «Второй луч» попадал в ветку шага и менял
         /// ДАЛЬНОСТЬ ТЕЛЕПОРТА. Строка журнала при этом называла одно, а менялось другое.
-        /// Тест фиксирует порядок: 1 радиус, 2 скорость, 3 рост, 4 телепорт, 5 второй луч, 6 рука.
+        /// Тест фиксирует порядок: 1 радиус, 2 скорость, 3 рост, 4 телепорт, 5 второй луч, 6 рука,
+        /// 7 режим VR/MR (добавлен 11.11.2026 — ВСЕГДА последним, чтобы не сдвинуть индексы
+        /// шагов 0…3, на которых держится вся ветка «−/+»).
         /// </summary>
         [Test]
         public void Screen_SettingsRowOrderIsFixed()
@@ -225,13 +228,14 @@ namespace KazistovVvTests
             var data = new KvXrSettingsData { PanelRadius = 0.11f, RayHand = KvXrQuickHand.Right };
             List<string> rows = KvXrScreenModel.BuildSettings(data);
 
-            Assert.AreEqual(7, rows.Count, "заголовок + шесть параметров");
+            Assert.AreEqual(8, rows.Count, "заголовок + семь параметров");
             StringAssert.Contains("Радиус панели", rows[1]);
             StringAssert.Contains("Скорость", rows[2]);
             StringAssert.Contains("Рост", rows[3]);
             StringAssert.Contains("телепорт", rows[4].ToLowerInvariant());
             StringAssert.Contains("Второй луч", rows[5]);
             StringAssert.Contains("Рука луча", rows[6]);
+            StringAssert.Contains("Режим VR/MR", rows[7]);
         }
 
         // ============================================================ 6. ЭКРАНЫ «ОБЪЕКТЫ», «СВОЙСТВА», «СПРАВКА»
@@ -350,3 +354,4 @@ namespace KazistovVvTests
         }
     }
 }
+

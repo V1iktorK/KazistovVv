@@ -27,6 +27,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Скорость суставов в предохранителе: реальная проверка вместо обещания.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvSafetyGateVelocityTests
     {
         /// <summary>
@@ -259,3 +260,4 @@ namespace KazistovVvTests
         }
     }
 }
+

@@ -31,6 +31,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Полнота и согласованность семи словарей.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvLocalizationParityTests
     {
         private static readonly string[] Languages = { "ru", "en", "zh", "es", "de", "fr", "ja" };
@@ -239,3 +240,4 @@ namespace KazistovVvTests
         }
     }
 }
+

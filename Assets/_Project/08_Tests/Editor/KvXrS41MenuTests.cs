@@ -20,6 +20,7 @@ namespace KazistovVvTests
     ///   • П3 — правый лазер зелёный, левый красный (как на компьютере), наведение не меняет цвет руки;
     ///   • П1 — стартовое меню: шесть разделов, строки в панели не налезают, строки ловятся лучом.
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvXrS41MenuTests
     {
         private const float ToleranceMeters = 0.0005f;
@@ -429,3 +430,4 @@ namespace KazistovVvTests
         }
     }
 }
+

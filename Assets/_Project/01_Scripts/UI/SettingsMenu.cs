@@ -75,8 +75,19 @@ public class SettingsMenu : MonoBehaviour
         // Ввод
         inputDeviceDropdown.value = (int)settings.preferredDevice;
         inputDeviceDropdown.onValueChanged.AddListener(v => {
-            settings.preferredDevice = (InputDeviceType)v;
-            InputManager.Instance?.SetInputDevice((InputManager.InputDevice)v);
+            // P3-9 (11.11.2026). ЧТО БЫЛО. Оба присваивания делали СЫРОЙ каст значения
+            // выпадающего списка: `(InputDeviceType)v` и `(InputManager.InputDevice)v`. То есть
+            // «номер строки в списке» превращался в устройство ввода по совпадению чисел, хотя
+            // для этого в проекте есть конвертеры — и они были мертвы.
+            // ЧЕМ ЭТО ГРОЗИЛО. Перестановка строк в списке или элемента в перечислении молча
+            // включала не тот провайдер ввода (например, MR вместо геймпада) — без исключения,
+            // без строки в журнале; оператор просто оставался без управления.
+            // ТЕПЕРЬ номер строки → `InputDeviceType` → ЯВНЫЙ конвертер → устройство `InputManager`.
+            InputDeviceType chosen = (InputDeviceType)Mathf.Clamp(
+                v, (int)InputDeviceType.KeyboardMouse, (int)InputDeviceType.AR);
+            settings.preferredDevice = chosen;
+            InputManager manager = InputManager.Instance;
+            if (manager != null) manager.SetInputDevice(chosen.ToInputManagerDevice());
         });
         
         mouseSensSlider.value = settings.mouseSensitivity;
@@ -209,9 +220,27 @@ public class SettingsMenu : MonoBehaviour
     
     public void ResetToDefaults()
     {
-        // Создаём новый ScriptableObject с дефолтами
+        // Создаём новый ScriptableObject с дефолтами.
+        //
+        // P1-8 (11.11.2026). ЧТО БЫЛО: временный объект не уничтожался. У `SettingsData` есть
+        // `OnEnable`, который ПЕРЕХВАТЫВАЕТ статический `Instance`, если тот пуст, — то есть
+        // «сброс настроек» мог сделать источником истины одноразовую копию с заводскими
+        // значениями, живущую до конца сессии и невидимую в проекте. После этого скорость робота
+        // и прочие настройки молча становились дефолтными (см. `SettingsData.RobotSpeedOrWarn`).
+        // ТЕПЕРЬ копия уничтожается сразу после переноса значений.
         var fresh = ScriptableObject.CreateInstance<SettingsData>();
-        JsonUtility.FromJsonOverwrite(JsonUtility.ToJson(fresh), settings);
+        try
+        {
+            JsonUtility.FromJsonOverwrite(JsonUtility.ToJson(fresh), settings);
+        }
+        finally
+        {
+            if (fresh != null)
+            {
+                if (SettingsData.Instance == fresh) SettingsData.Instance = settings;
+                DestroyImmediate(fresh);
+            }
+        }
         SetupUI(); // Переинициализируем UI
         SaveSettings();
     }

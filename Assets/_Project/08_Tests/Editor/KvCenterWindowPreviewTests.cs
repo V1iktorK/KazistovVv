@@ -26,6 +26,7 @@ using UnityEngine.TestTools;
 namespace KazistovVvTests
 {
     /// <summary>Подсветка превью размещения: пустой префаб, частичный набор, цвет.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvCenterWindowPreviewTests
     {
         private GameObject root;
@@ -56,19 +57,18 @@ namespace KazistovVvTests
         }
 
         /// <summary>
-        /// В РЕДАКТОРЕ Unity предупреждает, что `renderer.material` создаёт экземпляр материала
-        /// (в PlayMode утечки нет). Проверяемый код работает в PlayMode, поэтому предупреждение
-        /// ожидаемо: разрешаем его на время теста, иначе NUnit считает его провалом.
+        /// ЦВЕТ ПРЕВЬЮ ЧИТАЕТСЯ ИЗ `MaterialPropertyBlock` (P2-7 / R1-2, 11.11.2026).
+        ///
+        /// ПОЧЕМУ НЕ `renderer.material`. Раньше `PaintPreview` красил копию материала
+        /// (`r.material`), и тест читал цвет оттуда же. Копии никто не уничтожал — за каждое
+        /// наведение призрака появлялся комплект материалов-сирот. Теперь цвет живёт в блоке
+        /// свойств рендерера: материал (и ассет) не меняется вовсе.
         /// </summary>
-        private static void AllowEditModeMaterialWarning(int count)
+        private static Color ReadPreviewColor(Renderer r)
         {
-            for (int i = 0; i < count; i++)
-            {
-                // `LogAssert.Expect(LogType, Regex)` существует не во всех версиях пакета,
-                // поэтому берём перегрузку со строкой-подстрокой: она есть во всех.
-                LogAssert.Expect(LogType.Error,
-                    new Regex("Instantiating material.*"));
-            }
+            var block = new MaterialPropertyBlock();
+            r.GetPropertyBlock(block);
+            return block.GetColor("_Color");
         }
 
         /// <summary>Рендерер с собственным экземпляром материала — как у настоящего превью.</summary>
@@ -140,12 +140,11 @@ namespace KazistovVvTests
             Object.DestroyImmediate(destroyed);
             Object.DestroyImmediate(destroyedGo);
 
-            AllowEditModeMaterialWarning(1);
             Assert.AreEqual(0, CenterWindow.PaintPreview(new[] { destroyed }, true),
                 "массив из одного уничтоженного рендерера — красить нечего, исключения быть не должно");
             int painted = CenterWindow.PaintPreview(new[] { destroyed, alive }, true);
             Assert.AreEqual(1, painted, "покрашен обязан быть ровно один живой рендерер");
-            AssertColor(CenterWindow.PreviewColor(true), alive.material.color,
+            AssertColor(CenterWindow.PreviewColor(true), ReadPreviewColor(alive),
                 "живой рендерер обязан получить цвет «можно ставить»");
         }
 
@@ -163,37 +162,38 @@ namespace KazistovVvTests
             Renderer b = NewRenderer("b", out m2);
             Renderer c = NewRenderer("c", out m3);
 
-            AllowEditModeMaterialWarning(3);
             int painted = CenterWindow.PaintPreview(new[] { a, b, c }, false);
             Assert.AreEqual(3, painted, "обязаны быть покрашены все три рендерера");
 
             Color expected = CenterWindow.PreviewColor(false);
-            AssertColor(expected, a.material.color, "первый рендерер не покрашен");
-            AssertColor(expected, b.material.color, "второй рендерер не покрашен");
-            AssertColor(expected, c.material.color, "третий рендерер не покрашен");
+            AssertColor(expected, ReadPreviewColor(a), "первый рендерер не покрашен");
+            AssertColor(expected, ReadPreviewColor(b), "второй рендерер не покрашен");
+            AssertColor(expected, ReadPreviewColor(c), "третий рендерер не покрашен");
         }
 
         /// <summary>
-        /// ОРИГИНАЛ НЕ ПОРТИТСЯ: красится ЭКЗЕМПЛЯР материала, а не общий. Иначе материал модели
-        /// робота позеленел бы навсегда после первого наведения призрака.
+        /// ОРИГИНАЛ НЕ ПОРТИТСЯ, И НИКАКИХ КОПИЙ НЕ СОЗДАЁТСЯ (P2-7 / R1-2).
+        ///
+        /// Раньше покраска шла через `r.material` — то есть в КОПИЮ материала, которую никто не
+        /// уничтожал (утечка на каждое наведение призрака). Теперь цвет живёт в
+        /// `MaterialPropertyBlock`, а рендерер продолжает ссылаться на ТОТ ЖЕ материал.
+        /// Тест падал бы на старом коде дважды: и по неизменности `sharedMaterial`, и по цвету.
         /// </summary>
         [Test]
         public void PaintPreview_DoesNotTouchSharedMaterial()
         {
-            // `renderer.material` в редакторе Unity предупреждает об утечке материалов — это
-            // ОЖИДАЕМОЕ поведение проверяемого кода (он работает в PlayMode, где утечки нет).
-            // Разрешаем ровно одно такое сообщение и проверяем сами материалы.
-            LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("Instantiating material due to calling renderer.material"));
-
             Material shared;
             Renderer r = NewRenderer("model", out shared);
             Color before = shared.color;
 
             CenterWindow.PaintPreview(new[] { r }, true);
 
+            Assert.AreSame(shared, r.sharedMaterial,
+                "рендерер перестал ссылаться на общий материал — создана копия (утечка, P2-7)");
             Assert.AreEqual(before, shared.color,
                 "общий материал модели изменился — оригинал обязан остаться прежним");
-            Assert.AreNotEqual(before, r.material.color, "экземпляр материала обязан быть перекрашен");
+            Assert.AreNotEqual(before, ReadPreviewColor(r),
+                "цвет превью не попал в блок свойств рендерера");
         }
 
         // ---------------------------------------------------------------- 3. КОНТРАКТ ЦВЕТА
@@ -228,15 +228,13 @@ namespace KazistovVvTests
             Material m;
             Renderer r = NewRenderer("toggle", out m);
 
-            // Предупреждение редактирования Unity выдаёт ОДИН раз на материал: первая покраска
-            // создаёт экземпляр, вторая перекрашивает тот же. Поэтому ожидаем ровно одно.
-            AllowEditModeMaterialWarning(1);
             CenterWindow.PaintPreview(new[] { r }, false);
-            AssertColor(CenterWindow.PreviewColor(false), r.material.color, "призрак в недопустимой точке");
+            AssertColor(CenterWindow.PreviewColor(false), ReadPreviewColor(r), "призрак в недопустимой точке");
 
             CenterWindow.PaintPreview(new[] { r }, true);
-            AssertColor(CenterWindow.PreviewColor(true), r.material.color,
+            AssertColor(CenterWindow.PreviewColor(true), ReadPreviewColor(r),
                 "после переноса в допустимую точку призрак обязан позеленеть");
         }
     }
 }
+

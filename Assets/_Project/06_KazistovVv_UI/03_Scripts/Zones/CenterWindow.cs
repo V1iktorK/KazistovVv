@@ -195,34 +195,84 @@ namespace KazistovVvUI
         private Renderer[] previewRenderers = new Renderer[0];
 
         /// <summary>
-        /// ПОКРАСИТЬ ПРЕВЬЮ В ЦВЕТ ДОПУСТИМОСТИ. Вынесено статическим методом — чтобы поведение
-        /// проверялось тестом без сцены и без GameObject. Возвращает число покрашенных рендереров
-        /// (0 — красить нечего, и это не ошибка вызывающего).
-        ///
-        /// ЦВЕТА — КОНТРАКТ: зелёный «можно», красный «нельзя». Их читает и тест, и глаз оператора.
+        /// ЦВЕТА — КОНТРАКТ: зелёный «можно», красный «нельзя», оба полупрозрачные (0,45).
+        /// Их читает и тест, и глаз оператора; менять значения без теста нельзя.
         /// </summary>
         public static Color PreviewColor(bool valid)
         {
             return valid ? new Color(0.3f, 1f, 0.4f, 0.45f) : new Color(1f, 0.3f, 0.3f, 0.45f);
         }
 
-        /// <summary>Покрасить все рендереры; null-ы в массиве пропускаются.</summary>
+        /// <summary>
+        /// ПОКРАСИТЬ ПРЕВЬЮ В ЦВЕТ ДОПУСТИМОСТИ. Вынесено статическим методом — чтобы поведение
+        /// проверялось тестом без сцены и без GameObject. Возвращает число покрашенных рендереров
+        /// (0 — красить нечего, и это не ошибка вызывающего).
+        ///
+        /// ЦВЕТА — КОНТРАКТ: зелёный «можно», красный «нельзя». Их читает и тест, и глаз оператора.
+        ///
+        /// ЦВЕТ ПИШЕТСЯ В `MaterialPropertyBlock`, А НЕ В КОПИЮ МАТЕРИАЛА (P2-7 / R1-2, 11.11.2026).
+        ///
+        /// ЧТО БЫЛО. `Material m = r.material;` — на КАЖДЫЙ рендерер превью создавалась личная
+        /// копия материала, и копии никто не уничтожал (`DestroyPreview` уничтожал только
+        /// GameObject). В редакторе на каждую копию печаталось предупреждение Unity
+        /// «Instantiating material due to calling renderer.material». Превью пересоздаётся при
+        /// каждом движении курсора размещения, то есть копии копились на каждое наведение.
+        ///
+        /// ЧТО СТАЛО. `MaterialPropertyBlock` — значения на рендерер, без копий и без предупреждений.
+        /// Оригинал материала модели по-прежнему не меняется: блок свойств живёт рядом с рендерером.
+        /// </summary>
         public static int PaintPreview(Renderer[] renderers, bool valid)
         {
             if (renderers == null) return 0;
             Color c = PreviewColor(valid);
             int painted = 0;
+            MaterialPropertyBlock block = null;
             for (int i = 0; i < renderers.Length; i++)
             {
                 Renderer r = renderers[i];
                 if (r == null) continue;
-                Material m = r.material;          // экземпляр: оригинал модели не портится
-                if (m == null) continue;
-                if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
-                m.color = c;
+                if (block == null) block = new MaterialPropertyBlock();
+                r.GetPropertyBlock(block);
+                // Оба имени: `_BaseColor` у HDRP/URP, `_Color` у встроенного конвейера.
+                // Неизвестное шейдеру свойство блок просто игнорирует — падения не будет.
+                block.SetColor("_BaseColor", c);
+                block.SetColor("_Color", c);
+                r.SetPropertyBlock(block);
                 painted++;
             }
             return painted;
+        }
+
+        /// <summary>
+        /// ЕДИНСТВЕННЫЙ МАТЕРИАЛ ПРЕВЬЮ, СОЗДАННЫЙ НАМИ (уничтожается в `DestroyPreview`).
+        ///
+        /// Раньше материал создавался В ЦИКЛЕ по рендерерам и присваивался через `r.material` —
+        /// то есть на каждый рендерер появлялась ещё и копия только что созданного материала.
+        /// Теперь материал один, присваивается как общий (`sharedMaterial`) и учитывается здесь.
+        /// </summary>
+        private Material previewMaterial;
+
+        /// <summary>Цвет «призрака» пишется блоком свойств — копий материала не создаём (P2-7).</summary>
+        private static void TintGhost(Renderer[] renderers)
+        {
+            if (renderers == null || renderers.Length == 0) return;
+            MaterialPropertyBlock block = null;
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer r = renderers[i];
+                if (r == null) continue;
+                Material source = r.sharedMaterial;
+                if (source == null || !source.HasProperty("_BaseColor")) continue;
+                if (block == null) block = new MaterialPropertyBlock();
+                Color c = source.GetColor("_BaseColor");
+                r.GetPropertyBlock(block);
+                block.SetColor("_BaseColor", new Color(
+                    Mathf.Min(1f, c.r * 0.75f),
+                    Mathf.Min(1f, c.g * 1.2f),
+                    Mathf.Min(1f, c.b * 0.8f),
+                    c.a));
+                r.SetPropertyBlock(block);
+            }
         }
 
         private void CreatePreview(SpawnKind kind)
@@ -274,28 +324,22 @@ namespace KazistovVvUI
             if (preview == null) return;
             if (kind == SpawnKind.Robot && phantomTemplate != null)
             {
-                // Фантом из реальной модели: свои материалы, но с зелёным «призрачным» тоном.
-                foreach (Renderer r in preview.GetComponentsInChildren<Renderer>())
-                {
-                    Material m = r.material;
-                    if (m != null && m.HasProperty("_BaseColor"))
-                    {
-                        Color c = m.GetColor("_BaseColor");
-                        m.SetColor("_BaseColor", new Color(
-                            Mathf.Min(1f, c.r * 0.75f),
-                            Mathf.Min(1f, c.g * 1.2f),
-                            Mathf.Min(1f, c.b * 0.8f),
-                            c.a));
-                    }
-                }
+                // Фантом из реальной модели: свой зеленоватый «призрачный» тон — блоком свойств,
+                // без копий материала на каждый рендерер (P2-7 / R1-2).
+                TintGhost(preview.GetComponentsInChildren<Renderer>());
             }
             else
             {
+                // ОДИН материал на всё превью (раньше — материал и его копия на КАЖДЫЙ рендерер).
+                if (previewMaterial == null)
+                {
+                    previewMaterial = KazistovVvFeatures.KvRenderPipelineShaders.CreateLine(
+                        "Материал_превью", Color.white);
+                }
                 foreach (Renderer r in preview.GetComponentsInChildren<Renderer>(true))
                 {
-                    Material previewMaterial = KazistovVvFeatures.KvRenderPipelineShaders.CreateLine(
-                        "Материал_превью", Color.white);
-                    if (previewMaterial != null) r.material = previewMaterial;
+                    if (r == null || previewMaterial == null) continue;
+                    r.sharedMaterial = previewMaterial;
                 }
             }
 
@@ -311,6 +355,9 @@ namespace KazistovVvUI
             preview = null;
             previewRenderer = null;
             previewRenderers = new Renderer[0];
+            // Материал превью создан нами — GameObject его не уничтожит (P2-7 / R1-2).
+            if (previewMaterial != null) Destroy(previewMaterial);
+            previewMaterial = null;
         }
 
         /// <summary>

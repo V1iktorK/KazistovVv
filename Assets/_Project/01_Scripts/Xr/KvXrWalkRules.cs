@@ -28,10 +28,88 @@ namespace KazistovVvXr
         /// ПРИМЕНЯТЬ ЛИ ПРАВИЛА СЕЙЧАС. MR включается по факту пасс-тру (режим комнаты), AR сюда
         /// не попадает вовсе — там локомоция выключена. `Unknown` трактуем как VR (как и выбор
         /// режима в проекте: «спросить не удалось» — не повод ломать ходьбу).
+        ///
+        /// P2-3 (11.11.2026). ЧТО БЫЛО: геттер КАЖДОЕ обращение (а его читает `HandleSmooth` в
+        /// каждом кадре хода) вызывал `KvXrCapabilities.Passthrough()`, то есть нативный
+        /// `OpenXRRuntime.GetEnabledExtensions()` с НОВЫМ `string[]` на каждый вызов.
+        ///
+        /// ЧЕМ ЭТО ГРОЗИЛО: переход через нативную границу плюс аллокация массива на каждом кадре
+        /// ходьбы — ровно там, где нужен ровный кадр 72 Гц; при ходьбе оператор и так получает
+        /// максимум дискомфорта от рывков.
+        ///
+        /// ТЕПЕРЬ ответ пробы считается ОДИН РАЗ и пересчитывается по событию: смена XR-настроек
+        /// (`KvXrSettingsChanged`), загрузка сцены и старт PlayMode (см. `Invalidate`).
         /// </summary>
         public static bool EnabledInCurrentMode
         {
-            get { return KvXrCapabilities.Passthrough() != KvXrCapabilities.Answer.Yes; }
+            get
+            {
+                if (!cachedModeKnown)
+                {
+                    cachedModeEnabled = QueryModeEnabled();
+                    cachedModeKnown = true;
+                }
+                return cachedModeEnabled;
+            }
+        }
+
+        private static bool cachedModeEnabled;
+        private static bool cachedModeKnown;
+
+        /// <summary>Сколько раз пробу спрашивали на самом деле — для теста P2-3 (не растёт в кадре).</summary>
+        public static int ProbeCount { get { return probeCount; } }
+
+        private static int probeCount;
+
+        /// <summary>
+        /// ПРАВИЛО «НУЖНЫ ЛИ ПРАВИЛА ДЛЯ ЭТОГО ОТВЕТА ПРОБЫ» — чистая функция без обращения к
+        /// платформе (проверяется тестом P2-3): MR (пасс-тру есть) — правила выключены, всё
+        /// остальное, включая `Unknown`, — включены.
+        /// </summary>
+        public static bool EnabledForAnswer(KvXrCapabilities.Answer passthrough)
+        {
+            return passthrough != KvXrCapabilities.Answer.Yes;
+        }
+
+        /// <summary>СПРОСИТЬ ПЛАТФОРМУ ЗАНОВО (единственное место с обращением к OpenXR).</summary>
+        public static bool QueryModeEnabled()
+        {
+            probeCount++;
+            return EnabledForAnswer(KvXrCapabilities.Passthrough());
+        }
+
+        /// <summary>
+        /// СБРОСИТЬ ЗАКЭШИРОВАННЫЙ ОТВЕТ. Вызывать при смене XR-настроек (режим VR/MR — это
+        /// настройка), при загрузке сцены и на старте прогона: иначе шлем переключили в MR, а
+        /// правила ходьбы остались бы от прежнего ответа.
+        /// </summary>
+        public static void Invalidate()
+        {
+            cachedModeKnown = false;
+        }
+
+        /// <summary>Сброс статики между прогонами и подписка на событие смены настроек.</summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics()
+        {
+            cachedModeKnown = false;
+            cachedModeEnabled = false;
+            probeCount = 0;
+            KvXrSettingsChanged.SettingsChanged -= OnSettingsChanged;
+            KvXrSettingsChanged.SettingsChanged += OnSettingsChanged;
+            UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnSceneLoaded;
+            UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoaded;
+        }
+
+        private static void OnSettingsChanged()
+        {
+            Invalidate();
+        }
+
+        private static void OnSceneLoaded(UnityEngine.SceneManagement.Scene scene,
+                                          UnityEngine.SceneManagement.LoadSceneMode mode)
+        {
+            Invalidate();
         }
 
         /// <summary>ГРАНИЦЫ ЗАЛА В МИРОВЫХ КООРДИНАТАХ: зал стоит вокруг места старта оператора.</summary>

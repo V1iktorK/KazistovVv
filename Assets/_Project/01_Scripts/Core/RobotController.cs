@@ -235,20 +235,45 @@ public class RobotController : MonoBehaviour
         return new float[0];
     }
 
+    /// <summary>
+    /// ПОДСВЕТКА ВЫБРАННОГО РОБОТА ЧЕРЕЗ `MaterialPropertyBlock` (P2-7 / P4-15, 11.11.2026).
+    ///
+    /// ЧТО БЫЛО. Здесь стояло `renderer.material.SetColor(...)` в цикле по ВСЕМ рендерерам.
+    /// `renderer.material` — это СВОЯ КОПИЯ материала на каждый рендерер, и копии никто не
+    /// уничтожал: у робота с десятками частей каждый выбор создавал десятки материалов (утечка
+    /// нативной памяти + рост потребления кадра). Плюс в редакторе `renderer.material` может
+    /// вернуть сам АССЕТ, если у рендерера нет копии, — и тогда цвет записывался прямо в
+    /// `04_Materials/Robot/Robot_HDRP.mat`: прогон «пачкал» отслеживаемый файл (наблюдалось
+    /// 11.11.2026, критерий P4-15 «git status чист после прогона»).
+    ///
+    /// ЧТО СТАЛО. Свойства пишутся в `MaterialPropertyBlock`: это per-renderer значения, которые
+    /// НЕ создают материалов, не пачкают ассеты и применяются без пересборки материала.
+    ///
+    /// ЗАМЕТКА ПРО КЛЮЧЕВОЕ СЛОВО. `_EMISSION` — ключевое слово МАТЕРИАЛА, его нельзя включить
+    /// через блок свойств. Поэтому вместо включения ключевого слова используется заведомо
+    /// ненулевой цвет свечения: чтобы эмиссия была видна, она должна быть включена в материале
+    /// робота (в проекте так и есть). Если материала нет вовсе — рендерер пропускается.
+    /// </summary>
     public virtual void SetActive(bool active)
     {
         isActive = active;
+        Color emission = active ? Color.green * 0.3f : Color.black;
+
         foreach (Renderer renderer in GetComponentsInChildren<Renderer>(true))
         {
-            if (renderer.material.HasProperty("_EmissionColor"))
-            {
-                renderer.material.SetColor(
-                    "_EmissionColor",
-                    active ? Color.green * 0.3f : Color.black);
-                renderer.material.EnableKeyword("_EMISSION");
-            }
+            if (renderer == null) continue;
+            Material shared = renderer.sharedMaterial;
+            if (shared == null || !shared.HasProperty("_EmissionColor")) continue;
+
+            if (highlightBlock == null) highlightBlock = new MaterialPropertyBlock();
+            renderer.GetPropertyBlock(highlightBlock);
+            highlightBlock.SetColor("_EmissionColor", emission);
+            renderer.SetPropertyBlock(highlightBlock);
         }
     }
+
+    /// <summary>Блок свойств подсветки: один на робота, чтобы не выделять память на каждый выбор.</summary>
+    private MaterialPropertyBlock highlightBlock;
 
     public virtual void UpdateTelemetry(float deltaTime)
     {

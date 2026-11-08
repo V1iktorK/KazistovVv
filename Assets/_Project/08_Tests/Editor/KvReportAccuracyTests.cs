@@ -27,6 +27,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Отчёт для владельца: числа и утверждения совпадают с фактом.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvReportAccuracyTests
     {
         private static string Root
@@ -177,3 +178,4 @@ namespace KazistovVvTests
         }
     }
 }
+

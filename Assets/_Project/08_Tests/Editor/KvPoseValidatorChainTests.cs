@@ -27,6 +27,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Модель коллизий: есть ли инструмент в цепочке и каким радиусом он считается.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvPoseValidatorChainTests
     {
         private PoseValidator validator;
@@ -127,3 +128,4 @@ namespace KazistovVvTests
         }
     }
 }
+

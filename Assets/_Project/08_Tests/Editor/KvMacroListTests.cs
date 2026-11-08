@@ -30,6 +30,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Уведомление об изменении списка макросов.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvMacroListTests
     {
         private const string TestPrefix = "__S44_";
@@ -177,3 +178,4 @@ namespace KazistovVvTests
         }
     }
 }
+

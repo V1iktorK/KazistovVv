@@ -29,6 +29,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Одна клавиша — одно действие: конфликты между хабами.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvHotkeyConflictTests
     {
         /// <summary>
@@ -221,3 +222,4 @@ namespace KazistovVvTests
         }
     }
 }
+

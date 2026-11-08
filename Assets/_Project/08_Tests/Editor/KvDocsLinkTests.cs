@@ -26,6 +26,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Ссылки между документами: ни одной битой.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvDocsLinkTests
     {
         private static string Root
@@ -239,3 +240,4 @@ namespace KazistovVvTests
         }
     }
 }
+

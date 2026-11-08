@@ -27,6 +27,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Переводы команд: заголовок и пояснение для каждого идентификатора.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvCommandLocalizationTests
     {
         /// <summary>
@@ -218,3 +219,4 @@ namespace KazistovVvTests
         }
     }
 }
+

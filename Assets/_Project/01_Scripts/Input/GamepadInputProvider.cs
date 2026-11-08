@@ -70,7 +70,13 @@ public class GamepadInputProvider : InputProvider
         var gamepad = GetGamepad();
         if (gamepad != null)
             return gamepad.leftShoulder.wasPressedThisFrame;
-        return Input.GetButtonDown("LB");
+        // ИСПРАВЛЕНО 11.11.2026: раньше здесь читалась legacy-кнопка «LB» — такого имени НЕТ в
+        // ProjectSettings/InputManager.asset (там объявлены только Cancel, Fire1..3, Horizontal,
+        // Vertical, Jump, Submit, Mouse *). Unity бросала `ArgumentException: Input Button LB is
+        // not setup` КАЖДЫЙ КАДР, а `IsAvailable()` на основании legacy-джойстика выбирала этот
+        // провайдер на старте — то есть оператор оставался без управления и с потоком ошибок.
+        // `GetKeyDown(KeyCode.JoystickButtonN)` — НЕ требует объявления в Input Manager.
+        return Input.GetKeyDown(KeyCode.JoystickButton4);
     }
 
     public override bool GetRecordDown()
@@ -78,7 +84,7 @@ public class GamepadInputProvider : InputProvider
         var gamepad = GetGamepad();
         if (gamepad != null)
             return gamepad.buttonWest.wasPressedThisFrame;
-        return Input.GetButtonDown("X");
+        return Input.GetKeyDown(KeyCode.JoystickButton2);
     }
 
     public override bool GetPlayDown()
@@ -86,7 +92,7 @@ public class GamepadInputProvider : InputProvider
         var gamepad = GetGamepad();
         if (gamepad != null)
             return gamepad.buttonNorth.wasPressedThisFrame;
-        return Input.GetButtonDown("Y");
+        return Input.GetKeyDown(KeyCode.JoystickButton3);
     }
 
     public override Vector2 GetMovement()
@@ -104,7 +110,7 @@ public class GamepadInputProvider : InputProvider
         if (gamepad != null)
             return gamepad.rightStick.ReadValue();
 
-        return new Vector2(Input.GetAxis("RightStickX"), Input.GetAxis("RightStickY"));
+        return new Vector2(Input.GetAxis("Mouse X"), Input.GetAxis("Mouse Y"));   // осей правого стика в проекте нет — они бросали ArgumentException
     }
 
     public override bool IsAvailable()
@@ -115,7 +121,11 @@ public class GamepadInputProvider : InputProvider
             return true;
         }
 
-        string[] joysticks = Input.GetJoystickNames();
-        return joysticks.Length > 0 && joysticks[0] != null && joysticks[0].Length > 0;
+        // «Есть legacy-джойстик» НЕ делает провайдер рабочим (исправлено 11.11.2026): кнопки и
+        // стики читаются через `Gamepad.current`, и если он устройства не видит, действия не
+        // сработают вовсе. Раньше доступность подтверждалась по legacy-списку джойстиков, и
+        // `InputManager` выбирал на старте провайдер, который ничего не умел — оператор оставался
+        // без управления, а в консоль каждый кадр летел ArgumentException.
+        return false;
     }
 }

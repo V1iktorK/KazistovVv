@@ -71,6 +71,21 @@ public class InputManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// P3-10 (11.11.2026). ЧТО БЫЛО. Статическая ссылка `Instance` не обнулялась НИКОГДА:
+    /// объекта в сцене уже нет, а `InputManager.Instance` продолжает отдавать уничтоженный
+    /// MonoBehaviour. Объект при этом под `DontDestroyOnLoad`, то есть переживает смену сцен.
+    /// ЧЕМ ЭТО ГРОЗИЛО. «Фальшиво-null» объект: `Instance != null` истинно, а любое обращение к
+    /// его полям бросает `MissingReferenceException`. Проверить такое место взглядом нельзя — и
+    /// ровно на этом основании ввод «то работает, то нет» после перезагрузки сцены.
+    /// ТЕПЕРЬ ссылка сбрасывается тем же объектом, который её поставил (как в `RobotSelector`,
+    /// P1-15): «Instance != null» снова означает «живой экземпляр».
+    /// </summary>
+    void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
+    }
+
     void Start()
     {
         EnsureProvidersExist();
@@ -102,44 +117,75 @@ public class InputManager : MonoBehaviour
         }
     }
 
-    public void SetInputDevice(InputDevice device)
+    /// <summary>
+    /// Провайдер, НАЗНАЧЕННЫЙ устройству (без проверки доступности — её делает `SetInputDevice`).
+    /// </summary>
+    private InputProvider ProviderFor(InputDevice device)
     {
-        if (activeProvider != null)
-            activeProvider.enabled = false;
-
         switch (device)
         {
-            case InputDevice.VR:
-                activeProvider = vrProvider;
-                break;
-            case InputDevice.KeyboardMouse:
-                activeProvider = keyboardMouseProvider;
-                break;
-            case InputDevice.Gamepad:
-                activeProvider = gamepadProvider;
-                break;
-            case InputDevice.MR:
-                activeProvider = mrProvider;
-                break;
-            case InputDevice.AR:
-                activeProvider = arProvider;
-                break;
-            default:
-                activeProvider = keyboardMouseProvider;
-                break;
+            case InputDevice.VR: return vrProvider;
+            case InputDevice.Gamepad: return gamepadProvider;
+            case InputDevice.MR: return mrProvider;
+            case InputDevice.AR: return arProvider;
+            case InputDevice.KeyboardMouse: return keyboardMouseProvider;
+            default: return keyboardMouseProvider;
         }
+    }
 
-        if (activeProvider == null)
+    /// <summary>
+    /// P3-10 (11.11.2026). ЧТО БЫЛО. Устройство выбиралось БЕЗ проверки доступности: для
+    /// `InputDevice.MR` выставлялся `mrProvider`, который возвращает `false`/`zero` во всех
+    /// действиях и честно сообщает `IsAvailable() == false`; для AR — провайдер, у которого
+    /// «доступен» означало просто «платформа Android». Выбранное устройство при этом ещё и
+    /// записывалось в `PlayerPrefs`, то есть нерабочий выбор закреплялся на следующие запуски.
+    /// ЧЕМ ЭТО ГРОЗИЛО. Нажатие «MR» (или AR на шлеме PICO) оставляло приложение БЕЗ ВВОДА: ни
+    /// осмотра, ни выбора, ни телеоперации — и без единой ошибки в консоли, потому что провайдер
+    /// формально существует. Оператор видел «ничего не работает» и не мог понять причину.
+    /// ТЕПЕРЬ: провайдер с `IsAvailable() == false` НЕ выбирается. Текущий рабочий провайдер
+    /// сохраняется, а если выбранного ещё нет (старт) — берётся клавиатура с мышью: без ввода
+    /// приложение бесполезно, и «пусть будет хоть что-то работающее» здесь честнее пустоты.
+    /// Нерабочий выбор в `PlayerPrefs` НЕ записывается: сохранять нерабочее — то же обещание.
+    /// </summary>
+    public void SetInputDevice(InputDevice device)
+    {
+        InputProvider wanted = ProviderFor(device);
+        if (wanted == null)
         {
             Debug.LogError("[InputManager] No valid provider selected.");
             return;
         }
 
+        if (!wanted.IsAvailable())
+        {
+            Debug.LogWarning("[InputManager] устройство «" + device + "» не выбрано: провайдер " +
+                             wanted.GetType().Name + ".IsAvailable() = false (нет оборудования/" +
+                             "подсистемы). Текущий ввод: " +
+                             (activeProvider != null ? activeProvider.GetType().Name : "нет") +
+                             ". Настройка не сохранена, чтобы не закреплять нерабочий выбор.");
+            if (activeProvider == null && keyboardMouseProvider != null &&
+                keyboardMouseProvider != wanted && keyboardMouseProvider.IsAvailable())
+            {
+                ApplyProvider(keyboardMouseProvider, InputDevice.KeyboardMouse);
+            }
+            return;
+        }
+
+        ApplyProvider(wanted, device);
+    }
+
+    /// <summary>Включить провайдер и запомнить выбор (единственное место записи `PlayerPrefs`).</summary>
+    private void ApplyProvider(InputProvider provider, InputDevice device)
+    {
+        if (activeProvider != null && activeProvider != provider)
+            activeProvider.enabled = false;
+
+        activeProvider = provider;
         activeProvider.enabled = true;
         PlayerPrefs.SetInt("InputDevice", (int)device);
         PlayerPrefs.Save();
     }
-    
+
     void LoadPreferredDevice()
     {
         int saved = PlayerPrefs.GetInt("InputDevice", -1);

@@ -160,7 +160,8 @@ namespace KazistovVvFeatures
                 lr.widthMultiplier = 0.012f;
                 Material arrowMaterial = KazistovVvFeatures.KvRenderPipelineShaders.CreateLine(
                     "Материал_стрелки_сил", Color.white);
-                if (arrowMaterial != null) lr.material = arrowMaterial;
+                // sharedMaterial: материал наш и он один — копия не нужна (P2-7 / R1-2).
+            if (arrowMaterial != null) lr.sharedMaterial = arrowMaterial;
                 lr.positionCount = 0;
                 arrows.Add(lr);
             }
@@ -432,7 +433,9 @@ namespace KazistovVvFeatures
                 if (material != null)
                 {
                     material.hideFlags = HideFlags.HideAndDontSave;
-                    renderer.material = material;
+                    // sharedMaterial: материал наш и он один. `renderer.material` создавал ещё одну
+                    // копию, которую никто не уничтожал (P2-7 / R1-2, 11.11.2026).
+                    renderer.sharedMaterial = material;
                 }
                 renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 renderer.receiveShadows = false;

@@ -113,6 +113,7 @@ namespace KazistovVvTests
     /// GameObject/MonoBehaviour и не используют реальное время, поэтому полностью детерминированы.
     /// </summary>
     [TestFixture]
+        [Category(KvTestCategories.Fast)]
     public class KvPayloadCalculatorTests
     {
         /// <summary>Текст отказа, когда робот не привязан (KvPayloadCalculator.cs:134 и 158).</summary>
@@ -1007,3 +1008,4 @@ namespace KazistovVvTests
         }
     }
 }
+

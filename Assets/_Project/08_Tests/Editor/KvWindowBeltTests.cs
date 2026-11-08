@@ -16,6 +16,7 @@ namespace KazistovVvTests
     /// окно остаётся видимым, а интерфейс обязан сказать «на поясе нет места» — иначе оператор
     /// решит, что закрыл окно, и не найдёт его ни на экране, ни на поясе.
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvWindowBeltTests
     {
         /// <summary>Окно-двойник: считает, сколько раз его показали, скрыли и свернули.</summary>
@@ -242,3 +243,4 @@ namespace KazistovVvTests
         }
     }
 }
+

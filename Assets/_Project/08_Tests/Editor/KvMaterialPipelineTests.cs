@@ -30,6 +30,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>URP-копии материалов против HDRP-оригиналов.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvMaterialPipelineTests
     {
         // GUID шейдеров Unity (стабильные): URP/Lit и HDRP/Lit.
@@ -349,3 +350,4 @@ namespace KazistovVvTests
         }
     }
 }
+

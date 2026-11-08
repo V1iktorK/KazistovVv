@@ -31,6 +31,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Предусловия MR и AR: лоадеры, манифест, выбор режима, масштаб.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvMrArReadinessTests
     {
         private static string ProjectRoot
@@ -394,3 +395,4 @@ namespace KazistovVvTests
         }
     }
 }
+

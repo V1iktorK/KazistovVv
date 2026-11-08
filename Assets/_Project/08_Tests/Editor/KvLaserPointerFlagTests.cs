@@ -28,6 +28,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Флаг лучей гасит только рисование, а не работу прицела.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvLaserPointerFlagTests
     {
         /// <summary>Файл, в котором живёт `UpdateLaserPointers`.</summary>
@@ -161,3 +162,4 @@ namespace KazistovVvTests
         }
     }
 }
+

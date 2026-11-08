@@ -26,6 +26,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>GJK/EPA: пересечение и глубина проникновения выпуклых примитивов.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvNarrowPhaseTests
     {
         // ---------------------------------------------------------------- 1. РАЗДЕЛЁННЫЕ ТЕЛА
@@ -220,3 +221,4 @@ namespace KazistovVvTests
         }
     }
 }
+

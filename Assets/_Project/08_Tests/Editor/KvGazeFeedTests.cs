@@ -25,6 +25,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Подача взгляда: направление, начало луча, отсев нечисла.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvGazeFeedTests
     {
         private static readonly Vector3 Head = new Vector3(0f, 1.6f, 0f);
@@ -180,3 +181,4 @@ namespace KazistovVvTests
         }
     }
 }
+

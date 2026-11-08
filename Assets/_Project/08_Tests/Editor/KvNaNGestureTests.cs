@@ -28,6 +28,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Нечисловые данные в жестах: отказ, а не тихое «не сработало».</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvNaNGestureTests
     {
         private static readonly Vector3 Head = new Vector3(0f, 1.6f, 0f);
@@ -120,3 +121,4 @@ namespace KazistovVvTests
         }
     }
 }
+

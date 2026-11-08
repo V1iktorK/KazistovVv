@@ -19,7 +19,7 @@
       powershell -ExecutionPolicy Bypass -File Tools\stage-a-apk-check.ps1 -ExpectedPackage com.KazistovVv.app
 #>
 param(
-    [string]$Project = "C:\KazistovVv_Build",
+    [string]$Project = (Split-Path -Parent $PSScriptRoot),
     [string[]]$Apk = @(),
     [string]$ExpectedPackage = ""
 )

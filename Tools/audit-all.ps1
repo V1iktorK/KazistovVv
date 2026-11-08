@@ -21,7 +21,7 @@
         powershell -ExecutionPolicy Bypass -File Tools\audit-all.ps1 -Tag s44 -KeepLogs
 #>
 param(
-    [string]$Project = "C:\KazistovVv_Build",
+    [string]$Project = (Split-Path -Parent $PSScriptRoot),
     [string]$Tag = "audit",
     [switch]$KeepLogs,
     [int]$TestsTimeoutMinutes = 30

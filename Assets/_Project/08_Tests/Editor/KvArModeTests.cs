@@ -18,6 +18,7 @@ namespace KazistovVvTests
     /// СТИЛЬ — КАК В ПРОЕКТЕ: чтение настоящих файлов и поиск GUID скриптов. Сцену при этом
     /// запускать не нужно (правило: невызываемый код и непроверенные ассеты — дефект).
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvArModeTests
     {
         private static string ProjectRoot
@@ -549,3 +550,4 @@ namespace KazistovVvTests
                 "androidApplicationEntry не 2 (GameActivity): на шлеме PICO не активируется VR-дисплей");
         }    }
 }
+

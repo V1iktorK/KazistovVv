@@ -266,8 +266,19 @@ namespace TrajectoryCore
             return q;
         }
 
+        /// <summary>
+        /// УГОЛ СУСТАВА i ПО ЕГО ТРАНСФОРМУ (P3-12, 11.11.2026).
+        ///
+        /// ЧТО БЫЛО. `joints[i]` разыменовывался без проверки, тогда как соседний `Apply` пустые
+        /// суставы ПРОПУСКАЛ. Незаполненный в инспекторе сустав (или выключенный объект) ронял весь
+        /// поток траекторий `NullReferenceException` вместо понятного сообщения — и оператор видел
+        /// «перестало работать», а не «не задан сустав 4».
+        /// </summary>
         private float MeasureJoint(int i)
         {
+            if (joints == null || i < 0 || i >= joints.Length || joints[i] == null) return 0f;
+            if (q0 == null || axes == null || i >= q0.Length || i >= axes.Length) return 0f;
+
             Quaternion rel = joints[i].localRotation * Quaternion.Inverse(q0[i]);
             Vector3 u = (q0[i] * axes[i]).normalized;
             Vector3 r = PickPerp(u);
@@ -609,25 +620,25 @@ namespace TrajectoryCore
 
         /// <summary>
         /// Аналитический (численный) позиционный Якобиан 3×N в конфигурации q.
-        /// J_k = ∂p_tcp/∂q_k (конечные разности, шаг 0.25°; для призмы SCARA — метры).
+        /// J_k = ∂p_tcp/∂q_k (конечные разности, шаг <see cref="KinematicsJacobian.StepDegrees"/>°;
+        /// для призмы SCARA — метры).
+        ///
+        /// P2-14 (11.11.2026). ЧТО БЫЛО: этот метод САМ считал якобиан конечными разностями с
+        /// шагом 0,25°, а `KinematicsJacobian.Compute` — с шагом 0,5°. Две реализации ОДНОГО
+        /// якобиана с разными шагами: σ_min и манипулируемость для ОДНОЙ позы получались разными,
+        /// в зависимости от того, кто их спросил.
+        ///
+        /// ЧЕМ ЭТО ГРОЗИЛО. Вердикт «близко к сингулярности» (по нему запрещается движение) и
+        /// оценка удобства позы считались по разным числам: прицел мог быть зелёным по одной
+        /// оценке и красным по другой, а объяснить разницу было нечем — оба ответа «правильные».
+        ///
+        /// ТЕПЕРЬ реализация ОДНА — `KinematicsJacobian.Compute`, а шаг задан в одном месте
+        /// (`KinematicsJacobian.StepDegrees`). Этот метод оставлен обёрткой: его зовут десятки
+        /// мест, и менять их ради переименования незачем.
         /// </summary>
         public void Jacobian(double[] q, double[][] jac, out Vector3 tcp)
         {
-            tcp = TcpAt(q);
-            int n = Dof;
-            double h = 0.25 * Mathf.Deg2Rad;
-            var probe = (double[])q.Clone();
-            for (int k = 0; k < n; k++)
-            {
-                double save = probe[k];
-                probe[k] = save + h;
-                Vector3 plus = TcpAt(probe);
-                probe[k] = save - h;
-                Vector3 minus = TcpAt(probe);
-                probe[k] = save;
-                Vector3 dp = (plus - minus) / (float)(2.0 * h);
-                jac[0][k] = dp.x; jac[1][k] = dp.y; jac[2][k] = dp.z;
-            }
+            KinematicsJacobian.Compute(this, q, jac, out tcp);
         }
 
         /// <summary>Максимальная норма строки Якобиана ‖∂p/∂q_k‖∞ — для адаптивного шага рёбер.</summary>

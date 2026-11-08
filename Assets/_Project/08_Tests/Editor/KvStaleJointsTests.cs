@@ -28,6 +28,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Точки кисти не застревают в сервисе распознавания.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvStaleJointsTests
     {
         private static string Find(string fileName)
@@ -173,7 +174,13 @@ namespace KazistovVvTests
             string text = File.ReadAllText(path);
             Match tracked = Regex.Match(text, @"public bool IsTracked\(int hand\)\s*\{(.*?)\}",
                 RegexOptions.Singleline);
-            if (!tracked.Success) Assert.Pass("метод IsTracked не найден — проверять нечего");
+
+            // P4-1 (11.11.2026). ЧТО БЫЛО: `if (!tracked.Success) Assert.Pass(...)` — при
+            // переименовании метода тест зеленел, ничего не проверив (NUnit считает Pass пройденным).
+            // ЧТО СТАЛО: отсутствие метода — провал проверки с понятным сообщением.
+            Assert.IsTrue(tracked.Success,
+                "в KvXrInput.cs не найден метод IsTracked(int hand) — проверка «отметки valid влияют " +
+                "на трекинг» больше не выполняется, метод переименован или удалён");
 
             string body = tracked.Groups[1].Value;
             StringAssert.Contains("valid", body,
@@ -182,3 +189,4 @@ namespace KazistovVvTests
         }
     }
 }
+

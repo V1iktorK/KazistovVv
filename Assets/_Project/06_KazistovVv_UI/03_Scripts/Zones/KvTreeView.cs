@@ -459,6 +459,7 @@ namespace KazistovVvUI
             tip.Set(node.DisplayName, BuildTooltip(node), "");
 
             rows.Add(rowGo);
+            visibleNodesDirty = true;   // набор строк изменился — кэш `VisibleNodes` недействителен (P2-10)
 
             if (hasChildren && open)
             {
@@ -539,20 +540,39 @@ namespace KazistovVvUI
         /// ФИКС 9 (§22): узлы РОВНО в том порядке, в каком они видны в дереве (сверху вниз).
         /// Нужно навигации с клавиатуры: ↑/↓ ходят по этому списку. Только чтение —
         /// ни выделение, ни раскрытие узлов не меняются.
+        ///
+        /// P2-10 (11.11.2026). ЧТО БЫЛО: каждый вызов создавал НОВЫЙ `List&lt;ProjectNode&gt;` и
+        /// делал `GetComponent&lt;KvTreeRow&gt;()` на КАЖДУЮ строку. `KvKeyboardNav` зовёт метод в
+        /// каждом кадре (стрелки обязаны работать в любой момент), то есть на кадре 72 Гц это
+        /// список из десятков объектов и столько же поисков компонента.
+        ///
+        /// ЧЕМ ЭТО ГРОЗИЛО. Мусор в управляемой куче каждый кадр и работа в главном потоке ради
+        /// данных, которые меняются ТОЛЬКО при пересборке дерева — то есть почти никогда.
+        ///
+        /// ТЕПЕРЬ список строится один раз и переиспользуется; сбрасывается там, где меняется сам
+        /// набор строк (`rows.Add` при создании, `rows.Clear` при пересборке).
+        /// ВОЗВРАЩАЕМЫЙ СПИСОК — ТОЛЬКО ДЛЯ ЧТЕНИЯ: это внутренний буфер, а не копия.
         /// </summary>
         public List<ProjectNode> VisibleNodes()
         {
-            List<ProjectNode> result = new List<ProjectNode>();
+            if (!visibleNodesDirty && visibleNodesCache.Count == rows.Count) return visibleNodesCache;
+
+            visibleNodesCache.Clear();
             for (int i = 0; i < rows.Count; i++)
             {
                 GameObject rowGo = rows[i];
                 if (rowGo == null) continue;
                 KvTreeRow row = rowGo.GetComponent<KvTreeRow>();
                 if (row == null || row.Node == null) continue;
-                result.Add(row.Node);
+                visibleNodesCache.Add(row.Node);
             }
-            return result;
+            visibleNodesDirty = false;
+            return visibleNodesCache;
         }
+
+        /// <summary>Кэш видимых узлов и метка «набор строк изменился» (P2-10).</summary>
+        private readonly List<ProjectNode> visibleNodesCache = new List<ProjectNode>();
+        private bool visibleNodesDirty = true;
 
         /// <summary>Раскрыт ли узел (по ключу) — используется навигацией стрелками.</summary>
         public bool IsExpandedNode(ProjectNode node)
@@ -741,6 +761,8 @@ namespace KazistovVvUI
             foreach (GameObject go in rows)
                 if (go != null) Destroy(go);
             rows.Clear();
+            visibleNodesDirty = true;   // строки уничтожены — кэш `VisibleNodes` недействителен (P2-10)
+            visibleNodesCache.Clear();
         }
 
         private void OnDisable()

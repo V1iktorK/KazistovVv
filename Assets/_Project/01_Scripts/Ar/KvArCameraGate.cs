@@ -60,6 +60,20 @@ namespace KazistovVvAr
         private bool confirmed;
         private bool awaitingContinue;
         private float continueShownAt;
+
+        // --- ПРОВЕРКА СОДЕРЖИМОГО КАДРА (добавлено 11.11.2026): счётчик кадров сам по себе
+        // ничего не доказывал — на устройстве он доходил до 31 при ПОЛНОСТЬЮ ЧЁРНОМ изображении.
+        /// <summary>Содержимое кадра уже проверено.</summary>
+        private bool imageChecked;
+        /// <summary>Проверка содержимого идёт (корутина уже запущена).</summary>
+        private bool imageCheckRunning;
+        /// <summary>В кадре есть изображение (яркость выше порога).</summary>
+        private bool imageHasContent;
+        /// <summary>Средняя яркость проверенного кадра — для журнала.</summary>
+        private float lastAverageLuminance;
+        /// <summary>О пустом кадре уже сообщено (чтобы не заливать журнал каждый кадр).</summary>
+        private bool emptyImageReported;
+
         private ARCameraManager cameraManager;
         private ARSession session;
         private ARCameraBackground background;
@@ -93,11 +107,34 @@ namespace KazistovVvAr
             SetStatus("Проверяю доступ к камере…");
         }
 
+        /// <summary>
+        /// ОСВОБОЖДЕНИЕ КАМЕРЫ (P2-9, 11.11.2026).
+        ///
+        /// ЧТО БЫЛО. `webCam.Stop()` — и всё. `WebCamTexture` держит НАТИВНЫЙ буфер кадров
+        /// (1280×720, 4 байта на пиксель — около 3,7 МБ на кадр) плюс саму камеру устройства;
+        /// `Stop()` останавливает поток, но объект не уничтожает.
+        ///
+        /// ЧЕМ ЭТО ГРОЗИЛО. Повторный вход в AR (выход в меню и возврат, перезапуск сцены)
+        /// создавал ВТОРОЙ `WebCamTexture`, оставляя первый вместе с буфером: камера оставалась
+        /// занятой, предпросмотр мог не включиться вовсе, а память утекала на каждый вход.
+        ///
+        /// ТЕПЕРЬ после `Stop()` объект уничтожается и поле обнуляется.
+        /// </summary>
         void OnDestroy()
         {
             if (cameraManager != null)
                 cameraManager.frameReceived -= OnFrameReceived;
-            if (webCam != null) webCam.Stop();
+            if (webCam != null)
+            {
+                try { webCam.Stop(); }
+                catch (System.Exception e)
+                {
+                    Debug.LogWarning("[KvAr] КАМЕРА: остановка WebCamTexture не удалась: " + e.Message);
+                }
+                if (Application.isPlaying) Destroy(webCam);
+                else DestroyImmediate(webCam);
+                webCam = null;
+            }
         }
 
         void Update()
@@ -146,13 +183,48 @@ namespace KazistovVvAr
 
             if (confirmed) return;
 
-            if (CameraFrames >= framesToConfirm)
+            // ПРОВЕРКА ИЗОБРАЖЕНИЯ, А НЕ ТОЛЬКО СЧЁТЧИКА КАДРОВ (добавлено 11.11.2026).
+            //
+            // ЧТО БЫЛО. «Камера работает» объявлялось по `CameraFrames >= framesToConfirm`, то есть
+            // по числу ПРИШЕДШИХ кадров. На живом планшете (прогон 11.11.2026) приложение получило
+            // 31 кадр, написало «КАМЕРА: РАБОТАЕТ — программа действительно использует камеру», а
+            // сохранённый этим же кодом кадр оказался ПОЛНОСТЬЮ ЧЁРНЫМ (320×240, все пиксели нули).
+            // Оператор видел чёрный экран с интерфейсом, а журнал утверждал успех — то есть
+            // предохранитель подтверждал то, чего не было.
+            //
+            // ЧТО СТАЛО. Перед подтверждением берётся CPU-кадр и проверяется СОДЕРЖИМОЕ (средняя
+            // яркость). Пустое изображение — это не «работает», а честная строка с причиной.
+            if (CameraFrames >= framesToConfirm && !imageChecked && !imageCheckRunning)
             {
+                imageCheckRunning = true;
+                StartCoroutine(VerifyCameraImageOnce());
+            }
+
+            if (CameraFrames >= framesToConfirm && imageChecked)
+            {
+                if (!imageHasContent)
+                {
+                    if (!emptyImageReported)
+                    {
+                        emptyImageReported = true;
+                        Debug.LogError("[KvAr] КАМЕРА: кадры идут (" + CameraFrames +
+                                       "), но изображение ПУСТОЕ (чёрный кадр, яркость " +
+                                       lastAverageLuminance.ToString("0.000") +
+                                       ") — камера НЕ считается рабочей");
+                    }
+                    SetStatus("Камера отдаёт ПУСТЫЕ кадры (чёрное изображение).\n" +
+                              "Работа вслепую невозможна. Проверьте разрешение камеры и ARCore.");
+                    // Резервный предпросмотр — единственный шанс показать оператору хоть что-то.
+                    if (!FallbackPreviewActive) EnableFallbackPreview();
+                    return;
+                }
+
                 confirmed = true;
                 awaitingContinue = true;
                 continueShownAt = Time.unscaledTime;
                 Debug.Log("[KvAr] КАМЕРА: РАБОТАЕТ — получено кадров " + CameraFrames +
-                          " · программа действительно использует камеру");
+                          " · изображение НЕ пустое (яркость " + lastAverageLuminance.ToString("0.000") +
+                          ") · программа действительно использует камеру");
                 StartCoroutine(CaptureCameraFrameOnce());
                 // НЕ ПРЯЧЕМ САМИ: владелец должен увидеть подтверждение и нажать кнопку — иначе
                 // «увидел запрос, но не успел нажать» (жалоба 06.11.2026).
@@ -162,7 +234,7 @@ namespace KazistovVvAr
                 return;
             }
 
-            if (CameraFrames > 0)
+            if (CameraFrames > 0 && !imageChecked)
             {
                 SetStatus("Камера работает — получено кадров " + CameraFrames + "…");
             }
@@ -182,6 +254,111 @@ namespace KazistovVvAr
         }
 
         // ================================================================ кадры и разрешение
+
+        /// <summary>
+        /// ПРОВЕРИТЬ, ЧТО В КАДРЕ ЕСТЬ ИЗОБРАЖЕНИЕ, А НЕ ТОЛЬКО ЕГО РАЗМЕР.
+        ///
+        /// ЧИСТАЯ ФУНКЦИЯ — намеренно: именно её отсутствие и было дефектом (см. шапку класса и
+        /// комментарий в `Update`), а проверять «камера показала чёрный экран» на устройстве каждый
+        /// раз заново нельзя. Тест подаёт чёрный массив и ожидает `false`, а настоящий кадр — `true`.
+        ///
+        /// Порог 0.02 (≈5 из 255) — заведомо ниже любого реального изображения (даже тёмная комната
+        /// даёт больше) и заведомо выше шума полностью чёрного кадра, где все компоненты равны нулю.
+        /// </summary>
+        public static bool FrameHasContent(Color32[] pixels, float threshold = 0.02f)
+        {
+            if (pixels == null || pixels.Length == 0) return false;
+
+            // Считаем по выборке: полный проход по кадру 4K×4K на главном потоке не нужен и дорог.
+            int step = Mathf.Max(1, pixels.Length / 4096);
+            double sum = 0;
+            int counted = 0;
+            for (int i = 0; i < pixels.Length; i += step)
+            {
+                Color32 p = pixels[i];
+                // Взвешенная яркость (Rec. 709): глаз чувствительнее к зелёному.
+                sum += (0.2126 * p.r + 0.7152 * p.g + 0.0722 * p.b) / 255.0;
+                counted++;
+            }
+            if (counted == 0) return false;
+            return (sum / counted) > threshold;
+        }
+
+        /// <summary>Средняя яркость кадра 0…1 — попадает в журнал, чтобы отличить «чёрный» от «тёмный».</summary>
+        public static float AverageLuminance(Color32[] pixels)
+        {
+            if (pixels == null || pixels.Length == 0) return 0f;
+            int step = Mathf.Max(1, pixels.Length / 4096);
+            double sum = 0;
+            int counted = 0;
+            for (int i = 0; i < pixels.Length; i += step)
+            {
+                Color32 p = pixels[i];
+                sum += (0.2126 * p.r + 0.7152 * p.g + 0.0722 * p.b) / 255.0;
+                counted++;
+            }
+            return counted == 0 ? 0f : (float)(sum / counted);
+        }
+
+        /// <summary>
+        /// ВЗЯТЬ ОДИН CPU-КАДР И ПРОВЕРИТЬ СОДЕРЖИМОЕ. Ничего не сохраняет, кроме строки журнала:
+        /// это проверка, а не диагностический снимок (для снимка есть `CaptureCameraFrameOnce`).
+        /// </summary>
+        private IEnumerator VerifyCameraImageOnce()
+        {
+            if (cameraManager == null)
+            {
+                imageChecked = true;
+                imageHasContent = false;
+                yield break;
+            }
+
+            if (!cameraManager.TryAcquireLatestCpuImage(out UnityEngine.XR.ARSubsystems.XRCpuImage image))
+            {
+                imageChecked = true;
+                imageHasContent = false;
+                Debug.LogWarning("[KvAr] КАМЕРА: CPU-кадр недоступен — содержимое кадра проверить нечем");
+                yield break;
+            }
+
+            using (image)
+            {
+                int w = Mathf.Max(2, image.width / 4);
+                int h = Mathf.Max(2, image.height / 4);
+                var conversion = new UnityEngine.XR.ARSubsystems.XRCpuImage.ConversionParams
+                {
+                    inputRect = new RectInt(0, 0, image.width, image.height),
+                    outputDimensions = new Vector2Int(w, h),
+                    outputFormat = TextureFormat.RGBA32,
+                    transformation = UnityEngine.XR.ARSubsystems.XRCpuImage.Transformation.MirrorY
+                };
+
+                var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+                try
+                {
+                    image.Convert(conversion, tex.GetRawTextureData<byte>());
+                    tex.Apply();
+                    Color32[] pixels = tex.GetPixels32();
+                    lastAverageLuminance = AverageLuminance(pixels);
+                    imageHasContent = FrameHasContent(pixels);
+                    Debug.Log("[KvAr] КАМЕРА: содержимое кадра проверено · " + image.width + "×" +
+                              image.height + " · яркость " + lastAverageLuminance.ToString("0.000") +
+                              " · " + (imageHasContent ? "изображение ЕСТЬ" : "изображение ПУСТОЕ"));
+                }
+                catch (System.Exception e)
+                {
+                    imageHasContent = false;
+                    Debug.LogWarning("[KvAr] КАМЕРА: кадр не прочитан — " + e.GetType().Name + ": " + e.Message);
+                }
+                finally
+                {
+                    Object.Destroy(tex);
+                }
+            }
+
+            imageChecked = true;
+            imageCheckRunning = false;
+        }
 
         private void OnFrameReceived(ARCameraFrameEventArgs args)
         {
@@ -467,6 +644,26 @@ namespace KazistovVvAr
         private void HideGate()
         {
             if (canvas != null && fallbackRoot == null) canvas.gameObject.SetActive(false);
+        }
+
+        /// <summary>ЭКРАН ПОДТВЕРЖДЕНИЯ ЕЩЁ ЖДЁТ НАЖАТИЯ (для рантайма и журнала).</summary>
+        public bool AwaitingContinue { get { return awaitingContinue; } }
+
+        /// <summary>
+        /// СНЯТЬ ПОДТВЕРЖДЕНИЕ СНАРУЖИ (07.11.2026). Дефект планшета: окно «ДОСТУП К КАМЕРЕ /
+        /// ПРОДОЛЖИТЬ» висело на экране минутами, хотя кадры уже шли и трекинг работал — владельцу
+        /// приходилось каждый раз нажимать кнопку. Внутренний автопродолжение живёт в `Update`
+        /// этого компонента; если тот по какой-то причине не тикает, снимаем окно из `KvArRuntime`,
+        /// у которого обновление доказано строкой состояния. Возвращает true, если окно снято.
+        /// </summary>
+        public bool ConfirmNow(string reason)
+        {
+            if (!awaitingContinue) return false;
+            awaitingContinue = false;
+            Debug.Log("[KvAr] КАМЕРА: подтверждение снято автоматически (" + reason +
+                      ") — камера уже работает, кадров " + CameraFrames);
+            HideGate();
+            return true;
         }
 
         /// <summary>Строка для журнала/отчёта.</summary>

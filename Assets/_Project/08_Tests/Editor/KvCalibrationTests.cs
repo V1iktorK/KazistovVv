@@ -43,6 +43,7 @@ namespace KazistovVvTests
     /// Для каждого допуска в комментарии указано ИЗМЕРЕННОЕ значение и запас.
     /// </summary>
     [TestFixture]
+        [Category(KvTestCategories.Fast)]
     public class KvCalibrationTests
     {
         // ==================================================================== ДОПУСКИ
@@ -1433,3 +1434,4 @@ namespace KazistovVvTests
         }
     }
 }
+

@@ -28,6 +28,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Пуск после паузы: команда «начать» действительно начинает.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvPlayAfterPauseTests
     {
         private static string FindSource(string fileName)
@@ -145,3 +146,4 @@ namespace KazistovVvTests
         }
     }
 }
+

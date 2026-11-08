@@ -773,10 +773,15 @@ namespace KazistovVvFeatures
                 Vector3[] extra = personProvider();
                 if (extra != null) points.AddRange(extra);
             }
-            if (points.Count == 0 && Camera.main != null)
-                points.Add(Camera.main.transform.position);
-            else if (Camera.main != null)
-                points.Add(Camera.main.transform.position);
+            // P1-20 (11.11.2026). ЧТО БЫЛО: две ветки `if (points.Count == 0 …) … else if (…)` с
+            // ОДИНАКОВЫМ телом — проверка `Count == 0` не влияла ни на что, а `Camera.main`
+            // запрашивался до четырёх раз за вызов (это поиск по сцене, не поле).
+            // ПОЧЕМУ ПРОСТО ОБЪЕДИНЕНО, А НЕ ПЕРЕПИСАНО: задумывалось ли Различие (например, «если
+            // поставщик дал точки — оператора не добавлять») — вопрос владельцу; см. раздел 8
+            // отчёта. Пока поведение сохранено ровно тем, что код делал на самом деле: камера
+            // добавляется ВСЕГДА, когда она есть.
+            Camera camera = Camera.main;
+            if (camera != null) points.Add(camera.transform.position);
             return points.ToArray();
         }
 

@@ -136,6 +136,45 @@ namespace KazistovVvAr
             return Mathf.Abs(robotBaseWorld.y - planeY);
         }
 
+        /// <summary>
+        /// ТОЧКА ВНУТРИ ПЛОСКОСТИ (07.11.2026). Дефект планшета: объекты из ПК-меню (столы)
+        /// создавались в 1,2 м перед устройством «по плоскости якоря» без проверки границ, и на
+        /// фото их ножки висели над полом за краем настоящего стола. Здесь точка приводится
+        /// внутрь найденной плоскости с отступом `marginMeters`; если плоскость неизвестна —
+        /// точка возвращается как есть (прежнее поведение, ничего не ломаем).
+        /// </summary>
+        public static Vector3 ClampInsidePlane(Vector3 point, Vector3 planeCenter, float halfWidth,
+                                               float halfDepth, Quaternion planeRotation,
+                                               float marginMeters)
+        {
+            if (halfWidth <= 0f || halfDepth <= 0f) return point;
+
+            float marginX = Mathf.Min(Mathf.Max(0f, marginMeters), halfWidth);
+            float marginZ = Mathf.Min(Mathf.Max(0f, marginMeters), halfDepth);
+            float limitX = halfWidth - marginX;
+            float limitZ = halfDepth - marginZ;
+            if (limitX <= 0f || limitZ <= 0f) return planeCenter;
+
+            Vector3 local = Quaternion.Inverse(planeRotation) * (point - planeCenter);
+            local.x = Mathf.Clamp(local.x, -limitX, limitX);
+            local.z = Mathf.Clamp(local.z, -limitZ, limitZ);
+            local.y = 0f;                                   // высоту задаёт плоскость, не точка
+            return planeCenter + planeRotation * local;
+        }
+
+        /// <summary>Допуск на границу плоскости, метры (0,1 мм — против ошибок округления поворота).</summary>
+        public const float PlaneBoundaryEpsilon = 0.0001f;
+
+        /// <summary>ТОЧКА ВНЕ ГРАНИЦ ПЛОСКОСТИ (отступ не учитываем — грубая проверка).</summary>
+        public static bool IsOutsidePlane(Vector3 point, Vector3 planeCenter, float halfWidth,
+                                          float halfDepth, Quaternion planeRotation)
+        {
+            if (halfWidth <= 0f || halfDepth <= 0f) return false;
+            Vector3 local = Quaternion.Inverse(planeRotation) * (point - planeCenter);
+            return Mathf.Abs(local.x) > halfWidth + PlaneBoundaryEpsilon ||
+                   Mathf.Abs(local.z) > halfDepth + PlaneBoundaryEpsilon;
+        }
+
         /// <summary>ОСНОВАНИЕ СТОИТ НА ПЛОСКОСТИ (отклонение в пределах 5 мм).</summary>
         public static bool BaseIsOnPlane(Vector3 robotBaseWorld, float planeY)
         {
@@ -174,7 +213,7 @@ namespace KazistovVvAr
                            planesFound;
                 case KvArPlacementState.ReadyToPlace:
                     return "Стол найден (" + planesFound + (planesFound == 1 ? " плоскость" : " плоскостей") +
-                           ") · нажмите «Поставить робота» или коснитесь стола";
+                           ") · «Поставить» — робот встанет на самый большой стол или коснитесь стола";
                 case KvArPlacementState.Placed:
                     return "Робот стоит на столе · управляйте касаниями · «Переставить» — выбрать другое место";
                 default:
@@ -211,6 +250,12 @@ namespace KazistovVvAr
 
         /// <summary>Экранный интерфейс.</summary>
         public KvArUi ui;
+
+        /// <summary>Визуализация плоскостей и выбор самого большого стола (авто-постановка).</summary>
+        public KvArPlaneVisualizer planeVisualizer;
+
+        /// <summary>Разрешить постановку на самый большой найденный стол, если луч в центр не попал.</summary>
+        public bool allowAutoTable = true;
 
         /// <summary>Как часто обновлять строку состояния, секунды.</summary>
         public float statusIntervalSeconds = 0.5f;
@@ -257,6 +302,7 @@ namespace KazistovVvAr
             if (raycastManager == null) raycastManager = FindAny<ARRaycastManager>();
             if (planeManager == null) planeManager = FindAny<ARPlaneManager>();
             if (world == null) world = GetComponent<KvArWorld>();
+            if (planeVisualizer == null) planeVisualizer = FindAnyObjectByType<KvArPlaneVisualizer>();
             EnsureReticle();
         }
 
@@ -312,13 +358,21 @@ namespace KazistovVvAr
             Current = TryRaycast(new Vector2(Screen.width * 0.5f, Screen.height * 0.5f), out hit) ? hit : default;
         }
 
+        /// <summary>Буфер лучей: один на компонент (P2-6, 11.11.2026).</summary>
+        private readonly List<ARRaycastHit> raycastHits = new List<ARRaycastHit>();
+
         /// <summary>ЛУЧ ПО ПЛОСКОСТЯМ ИЗ ТОЧКИ ЭКРАНА. Публично: этим пользуются касания.</summary>
         public bool TryRaycast(Vector2 screenPoint, out KvArSurfaceHit surface)
         {
             surface = default;
             if (raycastManager == null || arCamera == null) return false;
 
-            List<ARRaycastHit> hits = new List<ARRaycastHit>();
+            // P2-6. ЧТО БЫЛО: `new List<ARRaycastHit>()` на КАЖДЫЙ вызов, а вызывается он из
+            // `Update` (прицел) — то есть мусор каждый кадр на устройстве, где кадровый бюджет
+            // 30–72 Гц. ЧЕМ ЭТО ГРОЗИЛО: лишние сборки мусора дают «столб» кадра как раз в момент
+            // наведения, когда оператор целится. ТЕПЕРЬ буфер переиспользуется.
+            List<ARRaycastHit> hits = raycastHits;
+            hits.Clear();
             bool hit = raycastManager.Raycast(screenPoint, hits,
                 TrackableType.PlaneWithinPolygon | TrackableType.PlaneWithinBounds |
                 TrackableType.PlaneEstimated);
@@ -365,10 +419,65 @@ namespace KazistovVvAr
             return PlaceSurface(surface, "тап по экрану");
         }
 
-        /// <summary>ПОСТАВИТЬ МИР ПО ЦЕНТРУ ЭКРАНА (кнопка «Поставить робота»).</summary>
+        /// <summary>
+        /// ПОСТАВИТЬ МИР ПО ЦЕНТРУ ЭКРАНА (кнопка «Поставить»).
+        ///
+        /// ПОРЯДОК (06.11.2026, запрос владельца — «робот автоматически на самый большой
+        /// горизонтальный стол»):
+        ///   1. если луч из центра экрана попал в плоскость — ставим туда (точный контроль);
+        ///   2. если не попал (камера смотрит мимо/стол большой, а центр на стене) — берём
+        ///      самый большой найденный горизонтальный стол и ставим якорь в его центр;
+        ///   3. если стола нет — подсказка «поводите камерой».
+        /// </summary>
         public bool TryPlaceAtCenter()
         {
-            return TryPlaceAt(new Vector2(Screen.width * 0.5f, Screen.height * 0.5f));
+            if (IsPlaced)
+            {
+                Debug.Log("[KvAr] ПОСТАНОВКА: мир уже поставлен — сначала «Переставить»");
+                return false;
+            }
+
+            PlaceAttempts++;
+            KvArSurfaceHit surface;
+            if (TryRaycast(new Vector2(Screen.width * 0.5f, Screen.height * 0.5f), out surface))
+                return PlaceSurface(surface, "центр экрана");
+
+            if (allowAutoTable && TryAutoTable(out surface))
+                return PlaceSurface(surface, "авто: самый большой стол");
+
+            Debug.LogWarning("[KvAr] ПОСТАНОВКА: стола не видно — поводите камерой по столу");
+            if (ui != null)
+                ui.SetHint("Стол не найден: поводите камерой по столу 2–3 секунды, затем «Поставить»");
+            return false;
+        }
+
+        /// <summary>НАЙТИ САМЫЙ БОЛЬШОЙ ГОРИЗОНТАЛЬНЫЙ СТОЛ (если луч в центр не попал).</summary>
+        private bool TryAutoTable(out KvArSurfaceHit surface)
+        {
+            surface = default;
+            if (planeVisualizer == null) planeVisualizer = FindAnyObjectByType<KvArPlaneVisualizer>();
+            if (planeVisualizer == null) return false;
+
+            ARPlane plane;
+            Vector3 center;
+            Vector3 normal;
+            float area;
+            if (!planeVisualizer.TryGetBestTable(out plane, out center, out normal, out area))
+                return false;
+
+            surface.valid = true;
+            surface.point = center;
+            surface.normal = normal.sqrMagnitude > 0.01f ? normal.normalized : Vector3.up;
+            surface.plane = plane;
+            surface.planeArea = area;
+            surface.alignment = plane != null ? plane.alignment : PlaneAlignment.HorizontalUp;
+            surface.worldPose = new Pose(center, KvArPlacementMath.ReticleRotation(surface.normal));
+            surface.distance = arCamera != null
+                ? Vector3.Distance(arCamera.transform.position, center)
+                : area;
+            Debug.Log("[KvAr] ПОСТАНОВКА: луч в центр не попал — ставлю на найденный стол площадью " +
+                      area.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + " м²");
+            return true;
         }
 
         private bool PlaceSurface(KvArSurfaceHit surface, string source)
@@ -392,6 +501,24 @@ namespace KazistovVvAr
 
             SetState(KvArPlacementState.Placed);
             if (ui != null) ui.HideHint();
+
+            // МАСШТАБ 1:1: реальная высота модели робота в метрах (для владельца — «как настоящий»).
+            if (world.Robot != null)
+            {
+                Bounds bounds = new Bounds(world.Robot.transform.position, Vector3.zero);
+                Renderer[] renderers = world.Robot.GetComponentsInChildren<Renderer>();
+                bool bound = false;
+                for (int r = 0; r < renderers.Length; r++)
+                {
+                    if (renderers[r] == null || !renderers[r].enabled) continue;
+                    if (!bound) { bounds = renderers[r].bounds; bound = true; }
+                    else bounds.Encapsulate(renderers[r].bounds);
+                }
+                if (bound && logOnChange)
+                    Debug.Log("[KvAr] МАСШТАБ: робот «" + world.Robot.robotName + "» высотой " +
+                              bounds.size.y.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture) +
+                              " м (1:1, как в ПК-версии) · основание на столе");
+            }
 
             // ЧИСЛА ПРИЁМКИ: основание робота относительно плоскости (Б2) и высота (В1).
             float baseError = world.Robot != null

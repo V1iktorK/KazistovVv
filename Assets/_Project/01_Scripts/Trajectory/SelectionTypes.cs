@@ -123,26 +123,24 @@ namespace TrajectoryCore
             return best;
         }
 
+        /// <summary>
+        /// РАССТОЯНИЕ МЕЖДУ ОТРЕЗКАМИ — ВЫЗОВ ЕДИНСТВЕННОЙ РЕАЛИЗАЦИИ (P2-14, 11.11.2026).
+        ///
+        /// ЧТО БЫЛО. Здесь лежала построчная КОПИЯ `CollisionWorld.SegmentSegmentDistance`.
+        /// Две реализации одной геометрии — это две возможности разойтись: правку в одной
+        /// (например, исправление вырожденного случая) никто не перенесёт во вторую, и тогда
+        /// выбор траектории лучом и проверка зазоров будут считать расстояния по-разному.
+        ///
+        /// ЧЕМ ЭТО ГРОЗИЛО. «Луч выбрал траекторию, которая по проверке зазоров пересекает стол» —
+        /// и оба расчёта формально верны, потому что считают разное. Разбор такого случая стоит
+        /// дня, а виноват дубль.
+        ///
+        /// ТЕПЕРЬ копия удалена как расчёт, а метод оставлен обёрткой: его зовут тесты и внешние
+        /// места, и ломать их ради удаления имени незачем.
+        /// </summary>
         public static float SegmentSegmentDistance(Vector3 p1, Vector3 p2, Vector3 q1, Vector3 q2)
         {
-            Vector3 u = p2 - p1, v = q2 - q1, w = p1 - q1;
-            float a = Vector3.Dot(u, u), b = Vector3.Dot(u, v), c = Vector3.Dot(v, v);
-            float d = Vector3.Dot(u, w), e = Vector3.Dot(v, w);
-            float denom = a * c - b * b;
-            float sN, sD = denom, tN, tD = denom;
-            if (denom < 1e-6f) { sN = 0f; sD = 1f; tN = e; tD = c; }
-            else
-            {
-                sN = b * e - c * d;
-                tN = a * e - b * d;
-                if (sN < 0f) { sN = 0f; tN = e; tD = c; }
-                else if (sN > sD) { sN = sD; tN = e + b; tD = c; }
-            }
-            if (tN < 0f) { tN = 0f; if (-d < 0f) sN = 0f; else if (-d > a) sN = sD; else { sN = -d; sD = a; } }
-            else if (tN > tD) { tN = tD; if (-d + b < 0f) sN = 0f; else if (-d + b > a) sN = sD; else { sN = -d + b; sD = a; } }
-            float sc = Mathf.Abs(sN) < 1e-6f ? 0f : sN / sD;
-            float tc = Mathf.Abs(tN) < 1e-6f ? 0f : tN / tD;
-            return (w + sc * u - tc * v).magnitude;
+            return CollisionWorld.SegmentSegmentDistance(p1, p2, q1, q2);
         }
 
         /// <summary>Длина полилинии, м.</summary>

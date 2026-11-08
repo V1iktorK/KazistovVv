@@ -24,6 +24,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>План на субботу соответствует реальному коду и инструментам.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvSaturdayPlanTests
     {
         private static string Root
@@ -185,3 +186,4 @@ namespace KazistovVvTests
         }
     }
 }
+

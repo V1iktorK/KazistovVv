@@ -55,7 +55,11 @@ namespace TrajectoryCore
     /// </summary>
     public class Planner
     {
-        public float clearance = 0.02f;
+        // ПОРОГ ЗАЗОРА ПЛАНИРОВЩИКА БЕРЁТСЯ ИЗ ОДНОГО МЕСТА (P1-16, 11.11.2026).
+        // ЧТО БЫЛО: здесь стояло своё число 0,02, а предохранитель проверял по 0,015 — план,
+        // посчитанный по одному порогу, отклонялся (или пропускался) по другому.
+        // Теперь число и коэффициент живут в `SafetyGate`: один источник, явный запас.
+        public float clearance = SafetyGate.DefaultPlanningClearance;
         public float selfClearance = 0.015f;   // запас между своими звеньями
         public float minLimitMarginDeg = 3f;   // как SafetyGate.minLimitMarginDeg
         public int maxIterations = 2500;

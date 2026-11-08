@@ -31,6 +31,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Луч и панель: нечисловые данные дают отказ, а не «попадание».</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvRayNaNTests
     {
         // Панель стоит в метре перед оператором, лицом к нему.
@@ -165,3 +166,4 @@ namespace KazistovVvTests
         }
     }
 }
+

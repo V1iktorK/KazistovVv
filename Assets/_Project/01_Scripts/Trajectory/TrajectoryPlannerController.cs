@@ -194,9 +194,16 @@ public class TrajectoryPlannerController : MonoBehaviour
     {
         metrics.logEveryTarget = logEachTarget;
         string s = metrics.SelfTest(robot, validator, world, oracle, planner, selfTestTargets);
-        metrics.SaveCsv();
+        // P3-5 (11.11.2026). ЧТО БЫЛО. Здесь вызывался `metrics.SaveCsv()`, то есть автотест
+        // вёл себя так, будто CSV-отчёт записан. На деле `rows` в `PlanMetrics` не пополняется,
+        // и `SaveCsv` всегда выходил на «rows.Count == 0»: файла не появлялось НИКОГДА.
+        // ЧЕМ ЭТО ГРОЗИЛО. Оператор искал `plan_metrics.csv` в каталоге отчётов и решал, что
+        // «метрики не собрались»; проверить это было нечем — вызов возвращал пустоту молча.
+        // ТЕПЕРЬ: вызова нет, а в журнал идёт честная строка о том, где искать сводку.
         KazistovVvUI.KazistovVvUIManager.SetPlanStatus(s, new Color(0.8f, 0.9f, 1f));
         Debug.Log("[Metrics] " + s);
+        Debug.Log("[Metrics] CSV-отчёт НЕ пишется (P3-5): сводка выше — в журнале; " +
+                  "файла plan_metrics.csv не будет");
     }
 
     private static RobotController FindActiveRobot()

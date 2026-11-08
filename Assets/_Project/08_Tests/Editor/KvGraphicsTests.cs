@@ -34,6 +34,7 @@ namespace KazistovVvTests
     ///     НЕ запускается: проверяются её чистые части через модель и опрос железа;
     ///   • нет зависимости от реального времени и случайности.
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvGraphicsTests
     {
         // ================================================================== ЭТАП 2: пресеты ТЗ
@@ -921,3 +922,4 @@ namespace KazistovVvTests
         }
     }
 }
+

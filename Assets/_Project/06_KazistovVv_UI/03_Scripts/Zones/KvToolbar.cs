@@ -49,6 +49,13 @@ namespace KazistovVvUI
         public const float LineGap = 3f;
 
         /// <summary>
+        /// ТЕКСТЫ ПОДСКАЗОК, ПОСЧИТАННЫЕ ОДИН РАЗ ПРИ СБОРКЕ КНОПОК (P2-10). Стоят в том же
+        /// порядке, что `buttons`/`ids`. Раньше текст склеивался заново десять раз в секунду
+        /// в `Refresh()` — см. шапку у `Refresh`.
+        /// </summary>
+        private readonly List<string> tooltipBodies = new List<string>();
+
+        /// <summary>
         /// ФИКС 9: редко используемые команды. Они ДУБЛИРУЮТСЯ пунктами меню, поэтому в
         /// компактном режиме не занимают место (в KvCommands/меню ничего не удаляется).
         /// </summary>
@@ -342,11 +349,13 @@ namespace KazistovVvUI
             KvIconButton button = KvWidgets.IconButton(gridRect, "Cmd_" + id, icon, cell,
                 delegate { KvCommands.Invoke(id); });
             PlaceBox((RectTransform)button.transform, x, y, cell, cell);
+            string tooltipBody = TooltipBodyFor(command);      // считается ОДИН раз (P2-10)
             button.Tooltip.Set(command != null ? command.LocalizedTitle : id,
-                TooltipBodyFor(command), command != null ? command.Hotkey : "");
+                tooltipBody, command != null ? command.Hotkey : "");
             if (command != null) button.SetStub(command.Stub);
             buttons.Add(button);
             ids.Add(id);
+            tooltipBodies.Add(tooltipBody);
         }
 
         /// <summary>
@@ -407,6 +416,7 @@ namespace KazistovVvUI
                 if (b != null) Destroy(b.gameObject);
             buttons.Clear();
             ids.Clear();
+            tooltipBodies.Clear();     // тексты подсказок живут ровно столько же, сколько кнопки
             foreach (KvIconButton b in groupHandles)
                 if (b != null) Destroy(b.gameObject);
             groupHandles.Clear();
@@ -544,7 +554,22 @@ namespace KazistovVvUI
             if (workbench != null) workbench.Set(index);
         }
 
-        /// <summary>Обновить состояние кнопок (галки/доступность/иконки/подсказки).</summary>
+        /// <summary>
+        /// ОБНОВИТЬ СОСТОЯНИЕ КНОПОК (галки/доступность/иконки/подсказки) — БЕЗ ПОВТОРНОЙ СБОРКИ
+        /// ТЕКСТА ПОДСКАЗОК (P2-10, 11.11.2026).
+        ///
+        /// ЧТО БЫЛО. `Refresh()` зовётся оболочкой десять раз в секунду и для КАЖДОЙ кнопки
+        /// пересобирал текст подсказки (`TooltipBodyFor`: поиск группы + склейка строк +
+        /// `KvLoc.T`). На тридцать кнопок это тридцать склеек строк десять раз в секунду —
+        /// мусор в куче и работа в главном потоке ради текста, который НЕ МЕНЯЕТСЯ.
+        ///
+        /// ЧЕМ ЭТО ГРОЗИЛО. Подсказка зависит только от команды и её группы, то есть от
+        /// константы: пересчёт был чистой работой «в никуда», отбиравшей кадр у рендера 72 Гц.
+        ///
+        /// ТЕПЕРЬ текст подсказки считается ОДИН РАЗ при сборке кнопки (`AddButton`) и лежит в
+        /// `tooltipBodies`; если кнопок больше, чем текстов (пересборка ещё не закончилась),
+        /// берётся живой расчёт — но это уже не кадровый путь.
+        /// </summary>
         public void Refresh()
         {
             for (int i = 0; i < buttons.Count; i++)
@@ -569,7 +594,7 @@ namespace KazistovVvUI
                     button.SetChecked(on, tint);
                 }
 
-                string body = TooltipBodyFor(c);
+                string body = i < tooltipBodies.Count ? tooltipBodies[i] : TooltipBodyFor(c);
                 if (button.Tooltip != null) button.Tooltip.Set(c.LocalizedTitle, body, c.Hotkey);
             }
         }

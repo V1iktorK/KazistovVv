@@ -30,6 +30,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Утечки подписок и коллекций: только осознанные, с причиной.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvLeakPolicyTests
     {
         /// <summary>
@@ -206,3 +207,4 @@ namespace KazistovVvTests
         }
     }
 }
+

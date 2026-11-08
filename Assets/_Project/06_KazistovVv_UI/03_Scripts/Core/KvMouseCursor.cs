@@ -201,9 +201,28 @@ namespace KazistovVvUI
                 UnityEngine.InputSystem.Keyboard k = UnityEngine.InputSystem.Keyboard.current;
                 if (k != null) return k.tabKey.wasPressedThisFrame;
             }
-            catch (Exception) { }
+            catch (Exception e)
+            {
+                // P3-3 (11.11.2026). ЧТО БЫЛО: перехват был ПУСТЫМ (тело из одних скобок). Если
+                // Input System бросал, состояние курсора расходилось с моделью, счётчик
+                // переприменений не рос, и в журнале НЕ БЫЛО НИ СТРОЧКИ: шапка класса описывает
+                // историю «мышь не восстанавливается», а её повторение становилось
+                // недиагностируемым.
+                // ЧЕМ ЭТО ГРОЗИЛО: оператор застревал с захваченной мышью без единой зацепки.
+                ReapplyCount++;
+                Debug.LogWarning("[KvMouseCursor] переключение режима курсора через Input System не " +
+                                 "удалось (" + e.GetType().Name + ": " + e.Message +
+                                 ") — пробую legacy Input; переприменений: " + ReapplyCount);
+            }
             try { return Input.GetKeyDown(ModeToggleKey); }
-            catch (Exception) { return false; }
+            catch (Exception e)
+            {
+                ReapplyCount++;
+                Debug.LogWarning("[KvMouseCursor] legacy Input тоже недоступен (" + e.GetType().Name +
+                                 ": " + e.Message + ") — переключение режима курсора не работает; " +
+                                 "переприменений: " + ReapplyCount);
+                return false;
+            }
         }
 
         /// <summary>Идёт ли ввод текста в поле (тот же признак, что у <see cref="KvKeyboardNav"/>).</summary>
@@ -239,11 +258,28 @@ namespace KazistovVvUI
             {
                 if (Cursor.lockState != CursorLockMode.None)
                 {
-                    try { Cursor.lockState = CursorLockMode.None; } catch (Exception) { }
+                    // P3-3 (11.11.2026): см. пояснение ниже у основного блока — отказ установки
+                    // курсора больше не глотается молча, иначе «мышь не восстанавливается»
+                    // повторяется без единой зацепки в журнале.
+                    try { Cursor.lockState = CursorLockMode.None; }
+                    catch (Exception e)
+                    {
+                        ReapplyCount++;
+                        Debug.LogWarning("[KvMouseCursor] окно без фокуса: не удалось снять захват (" +
+                                         e.GetType().Name + ": " + e.Message + "); переприменений: " +
+                                         ReapplyCount);
+                    }
                 }
                 if (!Cursor.visible)
                 {
-                    try { Cursor.visible = true; } catch (Exception) { }
+                    try { Cursor.visible = true; }
+                    catch (Exception e)
+                    {
+                        ReapplyCount++;
+                        Debug.LogWarning("[KvMouseCursor] окно без фокуса: не удалось показать курсор (" +
+                                         e.GetType().Name + ": " + e.Message + "); переприменений: " +
+                                         ReapplyCount);
+                    }
                 }
                 if (cursor != null) cursor.SetVisible(false);
                 return;
@@ -257,12 +293,27 @@ namespace KazistovVvUI
             bool drift = Cursor.lockState != wantLock || Cursor.visible != wantVisible;
             if (force || drift)
             {
+                // P3-3 (11.11.2026). ЧТО БЫЛО. Главная запись состояния курсора была обёрнута в
+                // `try` с ПУСТЫМ перехватом. Если платформа бросала
+                // исключение, состояние курсора расходилось с моделью, но `ReapplyCount` не рос,
+                // и в журнале не появлялось НИ СТРОЧКИ: шапка класса описывает историю «мышь не
+                // восстанавливается», а её повторение становилось недиагностируемым.
+                // ЧЕМ ЭТО ГРОЗИЛО. Оператор застревал с захваченной или скрытой мышью, и понять,
+                // что дело в отказе `Cursor.*`, было нечем: счётчик восстановлений молчал.
+                // ТЕПЕРЬ отказ виден: `ReapplyCount++` и предупреждение с типом исключения.
                 try
                 {
                     Cursor.lockState = wantLock;
                     Cursor.visible = wantVisible;
                 }
-                catch (Exception) { }
+                catch (Exception e)
+                {
+                    ReapplyCount++;
+                    Debug.LogWarning("[KvMouseCursor] не удалось поставить курсор (" +
+                                     e.GetType().Name + ": " + e.Message + "): хотели " + wantLock +
+                                     " / видимость " + wantVisible + ", сейчас " + Cursor.lockState +
+                                     " / " + Cursor.visible + "; переприменений: " + ReapplyCount);
+                }
                 if (!force && drift) ReapplyCount++;
             }
 
@@ -284,16 +335,41 @@ namespace KazistovVvUI
         public static void SetSystemCursorShape(Texture2D texture, Vector2 hotspot)
         {
             if (Captured) return;
+            // P3-4 (11.11.2026). ЧТО БЫЛО. ПУСТОЙ перехват вокруг `Cursor.SetCursor`: если форма
+            // курсора не ставилась, об этом не узнавал никто — курсор «залипал» в форме изменения
+            // размера окна, и причину искали в UI, а не в отказе платформы.
+            // ЧЕМ ЭТО ГРОЗИЛО. Неверный курсор при перетаскивании границ окна без единой зацепки
+            // в журнале. ТЕПЕРЬ причина называется — ОДИН раз: форма курсора вызывается часто
+            // (при наведении на границу), и предупреждение в каждом кадре обесценило бы себя.
             try { Cursor.SetCursor(texture, hotspot, CursorMode.ForceSoftware); }
-            catch (Exception) { }
+            catch (Exception e)
+            {
+                if (systemCursorShapeWarned) return;
+                systemCursorShapeWarned = true;
+                Debug.LogWarning("[KvMouseCursor] не удалось поставить ФОРМУ системного курсора (" +
+                                 e.GetType().Name + ": " + e.Message + ") — курсор останется " +
+                                 "обычным; сообщение повторяться не будет");
+            }
         }
+
+        /// <summary>Сообщение об отказе формы курсора уже выдано (см. `SetSystemCursorShape`).</summary>
+        private static bool systemCursorShapeWarned;
 
         /// <summary>Вернуть системному курсору обычную форму (см. <see cref="SetSystemCursorShape"/>).</summary>
         public static void ResetSystemCursorShape()
         {
             if (Captured) return;
+            // P3-4 (11.11.2026): см. пояснение в `SetSystemCursorShape` — отказ формы курсора
+            // больше не глотается молча (сообщение одно на компонент, чтобы не залить журнал).
             try { Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto); }
-            catch (Exception) { }
+            catch (Exception e)
+            {
+                if (systemCursorShapeWarned) return;
+                systemCursorShapeWarned = true;
+                Debug.LogWarning("[KvMouseCursor] не удалось вернуть ОБЫЧНУЮ форму курсора (" +
+                                 e.GetType().Name + ": " + e.Message + ") — курсор может остаться " +
+                                 "с прежней формой; сообщение повторяться не будет");
+            }
         }
 
         /// <summary>Захват по умолчанию для старта (используется камерой).</summary>

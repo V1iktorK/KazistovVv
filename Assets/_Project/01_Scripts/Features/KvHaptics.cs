@@ -43,25 +43,65 @@ namespace KazistovVvFeatures
         public float hardAmplitude = 0.85f;
 
         private readonly List<MonoBehaviour> controllers = new List<MonoBehaviour>();
-        private float controllerScanTimer;
+        private readonly List<MethodInfo> hapticMethods = new List<MethodInfo>();
+        private float controllerScanTimer = float.NegativeInfinity;
         private bool warned;
+
+        /// <summary>
+        /// УМЕНЬШЕНИЕ ОБХОДА СЦЕНЫ ДО ИЗВЕСТНЫХ ТИПОВ (P2-11, 11.11.2026).
+        ///
+        /// ЧТО БЫЛО. `Scan()` делал `FindObjectsByType&lt;MonoBehaviour&gt;` — обход ВСЕХ скриптов
+        /// сцены (в MR их тысячи), затем для каждого — `GetType().Name`, четыре `IndexOf` по
+        /// строке и `type.GetMethods()` (рефлексия!) чтобы понять, годится ли он. А `IsActive` —
+        /// ГЕТТЕР — запускал этот скан раз в две секунды, то есть «прочитать свойство» означало
+        /// обойти сцену с рефлексией прямо в кадре.
+        ///
+        /// ЧЕМ ЭТО ГРОЗИЛО. Тактильная отдача — часть обратной связи оператора (стоп,
+        /// столкновение). Обход сцены с рефлексией на главном потоке давал «столб» кадра ровно
+        /// в этот момент: предохранитель сработал, а оператор увидел замирание вместо отклика.
+        ///
+        /// ТЕПЕРЬ ищутся ТОЛЬКО известные типы контроллеров (их немного), метод для вызова
+        /// находится ОДИН РАЗ при сканировании и лежит рядом с компонентом, а геттер `IsActive`
+        /// ничего не запускает — он читает готовое состояние.
+        /// </summary>
+        public static readonly string[] KnownControllerTypeNames =
+        {
+            "UnityEngine.XR.Interaction.Toolkit.XRBaseController",
+            "UnityEngine.XR.Interaction.Toolkit.ActionBasedController",
+            "UnityEngine.XR.Interaction.Toolkit.XRController",
+            "UnityEngine.XR.Interaction.Toolkit.Interactors.XRBaseInputInteractor",
+            "UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor",
+            "Unity.XR.PXR.PXR_Controller",
+            "Unity.XR.PXR.PXR_Interactor",
+        };
 
         /// <summary>Есть ли найденный контроллер (для диагностики/панели функций).</summary>
         public bool Available { get { return controllers.Count > 0; } }
         public int ControllerCount { get { return controllers.Count; } }
 
-        /// <summary>Есть ли контроллеры XR в сцене (пересканируется раз в 2 с).</summary>
-        public bool IsActive
+        /// <summary>
+        /// ЕСТЬ ЛИ КОНТРОЛЛЕРЫ XR В СЦЕНЕ — БЕЗ ОБХОДА СЦЕНЫ (P2-11). Геттер только читает
+        /// результат последнего сканирования; пересборку списка делают `Pulse` и
+        /// `RefreshControllers` (событие, а не чтение свойства).
+        /// </summary>
+        public bool IsActive { get { return controllers.Count > 0; } }
+
+        /// <summary>
+        /// ПОРА ЛИ ПЕРЕСКАНИРОВАТЬ СЦЕНУ — чистая функция (проверяется тестом P2-11): время ушло
+        /// назад (новый прогон) — да, иначе только по истечении интервала.
+        /// </summary>
+        public static bool IsScanStale(float now, float lastScan, float intervalSeconds)
         {
-            get
-            {
-                if (Time.realtimeSinceStartup - controllerScanTimer > 2f)
-                {
-                    controllerScanTimer = Time.realtimeSinceStartup;
-                    Scan();
-                }
-                return controllers.Count > 0;
-            }
+            if (float.IsNaN(now) || float.IsNaN(lastScan)) return true;
+            if (now < lastScan) return true;
+            float interval = intervalSeconds > 0f ? intervalSeconds : 0f;
+            return now - lastScan >= interval;
+        }
+
+        /// <summary>Пересобрать список контроллеров немедленно (событие: сцена/настройки изменились).</summary>
+        public void RefreshControllers()
+        {
+            Scan();
         }
 
         /// <summary>Отправить импульс (light/medium/hard).</summary>
@@ -84,11 +124,9 @@ namespace KazistovVvFeatures
         {
             if (!Enabled) return;
 
-            if (Time.realtimeSinceStartup - controllerScanTimer > 2f)
-            {
-                controllerScanTimer = Time.realtimeSinceStartup;
+            // Пересканирование — по интервалу, а не в геттере (P2-11).
+            if (IsScanStale(Time.realtimeSinceStartup, controllerScanTimer, RescanIntervalSeconds))
                 Scan();
-            }
 
             if (controllers.Count == 0)
             {
@@ -107,7 +145,8 @@ namespace KazistovVvFeatures
             {
                 MonoBehaviour controller = controllers[i];
                 if (controller == null) continue;
-                if (SendTo(controller, amplitude, duration)) sent = true;
+                MethodInfo method = i < hapticMethods.Count ? hapticMethods[i] : null;
+                if (SendTo(controller, method, amplitude, duration)) sent = true;
             }
 
             if (sent && !string.IsNullOrEmpty(source))
@@ -123,32 +162,75 @@ namespace KazistovVvFeatures
         public void OnError() { Pulse(KvHapticStrength.Hard, "ошибка"); }
         public void OnEmergencyStop() { Pulse(1f, 0.30f, "аварийная остановка"); }
 
+        /// <summary>Как часто пересканировать сцену на контроллеры, с (P2-11).</summary>
+        public const float RescanIntervalSeconds = 2f;
+
+        /// <summary>
+        /// НАЙТИ КОНТРОЛЛЕРЫ — ТОЛЬКО ИЗВЕСТНЫХ ТИПОВ (P2-11). Прежний обход
+        /// `FindObjectsByType&lt;MonoBehaviour&gt;` + `GetMethods()` на каждом скрипте сцены заменён
+        /// на поиск по нескольким известным типам, а метод вибрации ищется один раз и
+        /// кэшируется рядом с компонентом (`hapticMethods`), чтобы отправка импульса не
+        /// занималась рефлексией заново.
+        /// </summary>
         private void Scan()
         {
             controllers.Clear();
-            MonoBehaviour[] all;
-            try
+            hapticMethods.Clear();
+            controllerScanTimer = Time.realtimeSinceStartup;
+
+            for (int t = 0; t < KnownControllerTypeNames.Length; t++)
             {
-                all = UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include);
+                Type type = ResolveType(KnownControllerTypeNames[t]);
+                if (type == null) continue;                    // пакета нет — законно, не ошибка
+
+                MethodInfo method = FindHapticMethod(type);
+                if (method == null) continue;                  // тип есть, но вибрации не умеет
+
+                UnityEngine.Object[] found;
+                try
+                {
+                    // Перегрузка БЕЗ `FindObjectsSortMode`: в Unity 6 она объявлена устаревшей
+                    // (CS0618), а гейт проекта требует ноль предупреждений компилятора.
+                    found = UnityEngine.Object.FindObjectsByType(type, FindObjectsInactive.Include);
+                }
+                catch (Exception)
+                {
+                    continue;   // тип не компонент/сцена занята — пропускаем, падать нечем
+                }
+
+                for (int i = 0; i < found.Length; i++)
+                {
+                    MonoBehaviour mb = found[i] as MonoBehaviour;
+                    if (mb == null) continue;
+                    controllers.Add(mb);
+                    hapticMethods.Add(method);
+                }
             }
-            catch (Exception)
+        }
+
+        private static readonly Dictionary<string, Type> resolvedTypes = new Dictionary<string, Type>();
+
+        /// <summary>Найти тип по полному имени среди загруженных сборок (результат кэшируется).</summary>
+        private static Type ResolveType(string fullName)
+        {
+            if (string.IsNullOrEmpty(fullName)) return null;
+
+            Type cached;
+            if (resolvedTypes.TryGetValue(fullName, out cached)) return cached;
+
+            Type found = Type.GetType(fullName, false);
+            if (found == null)
             {
-                return;
+                System.Reflection.Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+                for (int i = 0; i < assemblies.Length && found == null; i++)
+                {
+                    try { found = assemblies[i].GetType(fullName, false); }
+                    catch (Exception) { found = null; }
+                }
             }
-            for (int i = 0; i < all.Length; i++)
-            {
-                MonoBehaviour mb = all[i];
-                if (mb == null) continue;
-                string typeName = mb.GetType().Name;
-                if (typeName.IndexOf("Controller", StringComparison.OrdinalIgnoreCase) < 0) continue;
-                if (typeName.IndexOf("XR", StringComparison.OrdinalIgnoreCase) < 0 &&
-                    typeName.IndexOf("Haptic", StringComparison.OrdinalIgnoreCase) < 0 &&
-                    typeName.IndexOf("Pico", StringComparison.OrdinalIgnoreCase) < 0 &&
-                    typeName.IndexOf("Meta", StringComparison.OrdinalIgnoreCase) < 0 &&
-                    typeName.IndexOf("OVR", StringComparison.OrdinalIgnoreCase) < 0) continue;
-                if (FindHapticMethod(mb.GetType()) == null) continue;
-                controllers.Add(mb);
-            }
+
+            resolvedTypes[fullName] = found;   // null тоже кэшируем: пакета нет — искать нечего
+            return found;
         }
 
         private static MethodInfo FindHapticMethod(Type type)
@@ -166,11 +248,16 @@ namespace KazistovVvFeatures
             return null;
         }
 
-        private static bool SendTo(MonoBehaviour controller, float amplitude, float duration)
+        /// <summary>
+        /// ОТПРАВИТЬ ИМПУЛЬС В КОНТРОЛЛЕР. Метод для вызова берётся ИЗ КЭША сканирования
+        /// (`hapticMethods`), а не ищется рефлексией на каждое нажатие (P2-11): раньше каждый
+        /// импульс заново вызывал `GetMethods()` — перечисление всех методов типа с аллокацией.
+        /// </summary>
+        private static bool SendTo(MonoBehaviour controller, MethodInfo method,
+            float amplitude, float duration)
         {
             try
             {
-                MethodInfo method = FindHapticMethod(controller.GetType());
                 if (method == null) return false;
                 ParameterInfo[] ps = method.GetParameters();
                 object[] args = new object[ps.Length];

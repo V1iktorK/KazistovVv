@@ -304,6 +304,52 @@ public float RadiusMeters {
  get; private set; }
 private float builtRadius = -1f;
 
+// ------------------------------------------------------------------ кэш настроек панели (P2-5)
+//
+// ЧТО БЫЛО. `Update()` каждый кадр читал три настройки из `PlayerPrefs`/файла подстройки:
+// `KvXrTuning.PanelRadiusMeters` (внутри — `KvXrSettings.GetGroupPanelRadius()`), `GetQuickPanelVisible()`
+// и `GetQuickPanelHand()`. Вместе с указателем (P2-3/P2-4) и локомоцией это давало 8–10 обращений
+// к `PlayerPrefs` за кадр.
+//
+// ЧЕМ ЭТО ГРОЗИЛО. На шлеме `PlayerPrefs` — файл в `persistentDataPath`; десять чтений в кадре
+// 72 Гц (13,9 мс на кадр) давали неровный кадр, а панель — это первое, что видит оператор.
+//
+// ТЕПЕРЬ значения снимаются по событию: смена XR-настроек (`KvXrSettingsChanged`), появление
+// панели (`OnEnable`) и новая версия файла подстройки (`KvXrTuning.Revision`, номер сравнивается
+// в кадре вместо чтения). Кэш без инвалидации не годится: радиус меняют опросами владельца.
+private float cachedPanelRadius;
+private bool cachedQuickPanelVisible;
+private KvXrQuickHand cachedQuickPanelHand = KvXrQuickHand.Left;
+private int cachedTuningRevision = -1;
+private bool panelSettingsKnown;
+
+/// <summary>Снять настройки панели из хранилища (единственное место чтения в этом файле).</summary>
+private void ReloadPanelSettings()
+{
+    cachedPanelRadius = KvXrTuning.PanelRadiusMeters;
+    cachedQuickPanelVisible = KvXrSettings.GetQuickPanelVisible();
+    cachedQuickPanelHand = KvXrSettings.GetQuickPanelHand();
+    cachedTuningRevision = KvXrTuning.Revision;
+    panelSettingsKnown = true;
+}
+
+/// <summary>Настройка в файле подстройки сменилась — перечитать (событием, а не в кадре).</summary>
+private void OnXrSettingsChanged()
+{
+    ReloadPanelSettings();
+}
+
+void OnEnable()
+{
+    KvXrSettingsChanged.SettingsChanged += OnXrSettingsChanged;
+    ReloadPanelSettings();
+}
+
+void OnDisable()
+{
+    KvXrSettingsChanged.SettingsChanged -= OnXrSettingsChanged;
+}
+
 /// <summary>
 /// РАЗМЕР ИКОНКИ, С КОТОРЫМ ПАНЕЛЬ ПОСТРОЕНА, метры (§37). Иконка уменьшается вместе с
 /// радиусом, иначе на малом радиусе они налезали бы друг на друга — владелец просил ровно
@@ -339,7 +385,12 @@ public static KvXrGroupPanel Active {
 // §37: РАДИУС МОГ ИЗМЕНИТЬСЯ НА ХОДУ. Это и есть механизм опросов владельца: значение
 // приходит из файла подстройки (или из настроек), панель перестраивается за один кадр, и
 // в журнал уходит строка с новыми числами. Пересборки APK для этого не нужно.
-float radius = KvXrTuning.PanelRadiusMeters;
+//
+// P2-5 (11.11.2026): значения берутся ИЗ КЭША. В кадре сравнивается только номер версии
+// файла подстройки (один `int`), а не читается `PlayerPrefs`. Инвалидация — событие смены
+// настроек, `OnEnable` и рост `KvXrTuning.Revision`.
+if (!panelSettingsKnown || cachedTuningRevision != KvXrTuning.Revision) ReloadPanelSettings();
+float radius = cachedPanelRadius;
 if (builtOnce && Mathf.Abs(radius - builtRadius) > 0.0005f)
 {
                 Rebuild();
@@ -348,7 +399,7 @@ placed = false;
 // панель встанет заново уже с новым радиусом
 Debug.Log("[KvXr] панель групп: радиус изменён на " +                          radius.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture) +                          " м — панель перестроена · " +                          KvXrGroupPanelLayout.DescribeSizes(icons.Count,                              level == KvXrPanelLevel.Groups                                  ? KvXrGroupPanelLayout.GroupSpanDegrees                                  : KvXrGroupPanelLayout.FanSpanDegrees, radius));
 }
-            bool visible = KvXrSettings.GetQuickPanelVisible() && !arHidden &&
+            bool visible = cachedQuickPanelVisible && !arHidden &&
                            (KvXrInputSource.HeadsetPresent || allowWithoutHeadset);
 if (followHand)
 {
@@ -366,7 +417,7 @@ UpdateLabelDwell();
 // «держать на месте», потому что панель у пояса попадала в поле зрения. В итоге панель
 // оставалась у пояса НАВСЕГДА. Теперь правило простое: есть поза руки — панель идёт к руке,
 // независимо от того, что было раньше.
-bool handPoseAvailable = KvXrSettings.GetQuickPanelHand() == KvXrQuickHand.Right                ? KvXrInputSource.TryRightAimPose(out _, out _)                : KvXrInputSource.TryLeftAimPose(out _, out _);
+bool handPoseAvailable = cachedQuickPanelHand == KvXrQuickHand.Right                ? KvXrInputSource.TryRightAimPose(out _, out _)                : KvXrInputSource.TryLeftAimPose(out _, out _);
 if (followHand && !arDetached && (PlacedAtHand || handPoseAvailable || !ShouldHoldStill())) PlacePanel();
             LogOrientationProbe();
 }
@@ -1003,17 +1054,19 @@ var data = new KvXrStatusData            {
                 IconSizeMm = builtIconSize * 1000f,
                 CommandCount = KazistovVvUI.KvCommands.All.Count,
                 SecondRay = KvXrTuning.SecondaryRayEnabled,
-                PlanningCandidates = PlanningHasCandidates()
+                // P3-7 (11.11.2026). ЧТО БЫЛО. Здесь стоял вызов `PlanningHasCandidates()`,
+                // который делал `FindAnyObjectByType<TrajectoryPlannerController>()` — полный
+                // обход сцены ради типа, не размещённого НИ В ОДНОЙ сцене (это записано в самом
+                // атрибуте [Obsolete]). Результат всегда был `null`, то есть строка «кандидатов
+                // нет» не зависела от реальности, а обход сцены платился каждый кадр экрана.
+                // ЧЕМ ЭТО ГРОЗИЛО. Экран «Состояние» показывал состояние несуществующего
+                // планировщика, и по нему нельзя было понять, есть ли варианты на самом деле.
+                // ТЕПЕРЬ: значение честное и постоянное — планировщика E2–E5 в сцене нет,
+                // кандидатов у него быть не может; наличие вариантов показывает панель потока.
+                PlanningCandidates = false
 };
 CreateLabel("ScreenTitle", "Состояние", new Vector2(0f, 0.30f), 18);
 ShowRows(KvXrScreenModel.BuildStatus(data), true);
-}
-private static bool PlanningHasCandidates()
-{
-#pragma warning disable 0618 // TrajectoryPlannerController помечен [Obsolete] — мёртвый код (аудит §5.7)
-            TrajectoryPlannerController planner =                UnityEngine.Object.FindAnyObjectByType<TrajectoryPlannerController>();
-#pragma warning restore 0618
-return planner != null && planner.HasCandidates;
 }
 
 /// <summary>
@@ -1028,12 +1081,15 @@ private void BuildSettingsScreen()
 
 // ПОРЯДОК ПАРАМЕТРОВ ЖЁСТКО ЗАДАН и совпадает с моделью `KvXrScreenModel.BuildSettings`:
 // 0 — радиус панели, 1 — скорость, 2 — рост, 3 — дальность телепорта (у этих четырёх
-// есть шаг «−/+»), 4 — второй луч, 5 — рука луча (у этих двух — переключатель).
+// есть шаг «−/+»), 4 — второй луч, 5 — рука луча, 6 — РЕЖИМ VR/MR (у этих трёх — переключатель).
 //            // ИСПРАВЛЕНО 23.10.2026: раньше «переключатель» был привязан к ПОСЛЕДНЕМУ индексу, поэтому
 // он оказывался у «Руки луча», а «Второй луч» уходил в ветку шага и менял дальность
 // телепорта. Дефект беззвучный: строка журнала называла одно, менялось другое.
+//            // РАСШИРЕНО 11.11.2026: седьмым параметром добавлен «Режим VR/MR». Ветка
+// переключателя больше не «последний индекс», а ЯВНЫЙ список индексов — третий раз
+// сломать соответствие «строка ↔ обработчик» одним добавлением строки уже нельзя.
 const int stepperCount = 4;
-            const int totalCount = 6;
+            const int totalCount = 7;
 settingsIndex = Mathf.Clamp(settingsIndex, 0, totalCount - 1);
 CreateLabel("ScreenTitle", "Настройки " + (settingsIndex + 1) + " из " + totalCount,                new Vector2(0f, 0.30f), 18);
 string value = settingsIndex + 1 < settings.Count ? settings[settingsIndex + 1] : "—";
@@ -1065,14 +1121,23 @@ CreateIcon("Set_Interface", "settings", "Настройки интерфейса
 // при запуске, но путь назад к нему должен быть — иначе «меню есть, а вернуться некуда».
 CreateIcon("Set_StartMenu", "session", "Стартовое меню", new Vector2(0.18f, -0.09f),                delegate { ShowStartMenu(); }, false, "меню", 0.10f, 0.05f);
 
-// РЕЖИМ КОМНАТЫ (MR) — переключатель по решению владельца 04.11.2026: «сначала прога
+// РЕЖИМ VR/MR — ПЕРЕКЛЮЧАТЕЛЬ ПО РЕШЕНИЮ ВЛАДЕЛЬЦА 04.11.2026: «сначала прога
 // запускается как VR, но в настройках можно сделать MR». Место — свободная ячейка слева от
 // «Стартового меню»; прежние кнопки не сдвинуты (их смещения закреплены тестом §40).
+//
+// 11.11.2026: ГОЛАЯ ГАЛКА ЗАМЕНЕНА ПЕРЕКЛЮЧАТЕЛЕМ С ДВУМЯ НАЗВАННЫМИ ПОЛОЖЕНИЯМИ.
+// Раньше на кнопке стояло «Режим комнаты (MR): ВКЛ/выкл» — оператор видел «выкл» и не знал,
+// что это и есть VR. Теперь надпись называет ВЫБРАННЫЙ режим, а вторая строка (длинная
+// подпись) — что именно произойдёт и когда. Пишется то же хранилище (`SetModeIndex` →
+// `SetPassthrough`), поэтому ветка MR и `ModeLine()` продолжают работать без правок.
+// НОВЫХ ЭЛЕМЕНТОВ НЕ ДОБАВЛЕНО (только текст существующей кнопки): раскладка экрана
+// закреплена тестом §40, и лишняя строка сдвинула бы закреплённые смещения.
 CreateIcon("Set_Mode", "settings",
-    "Режим комнаты (MR): " + (KvXrSettings.GetPassthrough() ? "ВКЛ" : "выкл"),
+    "Режим комнаты (MR) · " + KvXrSettings.ModeLabel(KvXrSettings.GetModeIndex()) +
+    " · применится после перезапуска",
     new Vector2(-0.18f, -0.09f),
     delegate { ToggleMixedReality(); }, false,
-    KvXrSettings.GetPassthrough() ? "MR ВКЛ" : "MR выкл", 0.12f, 0.05f);
+    KvXrSettings.ModeShortLabel(KvXrSettings.GetModeIndex()), 0.12f, 0.05f);
 
 // ВИЗУАЛИЗАЦИИ VR — ЯВНЫЕ ПЕРЕКЛЮЧАТЕЛИ (жалоба владельца 05.11.2026: «появились зоны
 // достижимости сами по себе, в меню не нашёл настройку»). Теперь настройка есть здесь, в
@@ -1117,17 +1182,22 @@ private void ToggleJointLimitsFromSettings()
 }
 
 /// <summary>
-/// ПЕРЕКЛЮЧИТЬ РЕЖИМ КОМНАТЫ (MR). Решение применяется при следующем запуске: включение
+/// ПЕРЕКЛЮЧИТЬ РЕЖИМ VR/MR. Решение применяется при следующем запуске: включение
 /// сквозного вида требует пересоздания XR-сцены (пасс-слой, реальные поверхности, перенос
 /// робота из стенда). Поэтому здесь только сохраняем настройку и ГОВОРИМ об этом прямо —
 /// молчаливое «нажал и ничего» было бы худшим вариантом.
+///
+/// 11.11.2026: переключение идёт через единый `KvXrSettings.ToggleMode()`, а не через
+/// `SetPassthrough(!GetPassthrough())` на месте. Причина: тот же переключатель теперь есть и
+/// на компьютере (`KvSettingsView`), и логика «что считается следующим положением» обязана
+/// быть ОДНОЙ. Иначе две панели начнут расходиться в поведении — классический дефект
+/// «кнопка в шлеме выключает, кнопка на ПК включает то же самое».
 /// </summary>
 private void ToggleMixedReality()
 {
-    bool next = !KvXrSettings.GetPassthrough();
-    KvXrSettings.SetPassthrough(next);
-    Debug.Log("[KvXr] РЕЖИМ КОМНАТЫ (MR): " + (next ? "ВКЛЮЧЁН" : "выключен") +
-              " · применится после перезапуска приложения (сквозной вид пересоздаёт XR-сцену)");
+    int next = KvXrSettings.ToggleMode();
+    Debug.Log("[KvXr] РЕЖИМ VR/MR: выбрано «" + KvXrSettings.ModeLabel(next) + "» · " +
+              KvXrSettings.ModeStatusLine());
     Rebuild();
 }
 
@@ -1178,11 +1248,21 @@ CreateIcon("Interface_" + drawn, "settings", field.Title,                    new
 }
 }
 
-/// <summary>Переключатель для параметров без шага (второй луч, рука луча).</summary>
+/// <summary>Переключатель для параметров без шага (второй луч, рука луча, режим VR/MR).</summary>
 private void ToggleCurrentSetting()
 {
-            if (settingsIndex == 4) ToggleSecondaryRay();
-            else if (settingsIndex == 5) ToggleRayHand();
+            switch (settingsIndex)
+            {
+                case 4: ToggleSecondaryRay(); break;
+                case 5: ToggleRayHand(); break;
+                case 6: ToggleMixedReality(); break;
+                default:
+                    // Молча ничего не делать нельзя: «нажал и ничего» — тот самый беззвучный
+                    // дефект, из-за которого переключатель уже один раз оказался не у той строки.
+                    Debug.LogWarning("[KvXr] НАСТРОЙКА: у строки " + settingsIndex +
+                                     " нет переключателя — ветка не назначена");
+                    break;
+            }
 }
 private void ToggleRayHand()
 {
@@ -1201,7 +1281,10 @@ private KvXrSettingsData CurrentSettings()
                 OperatorHeight = KvXrSettings.GetOperatorHeight(),
                 TeleportDistance = KvXrSettings.GetTeleportDistance(),
                 SecondRay = KvXrSettings.GetSecondaryRay(),
-                RayHand = KvXrSettings.GetRayHand()
+                RayHand = KvXrSettings.GetRayHand(),
+                // СЕДЬМОЙ ПАРАМЕТР: выбранный режим. Читается из ТОГО ЖЕ хранилища, что и
+                // строка режима в меню (`ModeLine`), поэтому разойтись они не могут.
+                MixedReality = KvXrSettings.GetModeIndex() == KvXrSettings.ModeMr
 };
 }
 private void NextSetting(int parameterCount)
@@ -2940,7 +3023,8 @@ labelLogged = false;
 /// </summary>
 private void PlacePanel()
 {
-            KvXrQuickHand hand = KvXrSettings.GetQuickPanelHand();
+            // Рука панели — из кэша настроек (P2-5): PlacePanel зовётся каждый кадр при панели у руки.
+            KvXrQuickHand hand = cachedQuickPanelHand;
 Vector3 handPosition;
             Quaternion handRotation;
 

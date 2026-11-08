@@ -22,6 +22,7 @@ namespace KazistovVvTests
     ///      4,8 м, а стенды ставились на 3,2 м от оператора: ближняя кромка оказывалась на 1,6 м
     ///      ПОЗАДИ него. Это ровно то, что владелец запретил словами «я не внутри робота».
     /// </summary>
+        [Category(KvTestCategories.Slow)]
     public class KvXrStandPlacementTests
     {
         /// <summary>Габарит столешницы проекта — из кода, а не из пересказа.</summary>
@@ -154,3 +155,4 @@ namespace KazistovVvTests
         }
     }
 }
+

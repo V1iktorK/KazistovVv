@@ -26,6 +26,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Правда о режиме MR: настройка И факт, а не настройка вместо факта.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvMrActiveTruthTests
     {
         // ---------------------------------------------------------------- 1. ГАШЕНИЕ СТЕНДОВ
@@ -153,3 +154,4 @@ namespace KazistovVvTests
         }
     }
 }
+

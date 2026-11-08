@@ -27,6 +27,7 @@ namespace KazistovVvTests
     ///
     /// Тесты написаны ДО правки сцены и на текущем состоянии обязаны падать (правило [K5]).
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvXrLightingTests
     {
         private const string XrScenePath = "Assets/_Project/00_Scenes/XrMain.unity";
@@ -153,3 +154,4 @@ namespace KazistovVvTests
         }
     }
 }
+

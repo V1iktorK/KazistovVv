@@ -32,6 +32,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Пауза не отключает контроль зазора и лимитов.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvPauseSafetyTests
     {
         private static string FindSource(string fileName)
@@ -98,12 +99,18 @@ namespace KazistovVvTests
         [Test]
         public void EmergencyStopUsesPause()
         {
+            // P4-1 (11.11.2026). ЧТО БЫЛО: два `Assert.Pass` — «файла нет» и «метода нет». NUnit
+            // считает `Assert.Pass` ПРОЙДЕННЫМ, поэтому тест зеленел, НИЧЕГО не проверив: файл
+            // переименовали, метод убрали — гейт этого не увидел.
+            // ЧТО СТАЛО: отсутствие файла или метода — это ПРОВАЛ проверки, а не повод выйти.
             string path = FindSource("KvSafetyTools.cs");
-            if (path == null) Assert.Pass("KvSafetyTools.cs нет — проверять нечего");
+            Assert.IsNotNull(path, "KvSafetyTools.cs не найден — проверять связь «авария → пауза» нечем");
 
             string text = File.ReadAllText(path);
             int index = text.IndexOf("private void StopMotion", System.StringComparison.Ordinal);
-            if (index < 0) Assert.Pass("метода StopMotion нет");
+            Assert.GreaterOrEqual(index, 0,
+                "в KvSafetyTools.cs нет метода StopMotion — связь «аварийный останов ставит паузу» " +
+                "потеряна или переименована (проверьте, что авария по-прежнему ставит паузу)");
 
             string body = text.Substring(index, System.Math.Min(500, text.Length - index));
 
@@ -132,3 +139,4 @@ namespace KazistovVvTests
         }
     }
 }
+

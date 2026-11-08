@@ -33,6 +33,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Выгрузка программ KUKA KRL / FANUC KAREL / ABB RAPID через публичный API.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvRobotExportApiTests
     {
         private const string Robot = "KR6_R900";
@@ -504,3 +505,4 @@ namespace KazistovVvTests
         }
     }
 }
+

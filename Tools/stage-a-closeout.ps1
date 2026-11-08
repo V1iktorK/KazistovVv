@@ -31,7 +31,7 @@
       powershell -ExecutionPolicy Bypass -File Tools\stage-a-closeout.ps1 -Mode Wait
 #>
 param(
-    [string]$Project = "C:\KazistovVv_Build",
+    [string]$Project = (Split-Path -Parent $PSScriptRoot),
     [string]$BuildLogName = "xr-build-apk-s30.log",
     [ValidateSet('Snapshot', 'Wait', 'Compare')][string]$Mode = 'Wait',
     [int]$UnityPid = 12160,

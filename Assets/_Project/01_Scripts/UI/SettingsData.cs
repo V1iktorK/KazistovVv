@@ -73,4 +73,40 @@ public class SettingsData : ScriptableObject
     if (Instance == null || Instance == this)
         Instance = this;
 }
+
+    /// <summary>
+    /// СКОРОСТЬ РОБОТА ДЛЯ КОНТУРА УПРАВЛЕНИЯ (P1-8, 11.11.2026).
+    ///
+    /// ЧТО БЫЛО. `SixAxisController` и `SCARAController` писали
+    /// `SettingsData.Instance != null ? Instance.robotSpeed : 1f` — при отсутствии ассета скорость
+    /// МОЛЧА становилась 1.0. Оператор выставлял 0.2, ассет не подхватился (или `Instance` уже
+    /// перехвачен временным объектом из `ResetToDefaults`) — и робот ехал В ПЯТЬ РАЗ БЫСТРЕЕ
+    /// заданного, без единой строки в журнале.
+    ///
+    /// ЧЕМ ЭТО ГРОЗИЛО. Это ровно тот класс, где «тихо взять по умолчанию» опаснее отказа: предел
+    /// скорости — часть безопасности, и подмена его вверх никем не замечается.
+    ///
+    /// ТЕПЕРЬ: отсутствие настроек ВИДНО (предупреждение один раз на сессию), а значение берётся
+    /// из одного места — этого метода, чтобы обе модели роботов не расходились.
+    /// </summary>
+    public static float RobotSpeedOrWarn()
+    {
+        SettingsData data = Instance;
+        if (data != null) return data.robotSpeed;
+        if (!warnedAboutMissingSettings)
+        {
+            warnedAboutMissingSettings = true;
+            Debug.LogWarning("[Settings] ассет SettingsData не найден — скорость робота взята 1.0 " +
+                             "по умолчанию. Если оператор задавал другую, она НЕ применена (P1-8)");
+        }
+        return 1f;
+    }
+
+    private static bool warnedAboutMissingSettings;
+
+    /// <summary>СБРОС ПРЕДУПРЕЖДЕНИЯ (для тестов и повторной выдачи после смены сцены).</summary>
+    public static void ResetMissingSettingsWarning()
+    {
+        warnedAboutMissingSettings = false;
+    }
 }

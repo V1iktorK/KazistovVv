@@ -35,6 +35,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Сторож класса E-21: сравнение длины требует отсева нечисла.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvNaNPolicyTests
     {
         /// <summary>
@@ -298,3 +299,4 @@ namespace KazistovVvTests
         }
     }
 }
+

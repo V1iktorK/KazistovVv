@@ -27,6 +27,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Данные пользователя: путь, имя папки, подпапки, совпадение с настройками.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvUserDataSafetyTests
     {
         private const string DataFolderName = "KazistovVv";
@@ -144,3 +145,4 @@ namespace KazistovVvTests
         }
     }
 }
+

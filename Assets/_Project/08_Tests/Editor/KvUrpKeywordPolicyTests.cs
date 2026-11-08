@@ -20,6 +20,7 @@ namespace KazistovVvTests
     /// снимать НЕЛЬЗЯ. Так тест не ломается от смены настроек, но ловит рассинхрон «настройка
     /// изменилась, а отсечение осталось прежним».
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvUrpKeywordPolicyTests
     {
         private static string ProjectRoot { get { return Directory.GetParent(Application.dataPath).FullName; } }
@@ -160,3 +161,4 @@ namespace KazistovVvTests
         }
     }
 }
+

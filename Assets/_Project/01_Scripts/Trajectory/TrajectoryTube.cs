@@ -28,6 +28,23 @@ namespace TrajectoryCore
         private bool dimmed;                  // приглушена (после выбора ДРУГОЙ траектории)
         private float pulse;
 
+        // ------------------------------------------------- УЧЁТ СОЗДАННЫХ РЕСУРСОВ (P2-9)
+        //
+        // ЧТО БЫЛО. `BuildTubeMesh()` на каждую генерацию делал `new Mesh`, а прежний меш никто не
+        // уничтожал; материал трубы создавался копией (`tubeRenderer.material = m`), и копия тоже
+        // не освобождалась. Пересчёт траекторий идёт на каждое движение точки — то есть утечка
+        // шла постоянно, а не «когда-нибудь».
+        //
+        // ЧЕМ ЭТО ГРОЗИЛО. Нативные меши и материалы живут ВНЕ управляемой кучи: сборщик мусора
+        // C# их не считает, память на шлеме кончается без единой ошибки в журнале — приложение
+        // просто убивается системой, и оператор видит вылет без причины.
+        //
+        // ТЕПЕРЬ меш один и переиспользуется, а созданные материалы учтены в списке и уничтожаются
+        // в `OnDestroy`. Раньше `tubeRenderer.material` в `SetHighlight` каждый раз создавал ещё
+        // одну копию — теперь цвет ставится прямо в наш материал.
+        private Material tubeMaterial;
+        private readonly List<Material> ownedMaterials = new List<Material>();
+
         public Vector3[] Points => points;
         public bool Contains(Ray ray) => Contains(ray, radius);
 
@@ -85,14 +102,40 @@ namespace TrajectoryCore
                     : (hover ? 0.016f : (dimmed ? 0.006f : 0.010f));
             }
             if (dashLine != null) dashLine.enabled = hover || selected;
-            if (tubeRenderer != null)
+            if (tubeMaterial != null)
             {
-                Material m = tubeRenderer.material;
-                if (m != null && m.HasProperty("_BaseColor"))
-                    m.SetColor("_BaseColor", new Color(c.r, c.g, c.b,
+                if (tubeMaterial.HasProperty("_BaseColor"))
+                    tubeMaterial.SetColor("_BaseColor", new Color(c.r, c.g, c.b,
                         selected ? tubeAlpha * 2.2f
                                  : (hover ? tubeAlpha * 1.6f : (dimmed ? tubeAlpha * 0.35f : tubeAlpha))));
             }
+        }
+
+        /// <summary>
+        /// ОСВОБОДИТЬ ВСЁ, ЧТО МЫ СОЗДАЛИ (P2-9). Меш, материалы линии, пунктира и трубы —
+        /// нативные объекты: их не убирает сборщик мусора C#, поэтому без этого метода каждая
+        /// показанная траектория оставляла в памяти шлема меш и три материала навсегда.
+        /// </summary>
+        private void OnDestroy()
+        {
+            if (tubeFilter != null) tubeFilter.sharedMesh = null;
+            if (tubeRenderer != null) tubeRenderer.sharedMaterial = null;
+            if (line != null) line.sharedMaterial = null;
+            if (dashLine != null) dashLine.sharedMaterial = null;
+
+            DestroyOwned(tubeMesh);
+            tubeMesh = null;
+            tubeMaterial = null;
+
+            for (int i = 0; i < ownedMaterials.Count; i++) DestroyOwned(ownedMaterials[i]);
+            ownedMaterials.Clear();
+        }
+
+        private static void DestroyOwned(Object resource)
+        {
+            if (resource == null) return;
+            if (Application.isPlaying) Object.Destroy(resource);
+            else Object.DestroyImmediate(resource);
         }
 
         private void Update()
@@ -117,7 +160,11 @@ namespace TrajectoryCore
                 line.numCapVertices = 2;
                 Material lineMaterial = KazistovVvFeatures.KvRenderPipelineShaders.CreateLine(
                     "Материал_линии_траектории", Color.white);
-                if (lineMaterial != null) line.material = lineMaterial;
+                if (lineMaterial != null)
+                {
+                    ownedMaterials.Add(lineMaterial);   // наш материал — мы и уничтожим (P2-9)
+                    line.sharedMaterial = lineMaterial;
+                }
             }
             if (dashLine == null)
             {
@@ -129,7 +176,11 @@ namespace TrajectoryCore
                 dashLine.numCapVertices = 0;
                 Material dashMaterial = KazistovVvFeatures.KvRenderPipelineShaders.CreateLine(
                     "Материал_пунктира", Color.white);
-                if (dashMaterial != null) dashLine.material = dashMaterial;
+                if (dashMaterial != null)
+                {
+                    ownedMaterials.Add(dashMaterial);
+                    dashLine.sharedMaterial = dashMaterial;
+                }
             }
             if (tubeFilter == null)
             {
@@ -143,7 +194,11 @@ namespace TrajectoryCore
                     new Color(baseColor.r, baseColor.g, baseColor.b, 0.12f));
                 if (m == null) return;
                 if (m.HasProperty("_Smoothness")) m.SetFloat("_Smoothness", 0.2f);
-                tubeRenderer.material = m;
+                // `sharedMaterial`, а не `.material`: `.material` создаёт ЕЩЁ ОДНУ копию на
+                // каждый рендерер, и эти копии никто не уничтожал (P2-9).
+                ownedMaterials.Add(m);
+                tubeMaterial = m;
+                tubeRenderer.sharedMaterial = m;
                 tubeRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 tubeRenderer.receiveShadows = false;
             }
@@ -198,7 +253,9 @@ namespace TrajectoryCore
             int n = points.Length;
             if (n < 2)
             {
-                tubeMesh = null;
+                // Меш больше не нужен, но и уничтожать его не надо: он ПЕРЕИСПОЛЬЗУЕТСЯ следующей
+                // генерацией (P2-9). Достаточно снять его с фильтра.
+                if (tubeMesh != null) tubeMesh.Clear();
                 tubeFilter.sharedMesh = null;
                 return;
             }
@@ -228,7 +285,10 @@ namespace TrajectoryCore
                     tris.Add(b); tris.Add(c); tris.Add(d);
                 }
             }
-            tubeMesh = new Mesh { name = "TrajectoryTube" };
+            // МЕШ ОДИН НА ВСЮ ЖИЗНЬ «КОЛБАСКИ» (P2-9): раньше здесь стояло `new Mesh` на каждую
+            // генерацию, и прежний меш оставался в нативной памяти навсегда.
+            if (tubeMesh == null) tubeMesh = new Mesh { name = "TrajectoryTube" };
+            else tubeMesh.Clear();
             tubeMesh.SetVertices(verts);
             tubeMesh.SetTriangles(tris, 0);
             tubeMesh.RecalculateNormals();

@@ -28,6 +28,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Следы Plastic SCM: в рабочей копии — да, в git — нет.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvPlasticLeftoversTests
     {
         /// <summary>
@@ -165,3 +166,4 @@ namespace KazistovVvTests
         }
     }
 }
+

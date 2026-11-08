@@ -18,7 +18,8 @@ namespace KazistovVvUI
         //
         //   • СЕТКА ИКОНОК: KvIcons.GridSize = 24, штрих KvIcons.Stroke = 1.5 px
         //     (мелкие детали — KvIcons.StrokeThin = 1.2 px). Это эталон для ВСЕХ иконок.
-        //   • Кнопка тулбара: квадрат 24×24, глиф 0.78 · 24 ≈ 19 px (см. IconButton).
+        //   • Кнопка тулбара: квадрат 24 (плотность 0) / 28 (плотность 1), глиф 0.78 от стороны
+        //     ≈ 19–22 px (см. IconButton и `IconButtonSize` — P3-8).
         //   • Строка-переключатель (галка): высота 20 px, КВАДРАТ галки 16×16,
         //     глиф галки 12×12 — та же пропорция 0.78, что и у кнопки тулбара.
         //   • Галки в меню (KvMenuBar / KvContextMenu): 10×10 при высоте строки 18 px.
@@ -37,7 +38,9 @@ namespace KazistovVvUI
         public const float GlyphRatio = 0.78f;
 
         // ---- эталон §23 (ФИКС 6, дополнение к §22) --------------------------------------
-        //   • Кнопка-иконка: квадрат 24×24, глиф 0.78 · 24 ≈ 19 (см. IconButton);
+        //   • Кнопка-иконка: квадрат 24 (плотность 0) или 28 (плотность 1) — значение берётся
+        //     из `KvSettings.IconButtonSize`, см. пояснение к `IconButtonSize` ниже (P3-8);
+        //     глиф 0.78 от стороны ≈ 19–22 (см. IconButton);
         //   • Кнопка с текстом: высота 24, внутренний отступ 6 px (KvTheme.CreateButton);
         //   • ВКЛАДКА (панель настроек, верстак): высота 26 — внутри требуемого диапазона
         //     24…28, шрифт мелкий (FontSizeSmall).
@@ -48,7 +51,21 @@ namespace KazistovVvUI
         // sizeDelta, а `LayoutElement` игнорирует. Поэтому у каждой кнопки размер задаётся
         // ЯВНО И ДВАЖДЫ (LayoutElement + sizeDelta) — это и есть лечение «огромных
         // квадратиков» и «непонятных +/−» (ФИКС 8: кнопки «развернуть/свернуть дерево»).
-        public const float IconButtonSize = 24f;
+        // ---- P3-8 (11.11.2026): ЭТАЛОН СТОРОНЫ КНОПКИ-ИКОНКИ — ОДИН, В `KvSettings` ----------
+        //
+        // ЧТО БЫЛО. Здесь стояло `public const float IconButtonSize = 24f;`, а рядом жило второе
+        // значение того же понятия — `KvSettings.IconButtonSize => Density == 0 ? 24f : 28f`.
+        // Тулбар берёт размер из `KvSettings` (то есть при плотности 1 у него 28), а самопроверка
+        // `ValidateSizes()` сверяла КОНСТАНТУ 24 и рапортовала «провалов 0» при реальных 28 px.
+        //
+        // ЧЕМ ЭТО ГРОЗИЛО. Самопроверка подтверждала то, чего нет: оператор включал плотность 1,
+        // кнопки становились 28, а отчёт «эталон соблюдён» говорил, что всё в порядке. Хуже —
+        // дерево (`KvTreeView`) строилось по 24 и рядом с тулбаром на 28 разъезжалось.
+        //
+        // ТЕПЕРЬ: не константа, а ССЫЛКА на единственный источник (`KvSettings.IconButtonSize`).
+        // Имя оставлено, чтобы не переписывать вызовы; значение приходит из настроек плотности.
+        public static float IconButtonSize { get { return KvSettings.IconButtonSize; } }
+
         public const float TextButtonHeight = 24f;
         public const float TabHeight = 26f;
         /// <summary>Внутренний отступ кнопки с текстом (эталон).</summary>
@@ -461,10 +478,19 @@ namespace KazistovVvUI
                 KvIcons.Get("check", SwitchCheckIcon) != null, "KvIcons.Get(\"check\") != null");
 
             // ---- ФИКС 6/8 (§23): эталон кнопок и вкладок ----
-            failures += Check(sb, "кнопка-иконка 24×24",
-                Mathf.Abs(IconButtonSize - 24f) < 0.01f, "IconButtonSize = " + IconButtonSize);
-            failures += Check(sb, "глиф кнопки-иконки = 24 · GlyphRatio",
-                Mathf.Abs(IconButtonSize * GlyphRatio - IconButtonSize * 0.78f) < 0.01f,
+            // P3-8 (11.11.2026). ЧТО БЫЛО. Проверка сравнивала КОНСТАНТУ `IconButtonSize` с 24,
+            // хотя тулбар берёт сторону из `KvSettings.IconButtonSize` (28 при плотности 1):
+            // самопроверка рапортовала «провалов 0» при реальных 28 px.
+            // ЧЕМ ЭТО ГРОЗИЛО. Отчёт подтверждал неверный эталон, и расхождение тулбара с деревом
+            // (24 против 28) никто не видел.
+            // ТЕПЕРЬ сверяется ФАКТИЧЕСКОЕ значение с единственным источником и с допуском 24…28.
+            failures += Check(sb, "кнопка-иконка = KvSettings.IconButtonSize, в диапазоне 24…28",
+                Mathf.Abs(IconButtonSize - KvSettings.IconButtonSize) < 0.01f &&
+                IconButtonSize >= 24f - 0.01f && IconButtonSize <= 28f + 0.01f,
+                IconButtonSize + " (KvSettings = " + KvSettings.IconButtonSize +
+                ", плотность " + KvSettings.Density + ")");
+            failures += Check(sb, "глиф кнопки-иконки = сторона · 0,78 и не мельче 18 px",
+                Mathf.Abs(GlyphRatio - 0.78f) < 0.001f && IconButtonSize * GlyphRatio >= 18f,
                 IconButtonSize + " · " + GlyphRatio + " = " + (IconButtonSize * GlyphRatio).ToString("0.0"));
             failures += Check(sb, "кнопка с текстом высотой 24",
                 Mathf.Abs(TextButtonHeight - 24f) < 0.01f, "TextButtonHeight = " + TextButtonHeight);
@@ -484,8 +510,16 @@ namespace KazistovVvUI
                 KvIcons.Get("expand", 18) != null && KvIcons.Get("collapse", 18) != null,
                 "KvIcons.Get(\"expand\") и Get(\"collapse\") != null");
 
-            sb.Append("Проверок: 13 · провалов: ").Append(failures);
-            return sb.ToString();
+            // P3-8 (11.11.2026). ЧТО БЫЛО. В подписи итога стояло твёрдое «Проверок: 13», хотя
+            // здесь выполняется 14 проверок. ЧЕМ ЭТО ГРОЗИЛО. Отчёт самопроверки занижал
+            // собственный объём: «13 проверок, провалов 0» при 14 реальных — и по этой цифре
+            // судили, что эталон проверен полностью. ТЕПЕРЬ число СЧИТАЕТСЯ по самому отчёту.
+            string report = sb.ToString();
+            int total = 0;
+            foreach (string line in report.Split('\n'))
+                if (line.StartsWith("  [OK]") || line.StartsWith("  [FAIL]")) total++;
+
+            return report + "Проверок: " + total + " · провалов: " + failures;
         }
 
         private static int Check(StringBuilder sb, string what, bool ok, string detail)

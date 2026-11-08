@@ -28,6 +28,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Начало отслеживания — риг, а не камера.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvTrackingOriginTests
     {
         /// <summary>
@@ -181,3 +182,4 @@ namespace KazistovVvTests
         }
     }
 }
+

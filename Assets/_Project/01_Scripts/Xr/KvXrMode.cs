@@ -295,6 +295,14 @@ namespace KazistovVvXr
         public float TeleportDistance;
         public bool SecondRay;
         public KvXrQuickHand RayHand;
+
+        /// <summary>
+        /// ВЫБРАННЫЙ РЕЖИМ: true — смешанная реальность (MR), false — виртуальная (VR).
+        /// Отдельным полем, а не «первым в списке»: экран «Настройки» рисует шаги и переключатели
+        /// по ИНДЕКСУ строки, и режим обязан быть названным параметром наравне с остальными
+        /// (иначе он снова окажется безымянной галкой).
+        /// </summary>
+        public bool MixedReality;
     }
 
     /// <summary>Данные для экрана «Свойства».</summary>
@@ -363,6 +371,12 @@ namespace KazistovVvXr
                 "Дальность телепорта: {0:0.0} м", data.TeleportDistance));
             rows.Add("Второй луч: " + (data.SecondRay ? "включён" : "выключен"));
             rows.Add("Рука луча: " + (data.RayHand == KvXrQuickHand.Right ? "Правая" : "Левая"));
+            // СЕДЬМОЙ ПАРАМЕТР — ПЕРЕКЛЮЧАТЕЛЬ VR/MR. Стоит ПОСЛЕДНИМ сознательно: порядок
+            // первых шести закреплён тестом `Screen_SettingsRowOrderIsFixed` (дефект 23.10.2026,
+            // когда переключатель перепутали с шагом), и вставлять режим в середину значило бы
+            // сдвинуть индексы шагов и повторить ровно ту же ошибку.
+            rows.Add("Режим VR/MR: " + KvXrSettings.ModeLabel(data.MixedReality ? KvXrSettings.ModeMr
+                                                                             : KvXrSettings.ModeVr));
             return rows;
         }
 

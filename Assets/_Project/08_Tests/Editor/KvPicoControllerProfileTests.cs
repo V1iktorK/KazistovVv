@@ -37,6 +37,7 @@ namespace KazistovVvTests
     /// только в журнале устройства строкой `[KvXr] КОНТРОЛЛЕРЫ ПОЯВИЛИСЬ` — тестами без
     /// шлема такое не проверяется, и делать вид, что проверено, нельзя.
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvPicoControllerProfileTests
     {
         /// <summary>
@@ -257,3 +258,4 @@ namespace KazistovVvTests
         }
     }
 }
+

@@ -29,6 +29,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Дорогие вызовы в покадровом коде.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvFrameBudgetTests
     {
         /// <summary>
@@ -50,7 +51,6 @@ namespace KazistovVvTests
         /// </summary>
         private static readonly Dictionary<string, string> AllowedFiles = new Dictionary<string, string>
             {
-                { "DshPlayModeRunner.cs", "инструмент проверки: не работает в сборке" },
             };
 
         private static string ScriptsRoot
@@ -156,3 +156,4 @@ namespace KazistovVvTests
         }
     }
 }
+

@@ -19,6 +19,7 @@ namespace KazistovVvTests
     /// от которых зависит видимое поведение, закреплены здесь: если кто-то снова сделает луч
     /// фиксированной длины, упадёт конкретный тест, а не «владелец снова скажет».
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvXrLaserBeamTests
     {
         /// <summary>
@@ -89,3 +90,4 @@ namespace KazistovVvTests
         }
     }
 }
+

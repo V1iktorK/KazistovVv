@@ -21,6 +21,7 @@ namespace KazistovVv.Tests
     /// ТОЛЬКО префиксом. Если в модели правая рука названа иначе — это дефект модели, и его
     /// лучше увидеть здесь, а не в шлеме.
     /// </summary>
+        [Category(KazistovVvTests.KvTestCategories.Fast)]
     public class KvDualArmTests
     {
         private static string ProjectRoot
@@ -251,3 +252,4 @@ namespace KazistovVv.Tests
         }
     }
 }
+

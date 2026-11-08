@@ -28,6 +28,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Очистка имён файлов из пользовательского ввода.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvSafeNameTests
     {
         /// <summary>Вызов очистки через отражение: тип живёт в сборке фич.</summary>
@@ -169,3 +170,4 @@ namespace KazistovVvTests
         }
     }
 }
+

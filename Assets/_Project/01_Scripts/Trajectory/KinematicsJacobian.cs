@@ -9,11 +9,30 @@ namespace TrajectoryCore
     /// </summary>
     public static class KinematicsJacobian
     {
+        /// <summary>
+        /// ШАГ КОНЕЧНЫХ РАЗНОСТЕЙ ДЛЯ ЯКОБИАНА — ЕДИНСТВЕННОЕ МЕСТО, ГДЕ ОН ЗАДАН (P2-14,
+        /// 11.11.2026).
+        ///
+        /// ЧТО БЫЛО. Здесь стояло 0,5°, а в `PoseValidator.Jacobian` — 0,25°: два расчёта одного
+        /// якобиана давали разные σ_min и разную манипулируемость для ОДНОЙ позы.
+        ///
+        /// ЧЕМ ЭТО ГРОЗИЛО. «Близко к сингулярности» решает, можно ли двигать робота; два разных
+        /// ответа на один вопрос — это прицел, который зелёный по одной оценке и красный по
+        /// другой, и никакой возможности понять, какая верна.
+        ///
+        /// ВЫБРАНО 0,5°: шаг вдвое крупнее даёт вдвое меньший шум округления `float`-трансформа
+        /// и остаётся малым против хода сустава (0,5° из 180°), то есть производная ещё честная.
+        /// </summary>
+        public const double StepDegrees = 0.5;
+
+        /// <summary>Шаг конечных разностей в радианах (для призмы SCARA — те же единицы счёта).</summary>
+        public static double StepRadians { get { return StepDegrees * Mathf.Deg2Rad; } }
+
         public static void Compute(PoseValidator v, double[] q, double[][] jac, out Vector3 tcp)
         {
             int n = v.Dof;
             tcp = v.TcpAt(q);
-            double h = 0.5 * Mathf.Deg2Rad; // 0.5° (для SCARA z — метры, но шаг мал и допустим)
+            double h = StepRadians;   // шаг — из одного места (P2-14)
             double[] probe = (double[])q.Clone();
             for (int i = 0; i < n; i++)
             {

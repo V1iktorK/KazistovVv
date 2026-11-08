@@ -255,6 +255,21 @@ namespace KazistovVvUI
         /// <summary>Сброс настроек интерфейса.</summary>
         public Action ResetAll;
 
+        // --- ПЕРЕКЛЮЧАТЕЛЬ VR / MR (11.11.2026)
+        //
+        // ЗАЧЕМ ОТДЕЛЬНЫЕ КОЛБЭКИ, А НЕ ЕЩЁ ОДИН ПУНКТ ВКЛАДКИ «ФУНКЦИИ». Вкладка «Функции»
+        // состоит из галок «включено/выключено» и не умеет показывать ВЫБОР ИЗ ПОЛОЖЕНИЙ:
+        // у режима два РАВНОПРАВНЫХ названных состояния, а не «включено» и «не включено».
+        // Плюс режим — не украшение сцены, а корневое решение, и жить он должен рядом с темой
+        // и языком, а не в списке из тридцати галок.
+        //
+        // ХРАНИЛИЩЕ — ТО ЖЕ, ЧТО У ШЛЕМА (`KazistovVvXr.KvXrSettings`): одна настройка, два
+        // входа. Готовое значение читается и пишется индексом 0 (VR) / 1 (MR).
+        /// <summary>Текущее положение переключателя режима: 0 — VR, 1 — MR.</summary>
+        public Func<int> GetMode;
+        /// <summary>Сменить положение переключателя режима.</summary>
+        public Action<int> SetMode;
+
         // --- ЭТАП 11: ДОСТУПНОСТЬ
         /// <summary>Сменить размер шрифта (0 маленький … 2 большой).</summary>
         public Action<int> SetFontSize;
@@ -571,6 +586,36 @@ namespace KazistovVvUI
                 " · " + KvLoc.Status,
                 KvTheme.TextDisabled);
             rows.Add(langNote.gameObject);
+
+            // ---------------------------------------------------------------- РЕЖИМ VR / MR
+            // СТОИТ ВЫСОКО, СРАЗУ ПОСЛЕ ЯЗЫКА: это корневое решение (какой мир строить —
+            // виртуальную лабораторию или комнату оператора), а не оформление. Положения
+            // НАЗВАНЫ оба — «выключено» больше не значит «непонятно что».
+            Divider();
+            Header("Режим приложения (VR / MR)");
+            int mode = callbacks != null && callbacks.GetMode != null ? callbacks.GetMode() : 0;
+            KvSegmented modeSeg = KvWidgets.Segmented(content, "VrMr",
+                new[]
+                {
+                    KazistovVvXr.KvXrSettings.ModeLabel(KazistovVvXr.KvXrSettings.ModeVr),
+                    KazistovVvXr.KvXrSettings.ModeLabel(KazistovVvXr.KvXrSettings.ModeMr)
+                }, Mathf.Clamp(mode, 0, KazistovVvXr.KvXrSettings.ModeCount - 1),
+                delegate (int i)
+                {
+                    if (callbacks != null && callbacks.SetMode != null) callbacks.SetMode(i);
+                    // Пересобираем панель: подпись состояния ниже обязана смениться в том же
+                    // кадре, иначе переключатель молча врёт про текущий режим.
+                    Rebuild();
+                }, 22f);
+            rows.Add(modeSeg.gameObject);
+
+            Text modeNote = KvWidgets.Note(content,
+                "MR — оператор видит свою комнату, робот ставится в неё (масштаб 1:1). " +
+                "VR — виртуальная лаборатория. Настройка ОДНА для компьютера и шлема и " +
+                "применяется после перезапуска приложения (сквозной вид пересоздаёт XR-сцену). " +
+                KazistovVvXr.KvXrSettings.ModeStatusLine(),
+                KvTheme.TextDim);
+            rows.Add(modeNote.gameObject);
 
             Divider();
             Header(KvLoc.T("settings.header.theme", "Тема"));

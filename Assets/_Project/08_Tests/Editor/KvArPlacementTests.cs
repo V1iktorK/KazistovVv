@@ -22,6 +22,7 @@ namespace KazistovVvTests
     /// Всё это — EditMode: сцену и телефон не запускаем (иначе пункт проверялся бы только у
     /// владельца, а по правилам проекта он должен проверяться машинно).
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvArPlacementTests
     {
         private static string ProjectRoot
@@ -641,6 +642,9 @@ namespace KazistovVvTests
                 // Динамические команды моделей роботов регистрируются в рантайме (KvRobotCommands),
                 // статический разбор реестра их не видит — как и сторож полноты меню шлема.
                 if (id.StartsWith("robot.model.", System.StringComparison.Ordinal)) continue;
+                // Очистка рабочего пространства — ДЕЙСТВИЕ ИНТЕРФЕЙСА ПЛАНШЕТА (открывает окно
+                // подтверждения в `KvArUi`), а не команда общего реестра: в ПК/шлеме её нет.
+                if (id == "workspace.clear") continue;
                 if (!registered.Contains(id)) missing.Add(id);
             }
 
@@ -678,5 +682,368 @@ namespace KazistovVvTests
             StringAssert.Contains("persistentDataPath, \"KazistovVv\"", source,
                 "на Android папка экспорта должна быть доступным каталогом приложения");
         }
+        // ================================================================ ПОЛНОЦЕННЫЙ AR (06.11.2026)
+
+        /// <summary>
+        /// АВТООПРЕДЕЛЕНИЕ ПОВЕРХНОСТЕЙ: найденные плоскости рисуются сеткой, самая большая
+        /// горизонтальная подсвечивается и подписывается «СТОЛ» — по ней ставится робот.
+        /// </summary>
+        [Test]
+        public void Surfaces_AreVisualizedAndTableIsChosen()
+        {
+            string source = ReadScript("KvArPlaneVisualizer.cs");
+            StringAssert.Contains("TryGetBestTable", source, "нет выбора лучшего стола");
+            StringAssert.Contains("PlaneAlignment.HorizontalUp", source, "стол не ищется по горизонтали");
+            StringAssert.Contains("LineRenderer", source, "поверхности не рисуются сеткой");
+            StringAssert.Contains("СТОЛ", source, "нет подписи «СТОЛ» на выбранной поверхности");
+            StringAssert.Contains("minTableAreaMeters", source, "нет порога площади стола");
+            StringAssert.Contains("[KvAr] ПОВЕРХНОСТИ", source, "нет строки-доказательства в журнале");
+
+            string runtime = ReadScript("KvArRuntime.cs");
+            StringAssert.Contains("EnsurePlaneVisualizer", runtime, "рантайм не включает визуализацию");
+            StringAssert.Contains("placement.planeVisualizer = planeVisualizer", runtime,
+                "постановка не знает о выбранном столе — авто-постановка не сработает");
+        }
+
+        /// <summary>
+        /// АВТО-ПОСТАНОВКА: если луч из центра экрана не попал в плоскость, «Поставить» берёт
+        /// самый большой найденный стол (владелец: «робот автоматически на самый большой стол»).
+        /// </summary>
+        [Test]
+        public void Placement_FallsBackToLargestTable()
+        {
+            string source = ReadScript("KvArPlacement.cs");
+            StringAssert.Contains("TryAutoTable", source, "нет авто-постановки на найденный стол");
+            StringAssert.Contains("самый большой стол", source, "источник постановки не подписан");
+            StringAssert.Contains("planeVisualizer", source, "постановка не использует визуализатор");
+            StringAssert.Contains("МАСШТАБ", source, "после постановки не печатается высота робота 1:1");
+        }
+
+        /// <summary>
+        /// ГИРОСКОП/ОБЗОР: поворот планшета — обзор, палец больше не крутит мир (иначе два
+        /// вращения складываются и «гироскоп врёт»). Щипок остаётся масштабом.
+        /// </summary>
+        [Test]
+        public void ViewRotation_IsDeviceDrivenNotFinger()
+        {
+            string touch = ReadScript("KvArTouchInput.cs");
+            StringAssert.Contains("public bool allowDragRotate = false", touch,
+                "поворот мира пальцем должен быть выключен по умолчанию");
+            StringAssert.Contains("dragging && allowDragRotate", touch,
+                "поворот пальцем не проверяет флаг — мир снова будет спорить с гироскопом");
+            StringAssert.Contains("поворотом планшета", touch, "нет подсказки про поворот планшета");
+            StringAssert.Contains("ZoomView", touch, "щипок обязан остаться масштабом");
+
+            string gyro = ReadScript("KvArGyroFallback.cs");
+            StringAssert.Contains("SessionTracking", gyro,
+                "резервный гироскоп обязан отключаться, когда AR-трекинг работает");
+        }
+
+        /// <summary>
+        /// ОЧИСТКА РАБОЧЕГО ПРОСТРАНСТВА: кнопка есть, спрашивает подтверждение, удаляет столы/
+        /// роботов/точки/траектории, снимает якорь и возвращает мир к камере.
+        /// </summary>
+        [Test]
+        public void ClearWorkspace_AsksConfirmationAndClearsEverything()
+        {
+            string ui = ReadScript("KvArUi.cs");
+            StringAssert.Contains("workspace.clear", ui, "нет пункта «Очистить» в интерфейсе");
+            StringAssert.Contains("ShowConfirm", ui, "очистка без подтверждения — риск стереть сцену");
+            StringAssert.Contains("ОЧИСТИТЬ", ui, "нет кнопки подтверждения");
+            StringAssert.Contains("RequestClearWorkspace", ui, "окно подтверждения не вызывает очистку");
+            StringAssert.Contains("Очистить", ui, "нет кнопки «Очистить» на панели инструментов");
+
+            string runtime = ReadScript("KvArRuntime.cs");
+            StringAssert.Contains("public void ClearWorkspace()", runtime, "нет самой очистки");
+            StringAssert.Contains("world.Clear(\"очистка рабочего пространства\")", runtime,
+                "очистка не снимает якорь");
+            StringAssert.Contains("ResetFlow(\"очистка рабочего пространства\")", runtime,
+                "очистка не сбрасывает траекторию/точки");
+            StringAssert.Contains("ResetCreatedTableCounter", runtime, "счётчик столов не сбрасывается");
+            StringAssert.Contains("ClearSelection", runtime, "выбор объекта не сбрасывается");
+        }
+
+        // ================================================================ ПО ФОТО 06.11.2026
+
+        /// <summary>
+        /// ЦВЕТ СЕТКИ ПОВЕРХНОСТЕЙ. Дефект по фото: вся сетка БЕЛАЯ, зелёной подсветки стола и
+        /// подписи «СТОЛ» нет. Причина: один белый материал `URP/Unlit` и цвет в вершинах линии,
+        /// который этот шейдер не читает. Цвет обязан задаваться МАТЕРИАЛОМ на каждый вид.
+        /// </summary>
+        [Test]
+        public void SurfaceGrid_ColorComesFromMaterialNotVertexColor()
+        {
+            string source = ReadScript("KvArPlaneVisualizer.cs");
+            StringAssert.Contains("materialTableOutline", source,
+                "цвет контура стола не вынесен в отдельный материал — под URP сетка снова белая");
+            StringAssert.Contains("CreateLineMaterial(\"Материал_контура_стола_AR\", ColorTable)", source,
+                "материал контура стола не создаётся");
+            StringAssert.Contains("CreateLineMaterial(\"Материал_сетки_стола_AR\"", source,
+                "материал сетки стола не создаётся");
+            StringAssert.Contains("entry.outline.sharedMaterial = outline", source,
+                "материал контура не назначается на линию");
+            StringAssert.Contains("entry.grid.sharedMaterial = grid", source,
+                "материал сетки не назначается на линию");
+            StringAssert.DoesNotContain("private Material lineMaterial;", source,
+                "вернулся единственный белый материал линий — сетка снова станет белой");
+        }
+
+        /// <summary>
+        /// ПОДПИСЬ «СТОЛ» ЛИЦОМ К ОПЕРАТОРУ. Прежний код разворачивал текст ОТ камеры
+        /// (`центр − камера`), и надпись была видна с изнанки. Проверяем саму математику.
+        /// </summary>
+        [Test]
+        public void PlaneLabel_RotationFacesTheCamera()
+        {
+            Vector3 label = new Vector3(0f, 0.8f, 0f);
+            Vector3 camera = new Vector3(0f, 1.4f, -2f);
+
+            Quaternion rotation = KvArPlaneVisualizer.LabelRotation(label, camera);
+            Vector3 forward = rotation * Vector3.forward;
+            Vector3 toCamera = (camera - label).normalized;
+
+            Assert.Greater(Vector3.Dot(forward, toCamera), 0.99f,
+                "подпись «СТОЛ» отвёрнута от оператора: перед текста обязан смотреть НА камеру");
+
+            // Камера с другой стороны — метка переворачивается за ней.
+            Vector3 otherCamera = new Vector3(0f, 1.4f, 2f);
+            Vector3 otherForward = KvArPlaneVisualizer.LabelRotation(label, otherCamera) * Vector3.forward;
+            Assert.Greater(Vector3.Dot(otherForward, (otherCamera - label).normalized), 0.99f,
+                "подпись не разворачивается за оператором");
+
+            // Совпадение позиций не должно давать NaN/мусор.
+            Quaternion degenerate = KvArPlaneVisualizer.LabelRotation(label, label);
+            Assert.AreEqual(0f, Vector3.Angle(Quaternion.identity * Vector3.forward,
+                degenerate * Vector3.forward), 0.5f);
+        }
+
+        /// <summary>СЕТКА НЕ ШУМИТ: линии сетки темнее контура, но непрозрачные (URP/Unlit непрозрачен).</summary>
+        [Test]
+        public void SurfaceGrid_LinesAreDarkerThanOutline()
+        {
+            Color outline = new Color(0.20f, 1f, 0.45f, 1f);
+            Color grid = KvArPlaneVisualizer.GridColorFor(outline);
+            Assert.Less(grid.g, outline.g, "линии сетки не темнее контура — сетка будет спорить с подсветкой");
+            Assert.AreEqual(1f, grid.a, 0.001f, "у линий сетки не должно быть прозрачности: URP/Unlit её не рисует");
+        }
+
+        /// <summary>
+        /// МАТЕРИАЛЫ РОБОТА В ЖУРНАЛЕ. По фото робот выглядел однотонными светлыми панелями;
+        /// чтобы это был ФАКТ, а не догадка, при постановке в журнал пишется разбор материалов.
+        /// </summary>
+        [Test]
+        public void RobotSpawn_LogsMaterialFacts()
+        {
+            string source = ReadScript("KvArContent.cs");
+            StringAssert.Contains("[KvAr] МАТЕРИАЛЫ:", source, "нет строки-доказательства о материалах робота");
+            StringAssert.Contains("DescribeMaterials", source, "нет разбора материалов рендереров");
+            StringAssert.Contains("LooksLikePlaceholder", source, "заглушка («белые панели») не распознаётся");
+            StringAssert.Contains("mainTexture", source, "наличие текстуры не проверяется");
+            StringAssert.Contains("LogMaterials(robot.gameObject)", source,
+                "разбор материалов не вызывается при постановке робота");
+
+            // Разбор обязан отличать заглушку от нормальной модели — проверяем на живых объектах.
+            GameObject placeholder = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            try
+            {
+                Renderer first = placeholder.GetComponent<Renderer>();
+                string fact = "материал «" +
+                    (first != null && first.sharedMaterial != null ? first.sharedMaterial.name : "нет") +
+                    "», шейдер «" +
+                    (first != null && first.sharedMaterial != null && first.sharedMaterial.shader != null
+                        ? first.sharedMaterial.shader.name : "нет") +
+                    "», hideFlags " +
+                    (first != null && first.sharedMaterial != null ? first.sharedMaterial.hideFlags.ToString() : "-");
+                Assert.IsTrue(KvArContent.LooksLikePlaceholder(placeholder),
+                    "куб с материалом по умолчанию обязан считаться заглушкой. Факт: " + fact);
+                string summary = KvArContent.DescribeMaterials(placeholder);
+                StringAssert.Contains("рендереров 1", summary, "разбор материалов не считает рендереры");
+            }
+            finally
+            {
+                Object.DestroyImmediate(placeholder);
+            }
+        }
+
+        /// <summary>
+        /// ОБЪЕКТЫ ИЗ МЕНЮ НЕ ВИСЯТ ЗА КРАЕМ СТОЛА. По фото ножки нового стола уходили за
+        /// столешницу в воздух: точка создания бралась «по плоскости якоря» без проверки границ.
+        /// </summary>
+        [Test]
+        public void MenuSpawnPoint_StaysInsideFoundTable()
+        {
+            Vector3 center = new Vector3(1f, 0.8f, 2f);
+            Quaternion rotation = Quaternion.identity;
+
+            // Точка далеко за краем стола 0,8×0,8 м — обязана вернуться внутрь.
+            Vector3 requested = center + new Vector3(1.2f, 0f, 0f);
+            Assert.IsTrue(KvArPlacementMath.IsOutsidePlane(requested, center, 0.4f, 0.4f, rotation),
+                "точка в 1,2 м от центра стола 0,8×0,8 обязана считаться внешней");
+
+            Vector3 clamped = KvArPlacementMath.ClampInsidePlane(requested, center, 0.4f, 0.4f,
+                rotation, 0.08f);
+            Assert.IsFalse(KvArPlacementMath.IsOutsidePlane(clamped, center, 0.4f, 0.4f, rotation),
+                "точка создания осталась за краем стола — стол из меню повиснет в воздухе");
+            Assert.AreEqual(0.32f, clamped.x - center.x, 0.001f,
+                "точка не прижата к границе с отступом 8 см");
+            Assert.AreEqual(center.y, clamped.y, 0.0001f, "кламп не должен менять высоту плоскости");
+
+            // Внутренняя точка не двигается.
+            Vector3 inside = center + new Vector3(0.1f, 0f, -0.1f);
+            Assert.AreEqual(inside, KvArPlacementMath.ClampInsidePlane(inside, center, 0.4f, 0.4f,
+                rotation, 0.08f), "внутренняя точка сдвинута — объект «поехал» без причины");
+
+            // Повёрнутая плоскость: границы считаются в её системе координат.
+            Quaternion turned = Quaternion.Euler(0f, 90f, 0f);
+            Vector3 alongZ = center + new Vector3(0f, 0f, 0.9f);
+            Vector3 clampedTurned = KvArPlacementMath.ClampInsidePlane(alongZ, center, 0.4f, 0.2f,
+                turned, 0.05f);
+            Assert.IsFalse(KvArPlacementMath.IsOutsidePlane(clampedTurned, center, 0.4f, 0.2f, turned),
+                "для повёрнутой плоскости точка не вписана в границы");
+
+            // Неизвестная плоскость (нулевые полуоси) — прежнее поведение, точку не трогаем.
+            Vector3 untouched = new Vector3(5f, 1f, 5f);
+            Assert.AreEqual(untouched, KvArPlacementMath.ClampInsidePlane(untouched, center, 0f, 0f,
+                rotation, 0.08f), "без данных о плоскости точка обязана остаться прежней");
+
+            string world = ReadScript("KvArWorld.cs");
+            StringAssert.Contains("ClampSpawnPointToTable", world, "точка создания не вписывается в стол");
+            StringAssert.Contains("TryGetBestTableBounds", world, "границы стола не запрашиваются");
+        }
+
+        /// <summary>
+        /// ПЛОСКОСТИ НЕ ТЕРЯЮТСЯ. По журналу планшета 07.11.2026: после возврата из фона 19 минут
+        /// «SessionTracking · кадр/с 30 · плоскостей 0». Нужен сторож, возврат из фона и диагностика.
+        /// </summary>
+        [Test]
+        public void PlaneDetection_RecoversAndLogsDiagnosis()
+        {
+            string runtime = ReadScript("KvArRuntime.cs");
+            StringAssert.Contains("CheckPlaneDetection", runtime, "нет сторожа обнаружения плоскостей");
+            StringAssert.Contains("OnApplicationPause", runtime, "возврат из фона не обрабатывается");
+            StringAssert.Contains("ApplyPlaneDetection", runtime, "обнаружение плоскостей не перезапускается");
+            StringAssert.Contains("requestedDetectionMode", runtime, "режим обнаружения не задаётся");
+            StringAssert.Contains("PlaneDetectionMode.Horizontal | PlaneDetectionMode.Vertical", runtime,
+                "вертикальные плоскости не ищутся");
+            StringAssert.Contains("LogPlaneDiagnosis", runtime, "нет диагностики с числами");
+            StringAssert.Contains("ПОВЕРХНОСТИ: ДИАГНОСТИКА", runtime, "диагностика не пишется в журнал");
+            StringAssert.Contains("ResetArSubsystem", runtime, "подсистема не перезапускается при потере плоскостей");
+            StringAssert.Contains("session.Reset()", runtime,
+                "перезапуск подсистемы обязан идти через `session.Reset()`, как у сторожа сессии");
+            StringAssert.Contains("planeWatchdogSeconds", runtime, "нет порога ожидания плоскостей");
+        }
+
+        /// <summary>
+        /// КАРТИНКА НА ВЕСЬ ЭКРАН. По фото (tablet-pcui8.png 05.11, tablet-ar-surfaces1.png 06.11)
+        /// приложение оказывалось узкой вертикальной полосой с размытым фоном по бокам: Android
+        /// держал портретное окно. Ориентация обязана быть закреплена и в настройках сборки.
+        /// </summary>
+        [Test]
+        public void Display_AspectIsWatchedAndLandscapeLocked()
+        {
+            string settings = File.ReadAllText(Path.Combine(ProjectRoot, "ProjectSettings",
+                "ProjectSettings.asset"));
+            StringAssert.Contains("defaultScreenOrientation: 3", settings,
+                "в настройках сборки не закреплён горизонтальный экран — Android снова сделает полосу");
+            StringAssert.Contains("allowedAutorotateToPortrait: 0", settings,
+                "портретная ориентация разрешена — окно может стать вертикальным");
+
+            string runtime = ReadScript("KvArRuntime.cs");
+            StringAssert.Contains("CheckDisplayAspect", runtime, "пропорции экрана/камеры не проверяются");
+            StringAssert.Contains("[KvAr] ЭКРАН: пропорции", runtime, "пропорции не пишутся в журнал");
+            StringAssert.Contains("Screen.orientation = ScreenOrientation.LandscapeLeft", runtime,
+                "ориентация не перезакрепляется в рантайме");
+        }
+
+        /// <summary>
+        /// КНОПКИ ПОД ПАЛЕЦ. Замер по фото 2560×1600: строки тулбара/дерева были ≈5,3 мм, правые
+        /// кнопки ≈7,7 мм — меньше трети пальца. Высота строки обязана считаться от экрана.
+        /// </summary>
+        [Test]
+        public void Buttons_AreFingerSized()
+        {
+            string ui = ReadScript("KvArUi.cs");
+            StringAssert.Contains("TouchRowHeightUi", ui, "нет расчёта высоты строки под палец");
+            StringAssert.Contains("touchRowScreenFraction", ui, "нет доли экрана для высоты строки");
+            StringAssert.Contains("Mathf.Max(TouchRowHeightUi(), buttonHeight)", ui,
+                "правые кнопки не поднимаются до размера под палец");
+            StringAssert.DoesNotContain("new Vector2(142f, 44f)", ui,
+                "вернулся прежний размер кнопки тулбара 44 ед. (≈5,3 мм)");
+            StringAssert.DoesNotContain("new Vector2(252f, 44f)", ui,
+                "вернулся прежний размер строки дерева 44 ед. (≈5,3 мм)");
+
+            // Доля экрана даёт «палец» и на планшете, и на другом устройстве.
+            GameObject host = new GameObject("UiHost", typeof(RectTransform));
+            try
+            {
+                KvArUi probe = host.AddComponent<KvArUi>();
+                probe.referenceResolution = new Vector2(1920f, 1080f);
+                probe.touchRowScreenFraction = 0.065f;
+                float height = probe.TouchRowHeightUi();
+                Assert.GreaterOrEqual(height, 48f, "высота строки меньше минимально допустимой");
+                Assert.LessOrEqual(height, 220f, "высота строки вышла за разумный предел");
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        /// <summary>
+        /// ЧЕСТНАЯ СТРОКА СОСТОЯНИЯ: «Столов: N» — сколько столов РЕАЛЬНО стоит в мире, а не
+        /// сколько создано (по фото было «Столов: 8» при пустом мире). Плюс сброс устаревшего
+        /// выбора «Выбрано: робот «Robot»», когда объекта уже нет.
+        /// </summary>
+        [Test]
+        public void StatusLine_CountsRealObjectsAndDropsStaleSelection()
+        {
+            string runtime = ReadScript("KvArRuntime.cs");
+            StringAssert.Contains("CountExistingTables", runtime, "столы считаются по счётчику созданий");
+            StringAssert.DoesNotContain("uiTables = KvArUi.CreatedTableCount;", runtime,
+                "строка состояния снова печатает счётчик созданий вместо факта");
+            StringAssert.Contains("ClearSelectionIfGone", runtime, "устаревший выбор не сбрасывается");
+
+            string touch = ReadScript("KvArTouchInput.cs");
+            StringAssert.Contains("public bool ClearSelectionIfGone()", touch, "нет проверки живости выбора");
+            StringAssert.Contains("selectedObject", touch, "выбранный объект не запоминается");
+        }
+
+        /// <summary>
+        /// РАЗМЕРЫ ИНТЕРФЕЙСА СЧИТАЮТСЯ В ЕДИНИЦАХ КАНВАСА, А НЕ В ПИКСЕЛЯХ. Дефект планшета
+        /// 07.11.2026: `canvas.scaleFactor` в момент постройки равен 1 (масштаб применяется позже),
+        /// поэтому строка вышла 143 px вместо 104, а 13 кнопок инструментов заняли 2544 ед. при
+        /// доступных 1821 — «Экспорт», «Сохранить» и «Демо» уехали за экран.
+        /// </summary>
+        [Test]
+        public void UiLayout_UsesCanvasUnitsNotRawPixels()
+        {
+            string ui = ReadScript("KvArUi.cs");
+            StringAssert.Contains("UiScaleFactor", ui, "масштаб канваса не считается самостоятельно");
+            StringAssert.Contains("UiScaleMatch", ui, "формула масштаба не совпадает с CanvasScaler (match 0,5)");
+            StringAssert.Contains("Mathf.Log(", ui, "нет формулы ScaleWithScreenSize");
+            StringAssert.Contains("CanvasWidthUi", ui, "ширина канваса не используется — тулбар снова обрежется");
+            StringAssert.Contains("toolbarPitch", ui, "шаг кнопок инструментов не считается по ширине экрана");
+            StringAssert.DoesNotContain("new Vector2(142f, buttonHeightUi)", ui,
+                "вернулся фиксированный шаг 142 ед. — 13 кнопок не влезут на планшет");
+        }
+
+        /// <summary>
+        /// ОКНО «ДОСТУП К КАМЕРЕ / ПРОДОЛЖИТЬ» СНИМАЕТСЯ САМО. По факту планшета 07.11.2026 окно
+        /// висело минутами при работающей камере и идущем трекинге.
+        /// </summary>
+        [Test]
+        public void CameraGate_ConfirmScreenIsDismissedAutomatically()
+        {
+            string gate = ReadScript("KvArCameraGate.cs");
+            StringAssert.Contains("public bool ConfirmNow", gate, "нет внешнего снятия окна подтверждения");
+            StringAssert.Contains("AwaitingContinue", gate, "состояние окна не отдаётся наружу");
+
+            string runtime = ReadScript("KvArRuntime.cs");
+            StringAssert.Contains("CheckCameraGate", runtime, "рантайм не снимает застрявшее окно");
+            StringAssert.Contains("cameraGate.ConfirmNow", runtime, "окно не снимается из рантайма");
+            StringAssert.Contains("cameraGate = GetComponent<KvArCameraGate>()", runtime,
+                "рантайм не держит ссылку на сторож камеры");
+        }
     }
 }
+

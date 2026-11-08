@@ -11,9 +11,51 @@ namespace TrajectoryCore
     /// </summary>
     public class SafetyGate
     {
-        public float minClearance = 0.015f;
+        /// <summary>
+        /// МИНИМАЛЬНЫЙ ЗАЗОР, метры — ЕДИНСТВЕННОЕ МЕСТО, где он задан (P1-16, 11.11.2026).
+        ///
+        /// ЧТО БЫЛО. Для одного понятия безопасности жили ТРИ разных числа: `SafetyGate.minClearance`
+        /// (0,015 м), он же с коэффициентом «половина» в `ApproveStep` (`minClearance * 0.5f`,
+        /// нигде не объяснённый) и отдельное `Planner.clearance = 0.02f`. Планировщик оптимизировал
+        /// траекторию по одному порогу, а пропускал её другой — и «план прошёл проверку» означало
+        /// разные вещи в разных местах.
+        ///
+        /// ЧЕМ ЭТО ГРОЗИЛО. Траектория, которую планировщик считал годной, могла быть отклонена
+        /// предохранителем; «движение на грани» на паузе пропускалось по 0,0075 м. Наладчик не мог
+        /// понять, какое число настоящее.
+        ///
+        /// Теперь порог один; запас планировщика выражен ЯВНЫМ коэффициентом, а не вторым числом.
+        /// </summary>
+        public const float DefaultMinClearance = 0.015f;
+
+        /// <summary>
+        /// ВО СКОЛЬКО РАЗ ПЛАНИРОВЩИК ТРЕБУЕТ БОЛЬШЕ, ЧЕМ ПРЕДОХРАНИТЕЛЬ (P1-16). Планировать с
+        /// запасом 4/3 — осознанное решение: план строится «с полем», а пропускается по границе.
+        /// Раньше это было зашито двумя независимыми числами (0,015 в предохранителе и 0,02 в
+        /// планировщике), и «прошло проверку» означало разное в разных местах.
+        /// </summary>
+        public const float PlanningClearanceFactor = 4f / 3f;
+
+        /// <summary>ПОРОГ ПЛАНИРОВЩИКА, метры — единственный источник (см. `PlanningClearanceFactor`).</summary>
+        public static float DefaultPlanningClearance
+        {
+            get { return DefaultMinClearance * PlanningClearanceFactor; }
+        }
+
+        /// <summary>Действующий порог зазора, метры (настраивается; по умолчанию `DefaultMinClearance`).</summary>
+        public float minClearance = DefaultMinClearance;
+
+        /// <summary>
+        /// ДОЛЯ ПОРОГА ДЛЯ ПРОВЕРКИ СТОЯЩЕЙ ПОЗЫ (P1-16). Стоящий робот не движется, поэтому
+        /// требуем половину обычного зазора — но это ЯВНОЕ число с именем, а не «* 0.5f» в теле.
+        /// </summary>
+        public float standingClearanceFactor = 0.5f;
+
         public float minLimitMarginDeg = 3f;
         public int watchdogTimeoutMs = 300;
+
+        /// <summary>ПОРОГ ЗАЗОРА ДЛЯ СТОЯЩЕЙ ПОЗЫ, метры (см. `standingClearanceFactor`).</summary>
+        public float StandingClearance { get { return minClearance * standingClearanceFactor; } }
 
         /// <summary>
         /// ПРЕДЕЛ СКОРОСТИ СУСТАВА ДЛЯ ПРОВЕРКИ ПЕРЕД ПУСКОМ, °/с (добавлено 30.10.2026, S44).
@@ -104,6 +146,17 @@ namespace TrajectoryCore
             if (t == null || t.Path == null || t.Path.Length == 0)
             {
                 reason = SafetyReason.NoData; LastReason = reason; return false;
+            }
+
+            // П1-10: план без времён (или с несовпадающей длиной) не пропускаем — иначе падение
+            // `NullReferenceException` уже В ЦИКЛЕ ДВИЖЕНИЯ, мимо `Stop(reason)`.
+            if (t.Times == null || t.Times.Length != t.Path.Length)
+            {
+                reason = SafetyReason.NoData; LastReason = reason;
+                Debug.LogWarning("[Safety] Отказ: у плана " + t.Path.Length + " точек и " +
+                                 (t.Times != null ? t.Times.Length : 0) +
+                                 " времён — исполнять нечего (P1-10)");
+                return false;
             }
 
             if (!WatchdogAlive())

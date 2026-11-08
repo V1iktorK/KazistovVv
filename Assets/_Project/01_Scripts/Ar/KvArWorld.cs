@@ -290,6 +290,11 @@ namespace KazistovVvAr
         /// ГДЕ СОЗДАТЬ ОБЪЕКТ ИЗ МЕНЮ. Вызывается хуком `KvXrObjectFactory`: в AR нельзя ставить
         /// «в 1,2 м перед лицом на y = 0» — реального нуля на планшете нет, а пол уже найден.
         /// Возвращаем точку на поверхности якоря перед устройством. false — мир не поставлен.
+        ///
+        /// ГРАНИЦЫ ПЛОСКОСТИ (07.11.2026). Дефект планшета: стол из ПК-меню создавался в 1,2 м
+        /// перед устройством, найденная плоскость была всего 0,62 м², и ножки нового стола
+        /// висели над полом ЗА КРАЕМ настоящего стола. Теперь точка приводится внутрь границ
+        /// найденного стола с отступом 8 см; если плоскость ещё не найдена — прежнее поведение.
         /// </summary>
         public static bool TryGetMenuSpawnPoint(Camera camera, float distanceMeters, out Vector3 point)
         {
@@ -306,10 +311,40 @@ namespace KazistovVvAr
 
             float distance = Mathf.Clamp(distanceMeters, 0.3f, 3f);
             Vector3 basePoint = world.LabRoot.position;
-            point = new Vector3(basePoint.x + forward.x * distance,
-                                basePoint.y,
-                                basePoint.z + forward.z * distance);
+            Vector3 requested = new Vector3(basePoint.x + forward.x * distance,
+                                            basePoint.y,
+                                            basePoint.z + forward.z * distance);
+
+            point = ClampSpawnPointToTable(requested, forward, distance);
             return true;
+        }
+
+        /// <summary>
+        /// ВПИСАТЬ ТОЧКУ СОЗДАНИЯ В НАЙДЕННЫЙ СТОЛ. Если точка вне границ — двигаем её внутрь,
+        /// с запасом под габарит объекта (четверть размера стола), и пишем это в журнал.
+        /// </summary>
+        private static Vector3 ClampSpawnPointToTable(Vector3 requested, Vector3 forward, float distance)
+        {
+            KvArPlaneVisualizer visualizer =
+                UnityEngine.Object.FindAnyObjectByType<KvArPlaneVisualizer>();
+            Vector3 center;
+            float halfWidth;
+            float halfDepth;
+            Quaternion rotation;
+            if (visualizer == null ||
+                !visualizer.TryGetBestTableBounds(out center, out halfWidth, out halfDepth, out rotation))
+                return requested;
+
+            const float margin = 0.08f;
+            if (!KvArPlacementMath.IsOutsidePlane(requested, center, halfWidth, halfDepth, rotation))
+                return requested;
+
+            Vector3 clamped = KvArPlacementMath.ClampInsidePlane(
+                requested, center, halfWidth, halfDepth, rotation, margin);
+            Debug.Log("[KvAr] ИНТЕРФЕЙС: точка создания вышла за край стола (" +
+                      halfWidth.ToString("0.00") + "×" + halfDepth.ToString("0.00") +
+                      " м половины) — сдвигаю внутрь плоскости: " + clamped.ToString("0.00"));
+            return clamped;
         }
 
         /// <summary>КОРЕНЬ МИРА ДЛЯ ХУКА ФАБРИКИ (y = высота найденной плоскости).</summary>

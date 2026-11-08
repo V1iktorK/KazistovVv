@@ -87,6 +87,15 @@ namespace KazistovVvUI
             if (instance != null && instance.canvasRect == canvasTransform) return instance;
             GameObject go = new GameObject("KvTooltipLayer", typeof(RectTransform));
             go.transform.SetParent(canvasTransform, false);
+            // ПОДСКАЗКА — ПОВЕРХ ВСЕГО, ВКЛЮЧАЯ DOCK-ПАНЕЛИ (R6-1, 11.11.2026).
+            //
+            // Dock-панели с этого дня рисуются своим вложенным канвасом с высоким порядком
+            // сортировки (чтобы их не закрывал AR-оверлей). Без этого блока подсказка кнопок
+            // тулбара у края экрана оказалась бы ПОД панелью дерева или свойств и «пропала» —
+            // то есть починка одного дефекта создала бы другой.
+            Canvas order = go.AddComponent<Canvas>();
+            order.overrideSorting = true;
+            order.sortingOrder = KazistovVvUIManager.DockSortingOrder + 10;
             KvTooltip t = go.AddComponent<KvTooltip>();
             t.Build(canvasTransform, ownerCanvas);
             instance = t;

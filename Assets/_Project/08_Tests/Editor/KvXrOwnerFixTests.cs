@@ -25,6 +25,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Правки по тесту владельца 04.11.2026: роботы видны, плюшки выключены, камера стоит.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvXrOwnerFixTests
     {
         private static string ScriptsDir
@@ -207,3 +208,4 @@ namespace KazistovVvTests
         }
     }
 }
+

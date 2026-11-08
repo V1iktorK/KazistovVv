@@ -221,12 +221,40 @@ namespace KazistovVvUI
             return new Color(baseColor.r, baseColor.g, baseColor.b, alpha * 0.55f);
         }
 
+        /// <summary>
+        /// ПУЛЬСАЦИЯ «СКЕЛЕТОНА» — НЕ В КАЖДОМ КАДРЕ (P2-10, 11.11.2026).
+        ///
+        /// ЧТО БЫЛО. Каждый кадр (72 раза в секунду) цвет каждого прямоугольника «скелетона»
+        /// пересчитывался и присваивался заново. Смена цвета у `Graphic` помечает канвас
+        /// грязным (`SetVerticesDirty`), поэтому ВЕСЬ канвас перестраивался 72 раза в секунду —
+        /// на ПУСТОМ экране, где больше ничего не меняется.
+        ///
+        /// ЧЕМ ЭТО ГРОЗИЛО. Перестройка канваса — самая дорогая операция интерфейса в Unity; на
+        /// шлеме она съедала кадр из 13,9 мс, и именно на пустом экране (старт, ничего не
+        /// выбрано), то есть тогда, когда оператор впервые смотрит на интерфейс.
+        ///
+        /// ТЕПЕРЬ пульсация обновляется 8 раз в секунду и только если цвет действительно
+        /// изменился заметно: глаз разницы не видит, а перестроек канваса в девять раз меньше.
+        /// </summary>
+        private const float SkeletonUpdateIntervalSeconds = 0.125f;
+        private const float SkeletonVisibleDelta = 0.02f;
+        private float nextSkeletonUpdateTime;
+        private float lastSkeletonAlpha = -1f;
+
         private void Update()
         {
             if (skeletons.Count == 0 || skeletonGroup == null) return;
             if (!skeletonGroup.gameObject.activeSelf) return;
+
+            float now = Time.unscaledTime;
+            if (now < nextSkeletonUpdateTime) return;
+            nextSkeletonUpdateTime = now + SkeletonUpdateIntervalSeconds;
+
             // Мягкая пульсация «скелетона» — видно, что интерфейс работает, а не завис.
-            float k = 0.45f + 0.25f * Mathf.Sin(Time.unscaledTime * 2.6f);
+            float k = 0.45f + 0.25f * Mathf.Sin(now * 2.6f);
+            if (lastSkeletonAlpha >= 0f && Mathf.Abs(k - lastSkeletonAlpha) < SkeletonVisibleDelta) return;
+            lastSkeletonAlpha = k;
+
             for (int i = 0; i < skeletons.Count; i++)
             {
                 if (skeletons[i] == null) continue;

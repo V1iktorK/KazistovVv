@@ -594,8 +594,20 @@ namespace KazistovVvXrEditor
             if (!Directory.Exists(outputDir)) Directory.CreateDirectory(outputDir);
             if (!Directory.Exists(asciiOutputDir)) Directory.CreateDirectory(asciiOutputDir);
 
-            string apkPath = Path.Combine(asciiOutputDir, "KazistovVv.apk");
-            string finalApkPath = Path.Combine(outputDir, "KazistovVv.apk");
+            // ИМЯ АРТЕФАКТА — ПО ВАРИАНТУ ГРАФИЧЕСКОГО API (P4-19, 11.11.2026).
+            //
+            // ЧТО БЫЛО: оба варианта (шлем/Vulkan и планшет/GLES3) писали один и тот же
+            // `KazistovVv.apk`. Собрав шлем, легко было поставить не тот APK на планшет и искать
+            // «чёрный экран» вместо «не тот файл».
+            // ЧТО СТАЛО: имя говорит, для какого устройства сборка (`Tools/xr-build-apk-ascii.ps1`
+            // выбирает вариант ключом `-Gfx tablet|headset`, он же выставляет `KAZISTOVVV_GFX`).
+            bool glesVariant = string.Equals(
+                System.Environment.GetEnvironmentVariable("KAZISTOVVV_GFX"), "gl",
+                System.StringComparison.OrdinalIgnoreCase);
+            string apkName = glesVariant ? "KazistovVv-AR-gles3.apk" : "KazistovVv-VR-vulkan.apk";
+
+            string apkPath = Path.Combine(asciiOutputDir, apkName);
+            string finalApkPath = Path.Combine(outputDir, apkName);
 
             ConfigureXrLoaders();
             VerifyAndroidLoadersOrThrow();   // без ARCore APK не выпускаем (дефект 05.11.2026)
@@ -616,18 +628,15 @@ namespace KazistovVvXrEditor
             // ПОСЛЕДСТВИЕ ДЛЯ РАБОТЫ: собрать APK из командной строки было НЕВОЗМОЖНО вообще,
             // хотя скрипт `Tools/xr-build-apk-ascii.ps1` для этого и написан.
             //
-            // ТЕПЕРЬ настройка вызывается здесь, до сборки. Если пароля нет — `Configure()`
-            // печатает понятную ошибку, а не молчит.
-            try
-            {
-                KazistovVvXrEditor.KvAndroidSigning.Configure();
-            }
-            catch (System.Exception error)
-            {
-                // Подпись — не повод падать здесь: сборка всё равно сообщит о проблеме понятнее,
-                // если ключ действительно нужен. Но в журнале причина останется.
-                Debug.LogWarning("[KvXr] настройка подписи не удалась: " + error.Message);
-            }
+            // ТЕПЕРЬ настройка вызывается здесь, до сборки — И ОСТАНАВЛИВАЕТ СБОРКУ, ЕСЛИ НЕ ВЫШЛО.
+            //
+            // ИСПРАВЛЕНО 11.11.2026. Раньше исключение ловилось и превращалось в предупреждение
+            // («подпись — не повод падать»). На деле повод: сборка продолжалась с
+            // `useCustomKeystore = 1` и БЕЗ паролей, падала в Gradle и сообщала
+            // «No keystore passwords were found» — про пароли, хотя причиной чаще был
+            // отсутствующий ФАЙЛ ключа (именно так сборка и падала 11.11.2026). Останавливаемся
+            // здесь, где причина ещё известна.
+            KazistovVvXrEditor.KvAndroidSigning.ConfigureOrThrow();
 
             // ПЕРЕКЛЮЧАЕМ АКТИВНУЮ ПЛАТФОРМУ НА ANDROID ПЕРЕД СБОРКОЙ.
             //
@@ -1190,11 +1199,25 @@ namespace KazistovVvXrEditor
 
                 if (Directory.Exists(testsParked) && CountFilesIn(testsParked) > 0)
                 {
-                    report.Success = false;
-                    report.FilesLeftInTemp = CountFilesIn(testsParked);
-                    report.Detail += " · ПАРКОВКА ОТМЕНЕНА: в Temp остались файлы прошлой парковки, " +
-                                     "перенесите их в Assets вручную";
-                    return report;
+                    // УСТАРЕВШИЙ ДУБЛЬ ОТКЛАДЫВАЕМ, А НЕ ОТМЕНЯЕМ СБОРКУ (11.11.2026).
+                    // Раньше здесь сборка останавливалась, и следующая попытка падала на
+                    // `CS0246` (тесты попадали в плеер), хотя переносить было нечего: в `Assets`
+                    // те же файлы. Данные не удаляются — дубль уезжает в `…_stale_<время>`.
+                    if (IsStaleParkingDuplicate(testsPath, testsParked))
+                    {
+                        string aside = MoveAsideStaleParking(testsParked);
+                        if (aside != null)
+                            report.Detail += " · устаревший дубль отложен в " + Path.GetFileName(aside);
+                    }
+
+                    if (Directory.Exists(testsParked) && CountFilesIn(testsParked) > 0)
+                    {
+                        report.Success = false;
+                        report.FilesLeftInTemp = CountFilesIn(testsParked);
+                        report.Detail += " · ПАРКОВКА ОТМЕНЕНА: в Temp остались файлы прошлой парковки, " +
+                                         "которых нет в Assets — перенесите их вручную";
+                        return report;
+                    }
                 }
             }
 
@@ -1492,6 +1515,56 @@ namespace KazistovVvXrEditor
                 parked,
                 folderExists ? "есть" : "отсутствует",
                 folderExists && inAssets == 0 ? " — ПАПКА ПУСТА, её пересоздала Unity (дефект A2)" : string.Empty);
+        }
+
+        /// <summary>
+        /// ОСТАТОК ПРОШЛОЙ ПАРКОВКИ — ЭТО ДУБЛЬ, А НЕ ЕДИНСТВЕННАЯ КОПИЯ (11.11.2026).
+        ///
+        /// ЧТО БЫЛО. Если сборку убили посреди парковки, в `_tests_parked_for_build` оставался
+        /// комплект файлов. Следующая сборка пыталась «самолечением» вернуть их в `Assets`, все
+        /// файлы конфликтовали (в `Assets` они уже есть), и парковка ОТМЕНЯЛАСЬ — тесты попадали в
+        /// сборку плеера, а сборка падала на `CS0246: UnityPlatformAttribute could not be found`
+        /// (nunit в плеере недоступен). Сообщение при этом говорило «перенесите вручную», хотя
+        /// переносить было нечего: дубль.
+        ///
+        /// ПРАВИЛО: если КАЖДЫЙ файл парковки уже есть в `Assets`, парковка — устаревший дубль, её
+        /// можно отложить в сторону (`_tests_parked_for_build_stale_<время>`) и собрать APK.
+        /// Если хотя бы одного файла в `Assets` нет — ничего не трогаем (это данные).
+        /// </summary>
+        public static bool IsStaleParkingDuplicate(string testsPath, string testsParked)
+        {
+            if (!Directory.Exists(testsParked)) return false;
+            if (!Directory.Exists(testsPath)) return false;
+
+            string[] parked = Directory.GetFiles(testsParked, "*", SearchOption.AllDirectories);
+            if (parked.Length == 0) return false;
+
+            for (int i = 0; i < parked.Length; i++)
+            {
+                string relative = parked[i].Substring(testsParked.Length).TrimStart('\\', '/');
+                if (!File.Exists(Path.Combine(testsPath, relative))) return false;
+            }
+            return true;
+        }
+
+        /// <summary>ОТЛОЖИТЬ УСТАРЕВШИЙ ДУБЛЬ ПАРКОВКИ В СТОРОНУ. Возвращает новый путь или null.</summary>
+        public static string MoveAsideStaleParking(string testsParked)
+        {
+            if (!Directory.Exists(testsParked)) return null;
+            string target = testsParked + "_stale_" + System.DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            try
+            {
+                Directory.Move(testsParked, target);
+                Debug.LogWarning("[KvXr] ПАРКОВКА: устаревший дубль отложен в " + target +
+                                 " (в Assets те же файлы) — сборка продолжается");
+                return target;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[KvXr] ПАРКОВКА: не удалось отложить дубль " + testsParked +
+                                 " (" + e.Message + ")");
+                return null;
+            }
         }
 
     }

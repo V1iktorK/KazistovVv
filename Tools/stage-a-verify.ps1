@@ -21,7 +21,7 @@
       powershell -ExecutionPolicy Bypass -File Tools\stage-a-verify.ps1 -Tag stage-a-red
 #>
 param(
-    [string]$Project = "C:\KazistovVv_Build",
+    [string]$Project = (Split-Path -Parent $PSScriptRoot),
     [string]$Tag = "stage-a",
     [int]$ProbeTimeoutMinutes = 20,
     [int]$GateTimeoutMinutes = 25,

@@ -1035,11 +1035,22 @@ namespace TrajectoryCore
             if (!matchRealAppearance)
             {
                 // Совместимость: старый режим «бирюзовый рентген-призрак» (по умолчанию выключен).
+                //
+                // P2-7 / R1-2 (11.11.2026). ЧТО БЫЛО: `Material m = r.material;` — на каждый
+                // рендерер фантома создавалась личная копия материала, и копии никто не
+                // уничтожал: `Destroy` фантома уничтожал только GameObject (материал живёт
+                // отдельно от него). За показ фантома — десятки осиротевших материалов.
+                // ЧТО СТАЛО: копия создаётся ЯВНО и учитывается владельцем на самом фантоме,
+                // который уничтожает их вместе с собой.
+                PhantomMaterialOwner owner = ghost.GetComponent<PhantomMaterialOwner>();
+                if (owner == null) owner = ghost.AddComponent<PhantomMaterialOwner>();
                 foreach (Renderer r in ghost.GetComponentsInChildren<Renderer>(true))
                 {
-                    Material m = r.material;
-                    if (m == null) continue;
+                    if (r == null || r.sharedMaterial == null) continue;
+                    Material m = new Material(r.sharedMaterial);
                     GhostMaterial.MakeGhost(m, cfg.tint, ghostAlpha);
+                    r.sharedMaterial = m;
+                    owner.Track(m);
                     r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                     r.receiveShadows = false;
                     r.allowOcclusionWhenDynamic = false;
@@ -1375,6 +1386,39 @@ namespace TrajectoryCore
             float t = Vector3.Dot(m, ray.direction);
             if (t < 0f) t = 0f;
             return Vector3.Distance(center, ray.origin + ray.direction * t) - radius;
+        }
+    }
+
+    /// <summary>
+    /// ВЛАДЕЛЕЦ КОПИЙ МАТЕРИАЛОВ ФАНТОМА (P2-7 / R1-2, 11.11.2026).
+    ///
+    /// ЗАЧЕМ. Копия материала, созданная вручную (`new Material(source)`), НЕ является частью
+    /// GameObject: `Destroy` фантома уничтожает иерархию, но материалы остаются в памяти
+    /// навсегда. Компонент висит на корне фантома и уничтожает учтённые копии вместе с собой.
+    ///
+    /// ПОЧЕМУ НЕ `MaterialPropertyBlock`. В режиме «рентген-призрак» меняется не только цвет:
+    /// `GhostMaterial.MakeGhost` переводит материал в прозрачный режим (ZWrite/Blend/render
+    /// queue), а это свойства САМОГО материала, а не значения на рендерер.
+    /// </summary>
+    internal sealed class PhantomMaterialOwner : MonoBehaviour
+    {
+        private readonly System.Collections.Generic.List<Material> created =
+            new System.Collections.Generic.List<Material>();
+
+        /// <summary>Учесть созданную копию — она будет уничтожена вместе с фантомом.</summary>
+        public void Track(Material material)
+        {
+            if (material != null) created.Add(material);
+        }
+
+        /// <summary>Сколько копий на учёте (для теста и журнала).</summary>
+        public int Count { get { return created.Count; } }
+
+        private void OnDestroy()
+        {
+            for (int i = 0; i < created.Count; i++)
+                if (created[i] != null) Destroy(created[i]);
+            created.Clear();
         }
     }
 }

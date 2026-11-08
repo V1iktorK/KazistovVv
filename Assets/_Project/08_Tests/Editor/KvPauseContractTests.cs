@@ -26,6 +26,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Единый контракт паузы у исполнителей движения.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvPauseContractTests
     {
         private static string FindSource(string fileName)
@@ -166,3 +167,4 @@ namespace KazistovVvTests
         }
     }
 }
+

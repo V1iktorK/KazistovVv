@@ -163,8 +163,33 @@ namespace KazistovVvXr
             EnsurePointerData();
         }
 
+        // ------------------------------------------------------------------ кэш настройки (P2-3)
+        //
+        // ЧТО БЫЛО. `Update()` каждый кадр спрашивал `KvXrSettings.GetShowPanel()`, а это чтение
+        // ключа `PlayerPrefs` в кадре 72 Гц.
+        // ЧЕМ ЭТО ГРОЗИЛО. Лишнее обращение к файлу настроек в кадре — неровный кадр на шлеме.
+        // ТЕПЕРЬ значение снимается по событию `KvXrSettingsChanged` (и в `OnEnable`).
+        private bool cachedShowPanel = KvXrSettings.DefaultShowPanel != 0;
+
+        private void ReloadRaySettings()
+        {
+            cachedShowPanel = KvXrSettings.GetShowPanel();
+        }
+
+        void OnEnable()
+        {
+            KvXrSettingsChanged.SettingsChanged += OnSettingsChanged;
+            ReloadRaySettings();
+        }
+
+        private void OnSettingsChanged()
+        {
+            ReloadRaySettings();
+        }
+
         void OnDisable()
         {
+            KvXrSettingsChanged.SettingsChanged -= OnSettingsChanged;
             if (line != null) line.enabled = false;
             HideCursor();
             if (currentHover != null) ClearHover();
@@ -178,7 +203,7 @@ namespace KazistovVvXr
 
         void Update()
         {
-            if (KvXrSettings.GetShowPanel() == false)
+            if (cachedShowPanel == false)   // значение из кэша настроек (P2-3), не из PlayerPrefs
             {
                 if (line != null) line.enabled = false;
                 HideCursor();
@@ -187,9 +212,24 @@ namespace KazistovVvXr
                 return;
             }
 
-            // ПОИСК ПАНЕЛИ — `FindAnyObjectByType`: `FindFirstObjectByType` в Unity 6 объявлен
-            // устаревшим (CS0618), а гейт проекта требует НОЛЬ предупреждений компилятора.
-            if (groupPanel == null) groupPanel = UnityEngine.Object.FindAnyObjectByType<KvXrGroupPanel>();
+            // ПАНЕЛЬ БЕРЁТСЯ ИЗ РЕЕСТРА, А НЕ ПОИСКОМ ПО ВСЕЙ СЦЕНЕ (P2-4, 11.11.2026).
+            //
+            // ЧТО БЫЛО. `if (groupPanel == null) groupPanel = FindAnyObjectByType<KvXrGroupPanel>();`
+            // прямо в `Update()` — то есть полный обход сцены КАЖДЫЙ кадр, пока панели в сцене ещё
+            // нет: на старте, пока она не создана, и всё время, пока окно закрыто или панель
+            // пересоздаётся. Это ровно та же ошибка, что была с `Camera.main` (см. шапку выше).
+            //
+            // ЧЕМ ЭТО ГРОЗИЛО. Обход сцены в кадре 72 Гц — в самом начале работы шлема, когда и без
+            // того идёт загрузка и настройка, — и оператор видит «шлем тормозит на старте».
+            //
+            // ТЕПЕРЬ панель берётся из реестра `KvXrPanels` / `KvXrGroupPanel.Active` (панель сама
+            // регистрируется в `Awake` и снимается в `OnDestroy`), поэтому поиск по сцене не нужен
+            // вовсе: нет панели — луч просто выключен до её появления.
+            if (groupPanel == null)
+            {
+                groupPanel = KvXrPanels.HandPanel;
+                if (groupPanel == null) groupPanel = KvXrGroupPanel.Active;
+            }
             if (groupPanel == null && !useEventSystemFallback)
             {
                 if (line != null) line.enabled = false;

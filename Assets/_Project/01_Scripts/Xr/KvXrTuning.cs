@@ -33,8 +33,23 @@ namespace KazistovVvXr
         /// <summary>Имя файла подстройки в папке данных приложения.</summary>
         public const string FileName = "kv_xr_tuning.txt";
 
-        /// <summary>Как часто перечитывать файл, секунды. 2 с — «на ходу», без нагрузки на кадр.</summary>
-        public const float ReloadIntervalSeconds = 2f;
+        /// <summary>
+        /// КАК ЧАСТО ПЕРЕЧИТЫВАТЬ ФАЙЛ, СЕКУНДЫ (P2-13, 11.11.2026).
+        ///
+        /// ЧТО БЫЛО. 2 с: `Tick()` раз в две секунды делал `File.Exists` + `File.ReadAllText`
+        /// СИНХРОННО на главном потоке из `KvXrRig.Update`.
+        ///
+        /// ЧЕМ ЭТО ГРОЗИЛО. На шлеме `persistentDataPath` — не быстрая ФС (эмуляция внешнего
+        /// хранилища): чтение файла на главном потоке давало «столб» кадра каждые две секунды,
+        /// а 72 Гц — это 13,9 мс на весь кадр. Оператор видел периодические рывки и не мог
+        /// связать их с подстройкой.
+        ///
+        /// ТЕПЕРЬ интервал 8 с И файл не читается, если он не менялся (`File.GetLastWriteTimeUtc`):
+        /// цена одного тика — один `stat` файла. Подстройка по-прежнему применяется без пересборки,
+        /// только не мгновенно, а в пределах восьми секунд.
+        /// </summary>
+        public const float ReloadIntervalSeconds = 8f;
+
 
         // ------------------------------------------------------------------ имена ключей
 
@@ -100,6 +115,7 @@ namespace KazistovVvXr
         private static bool fileFound;
         private static float nextReadTime;
         private static string lastRawText;
+        private static long lastReadWriteTicks = -1;   // время изменения файла на прошлом чтении (P2-13)
         private static string lastApplied;
         private static bool reportedAbsent;
 
@@ -115,6 +131,17 @@ namespace KazistovVvXr
 
         /// <summary>Файл подстройки найден и прочитан.</summary>
         public static bool FileFound { get { return fileFound; } }
+
+        /// <summary>
+        /// НОМЕР ВЕРСИИ ДЕЙСТВУЮЩИХ ЗНАЧЕНИЙ (P2-5, 11.11.2026). Растёт каждый раз, когда файл
+        /// подстройки применён заново (или убран). Читатели, которые держат значения в кэше,
+        /// сравнивают этот номер с сохранённым — это сравнение одного `int` в кадре вместо
+        /// чтения `PlayerPrefs` и повторного разбора файла.
+        /// </summary>
+        public static int Revision { get { return revision; } }
+
+        private static int revision;
+
 
         /// <summary>Сколько ключей применено (для журнала).</summary>
         public static int KeyCount { get { return values.Count; } }
@@ -274,28 +301,61 @@ namespace KazistovVvXr
         /// ПЕРЕЧИТАТЬ ФАЙЛ, ЕСЛИ ПОРА. Зовётся каждый кадр из `KvXrRig`; внутри — не чаще, чем
         /// раз в <see cref="ReloadIntervalSeconds"/> секунд. Возвращает строку для журнала, если
         /// что-то изменилось, иначе null.
+        ///
+        /// P2-13: сам интервал и проверка «файл не менялся» вынесены в чистые функции
+        /// (<see cref="IsTimeToReload"/>, <see cref="FileChangedSince"/>) — их проверяют тесты.
         /// </summary>
         public static string Tick()
         {
-            if (Time.realtimeSinceStartup < nextReadTime) return null;
+            if (!IsTimeToReload(Time.realtimeSinceStartup, nextReadTime)) return null;
             nextReadTime = Time.realtimeSinceStartup + ReloadIntervalSeconds;
             return Reload();
+        }
+
+        /// <summary>ПОРА ЛИ ЧИТАТЬ ФАЙЛ — чистая функция (проверяется тестом P2-13).</summary>
+        public static bool IsTimeToReload(float now, float nextReadTime)
+        {
+            return now >= nextReadTime;
+        }
+
+        /// <summary>
+        /// ФАЙЛ МЕНЯЛСЯ С ПРОШЛОГО ЧТЕНИЯ — чистая функция (проверяется тестом P2-13).
+        /// `cachedTicks &lt; 0` — прошлого чтения не было; `writeTicks &lt; 0` — время файла не
+        /// получено, и тогда читаем (лучше прочитать лишний раз, чем пропустить подстройку).
+        /// </summary>
+        public static bool FileChangedSince(long writeTicks, long cachedTicks)
+        {
+            if (writeTicks < 0) return true;
+            if (cachedTicks < 0) return true;
+            return writeTicks != cachedTicks;
         }
 
         /// <summary>
         /// ПЕРЕЧИТАТЬ ФАЙЛ НЕМЕДЛЕННО. Возвращает строку для журнала, если значения изменились
         /// (или файл появился/пропал), иначе null: журнал не должен забиваться одним и тем же.
+        ///
+        /// P2-13 (11.11.2026). ЧТО БЫЛО: каждое обращение безусловно делало `File.ReadAllText` —
+        /// восемь килобайт (а с ростом файла больше) синхронно на главном потоке. ЧЕМ ГРОЗИЛО:
+        /// ровно тем же «столбом» кадра, что описан у интервала выше.
+        /// ТЕПЕРЬ сначала сравнивается ВРЕМЯ ИЗМЕНЕНИЯ файла: не изменился — чтения нет вовсе.
         /// </summary>
         public static string Reload()
         {
             string text = null;
             bool exists = false;
+            long writeTicks = -1;
             try
             {
                 string path = FilePath;
                 if (File.Exists(path))
                 {
                     exists = true;
+                    try { writeTicks = File.GetLastWriteTimeUtc(path).Ticks; }
+                    catch (Exception) { writeTicks = -1; }
+
+                    // Не менялся с прошлого чтения — файл не читаем (остаётся один `stat`).
+                    if (lastRawText != null && !FileChangedSince(writeTicks, lastReadWriteTicks)) return null;
+
                     text = File.ReadAllText(path);
                 }
             }
@@ -312,17 +372,21 @@ namespace KazistovVvXr
                 fileFound = false;
                 values = new Dictionary<string, string>();
                 lastRawText = null;
+                lastReadWriteTicks = -1;
+                revision++;      // значения изменились — держатели кэшей обязаны перечитать (P2-5)
                 if (hadValues) return BuildLogLine("файл подстройки убран — работают настройки по умолчанию");
                 if (reportedAbsent) return null;
                 reportedAbsent = true;
                 return "[KvXr] подстройка: файла нет (" + FilePath + ") — работают настройки по умолчанию";
             }
 
+            lastReadWriteTicks = writeTicks;
             if (string.Equals(text, lastRawText, StringComparison.Ordinal)) return null;
 
             lastRawText = text;
             fileFound = true;
             values = Parse(text);
+            revision++;          // новые значения применены — держатели кэшей перечитают (P2-5)
 
             string line = BuildLogLine("файл подстройки применён");
             if (line == lastApplied) return null;

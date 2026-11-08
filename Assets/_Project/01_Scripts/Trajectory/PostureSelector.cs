@@ -100,6 +100,27 @@ namespace TrajectoryCore
             return Mathf.DeltaAngle((float)from, (float)to);
         }
 
+        /// <summary>
+        /// СМЕНА ВЕТВИ РЕШЕНИЯ IK ОПРАВДАНА? (P1-9, 11.11.2026)
+        ///
+        /// ЧТО БЫЛО. Условие стояло наоборот: `bestCost &gt; lockedCost * (1 - hysteresis)`.
+        /// `best` — ГЛОБАЛЬНЫЙ минимум, поэтому `bestCost &lt;= lockedCost`, и условие было истинно
+        /// ровно тогда, когда выигрыш МАЛ. Ветвь переключалась на шуме, а при явном улучшении её
+        /// удерживали — гистерезис работал против себя.
+        ///
+        /// ЧЕМ ЭТО ГРОЗИЛО. Дёрганье конфигурации (локоть вверх/вниз) посреди траектории: робот
+        /// менял ветвь там, где оператор этого не ждал.
+        ///
+        /// Теперь переключение — только при выигрыше больше `hysteresis` (доля стоимости).
+        /// </summary>
+        public static bool ShouldSwitchBranch(double bestCost, double lockedCost, double hysteresis)
+        {
+            if (double.IsNaN(bestCost) || double.IsInfinity(bestCost)) return false;
+            if (double.IsNaN(lockedCost) || double.IsInfinity(lockedCost)) return true;   // держаться не за что
+            double h = hysteresis < 0.0 ? 0.0 : (hysteresis > 0.95 ? 0.95 : hysteresis);
+            return bestCost < lockedCost * (1.0 - h);
+        }
+
         /// <summary>Выбор решения с гистерезисом: держимся за ветвь, пока она адекватна.</summary>
         public IkSolution Select(System.Collections.Generic.List<IkSolution> candidates, double[] qPrev)
         {
@@ -117,7 +138,7 @@ namespace TrajectoryCore
             }
 
             if (bestCost == double.MaxValue) return best;             // ничего валидного
-            if (foundLocked && bestCost > lockedCost * (1.0 - hysteresis))
+            if (foundLocked && ShouldSwitchBranch(bestCost, lockedCost, hysteresis))
                 return best;                                          // смена ветви оправдана
             if (foundLocked && !SameBranch(best.tag, lockedTag))
             {

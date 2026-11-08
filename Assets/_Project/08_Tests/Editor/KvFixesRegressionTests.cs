@@ -21,6 +21,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Сквозной сторож: исправления ночи не откачены.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvFixesRegressionTests
     {
         /// <summary>
@@ -138,3 +139,4 @@ namespace KazistovVvTests
         }
     }
 }
+

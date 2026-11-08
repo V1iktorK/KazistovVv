@@ -26,6 +26,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Адаптер кистей: данные доходят до распознавания жестов.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvGestureAdapterTests
     {
         private static string Find(string fileName)
@@ -163,3 +164,4 @@ namespace KazistovVvTests
         }
     }
 }
+

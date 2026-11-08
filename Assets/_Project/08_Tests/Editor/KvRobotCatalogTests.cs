@@ -19,6 +19,7 @@ namespace KazistovVv.Tests
     /// (это YAML Unity), достаём `m_Name` — и сверяем с именами из каталога. Копии `*_LOD*`
     /// не учитываем: в рантайме они тоже отбрасываются, проверка обязана видеть то же.
     /// </summary>
+        [Category(KazistovVvTests.KvTestCategories.Fast)]
     public class KvRobotCatalogTests
     {
         private static string ProjectRoot
@@ -193,3 +194,4 @@ namespace KazistovVv.Tests
         }
     }
 }
+

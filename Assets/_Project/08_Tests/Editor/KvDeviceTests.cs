@@ -32,6 +32,7 @@ namespace KazistovVvTests
     /// Тесты написаны ДО правки настроек и на прежнем состоянии падали (правило [K5]);
     /// после применения решений §31 — зелёные.
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvDeviceTests
     {
         private const string ProjectSettingsPath = "ProjectSettings/ProjectSettings.asset";
@@ -263,3 +264,4 @@ namespace KazistovVvTests
         }
     }
 }
+

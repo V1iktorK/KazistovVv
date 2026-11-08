@@ -211,6 +211,55 @@ namespace KazistovVvFeatures
             return Create(FindUnlit(kind), name, color, true);
         }
 
+        /// <summary>
+        /// СОЗДАТЬ ПОЛУПРОЗРАЧНЫЙ UNLIT-МАТЕРИАЛ (добавлено 11.11.2026).
+        ///
+        /// ЗАЧЕМ ОТДЕЛЬНАЯ ФАБРИКА. Рантайм-коду нельзя искать шейдеры самому (правило §32 и тест
+        /// `Sources_HaveNoDirectShaderLookupsInRuntimeCode`): такой вызов даёт «розовую» поверхность
+        /// под чужим конвейером и пропавший материал в сборке. `KvArPlaneVisualizer` заливку стола
+        /// создавал напрямую через `Shader.Find("Sprites/Default")` — единственное место, где
+        /// правило оставалось нарушенным, и тест набора был КРАСНЫМ.
+        ///
+        /// ПОЧЕМУ СПРАЙТОВЫЙ ШЕЙДЕР ПЕРВЫМ. Из всей цепочки он один уважает альфу без правки
+        /// режимов смешивания и одинаково работает в URP и HDRP. Остальные — запасной путь: им
+        /// прозрачность выставляется свойствами (`_Surface`/`_Blend`/`_SrcBlend`), а если свойства
+        /// нет — материал останется непрозрачным, но НЕ станет невидимым.
+        /// </summary>
+        public static Material CreateUnlitTransparent(string name, Color color)
+        {
+            return CreateUnlitTransparent(ActiveKind(), name, color);
+        }
+
+        /// <summary>Полупрозрачный Unlit-материал под заданный конвейер.</summary>
+        public static Material CreateUnlitTransparent(KvPipelineKind kind, string name, Color color)
+        {
+            Shader shader = FindFirst(new[]
+            {
+                SpriteDefaultName, BuiltInUnlitName, UrpUnlitName, HdrpUnlitName
+            });
+            Material material = Create(shader, name, color, true);
+            if (material != null) ConfigureTransparent(material);
+            return material;
+        }
+
+        /// <summary>
+        /// ВКЛЮЧИТЬ ПРОЗРАЧНОСТЬ ПО СВОЙСТВАМ ШЕЙДЕРА. Каждое свойство проверяется отдельно:
+        /// запись в несуществующее свойство молча ничего не делает, и материал остался бы
+        /// непрозрачным (та же ловушка, что описана у `ApplyColor`).
+        /// </summary>
+        private static void ConfigureTransparent(Material material)
+        {
+            if (material.HasProperty("_Surface")) material.SetFloat("_Surface", 1f);
+            if (material.HasProperty("_Blend")) material.SetFloat("_Blend", 0f);
+            if (material.HasProperty("_SrcBlend"))
+                material.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            if (material.HasProperty("_DstBlend"))
+                material.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            if (material.HasProperty("_ZWrite")) material.SetFloat("_ZWrite", 0f);
+            material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+        }
+
         private static Material Create(Shader shader, string name, Color color, bool unlit)
         {
             if (shader == null) return null;

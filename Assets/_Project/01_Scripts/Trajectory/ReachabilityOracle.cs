@@ -114,16 +114,35 @@ namespace TrajectoryCore
             }
 
             long key = VoxelKey(point);
-            if (cache.TryGetValue(key, out ReachResult cached) &&
-                Time.realtimeSinceStartup - cacheTime < 1.5f)
-                return cached;
+            ReachResult cachedResult;
+            if (cache.TryGetValue(key, out cachedResult) &&
+                Time.realtimeSinceStartup - cachedResult.stampMs / 1000f < CacheTtlSeconds)
+                return cachedResult;
 
             r = scara != null ? QueryScara(point) : QuerySixAxis(point);
             r.stampMs = (long)(Time.realtimeSinceStartup * 1000f);
             cache[key] = r;
-            cacheTime = Time.realtimeSinceStartup;
             return r;
         }
+
+        /// <summary>
+        /// СКОЛЬКО ЖИВЁТ ЗАПИСЬ КЭША ДОСТИЖИМОСТИ, секунды (P1-11).
+        ///
+        /// ЧТО БЫЛО. Свежесть проверялась ОДНИМ полем `cacheTime` на весь словарь, и оно
+        /// перезаписывалось при КАЖДОМ попадании в новую точку. Поэтому запись, положенная
+        /// десять минут назад, считалась свежей, если рядом только что спросили другую точку.
+        /// По этому вердикту красится прицел и оператор решает, тянуться ли туда.
+        ///
+        /// ЧЕМ ЭТО ГРОЗИЛО. Оператор убрал со стола препятствие (или подвинул стол) — прицел
+        /// продолжает показывать «недостижимо/пересечение» по старому вердикту, и это выглядит как
+        /// «робот разучился». Обратный случай хуже: зона освободилась, а вердикт «можно» устарел.
+        ///
+        /// ТЕПЕРЬ: время хранится ВМЕСТЕ с записью (`ReachResult.stampMs`), у каждой точки свой срок.
+        /// </summary>
+        public const float CacheTtlSeconds = 1.5f;
+
+        /// <summary>Сколько записей в кэше сейчас (для теста P1-11 и журнала).</summary>
+        public int CacheCount { get { return cache.Count; } }
 
         private float PoseSignature()
         {
@@ -271,46 +290,75 @@ namespace TrajectoryCore
                 return res;
             }
 
-            // Сохраняем позу, решаем IK в реальных трансформах, затем возвращаем.
+            // Сохраняем позу, решаем IK в реальных трансформах, затем ВСЕГДА возвращаем.
+            //
+            // P1-12 (11.11.2026). ЧТО БЫЛО: восстановление позы стояло ПРОСТО ПОСЛЕ вызова
+            // `SolveCCD`, без `try/finally`. Любое исключение внутри расчёта (а он ходит по
+            // настоящим трансформам и мировым матрицам) оставляло робота В ПОЗЕ, КОТОРУЮ ПОСЧИТАЛ
+            // ОРАКУЛ. ЧЕМ ЭТО ГРОЗИЛО: «проверка достижимости» двигала настоящего робота и не
+            // возвращала его — оператор видел рывок без команды, а предохранители считали зазоры
+            // по этой случайной позе.
+            //
+            // ЗАОДНО: условие `err &gt; 0.03f || !ok &amp;&amp; err &gt; 0.03f` было тавтологией —
+            // признак сходимости `ok` не влиял ни на что. Теперь `!ok` сам по себе означает отказ.
             Quaternion[] saved = new Quaternion[six.jointTransforms.Length];
             for (int i = 0; i < saved.Length; i++)
                 saved[i] = six.jointTransforms[i] != null ? six.jointTransforms[i].localRotation : Quaternion.identity;
 
-            bool ok = DHInverse.SolveCCD(six.jointTransforms, six.jointAxesLocal, tip, point,
-                ccdIterations, ccdTolerance);
-            float err = Vector3.Distance(tip.position, point);
-            res.tcp = tip.position;
-
-            // Капсульная цепочка по суставам + инструмент.
-            var nodes = new List<Vector3>();
-            foreach (Transform j in six.jointTransforms)
-            {
-                if (j == null) continue;
-                Vector3 p = j.position;
-                if (nodes.Count > 0 && (p - nodes[nodes.Count - 1]).sqrMagnitude < 1e-6f) continue;
-                nodes.Add(p);
-            }
-            nodes.Add(tip.position);
-            float clr = world.MinDistanceChain(nodes, linkRadius);
-
-            // Лимиты и сингулярности по фактическим углам.
-            float[] angles = six.GetJointAngles();
+            bool ok = false;
+            float err = float.MaxValue;
+            float clr = -1f;
             bool nearLimit = false;
-            if (angles != null && six.jointLimits != null)
+            bool wristSingular = false;
+            try
             {
-                for (int i = 0; i < angles.Length && i < six.jointLimits.Length; i++)
-                {
-                    if (angles[i] < six.jointLimits[i].x + 5f || angles[i] > six.jointLimits[i].y - 5f)
-                    { nearLimit = true; break; }
-                }
-            }
-            bool wristSingular = angles != null && angles.Length > 4 && Mathf.Abs(angles[4]) < 8f;
+                ok = DHInverse.SolveCCD(six.jointTransforms, six.jointAxesLocal, tip, point,
+                    ccdIterations, ccdTolerance);
+                err = Vector3.Distance(tip.position, point);
+                res.tcp = tip.position;
 
-            for (int i = 0; i < saved.Length; i++)
-                if (six.jointTransforms[i] != null) six.jointTransforms[i].localRotation = saved[i];
+                // Капсульная цепочка по суставам + инструмент.
+                var nodes = new List<Vector3>();
+                foreach (Transform j in six.jointTransforms)
+                {
+                    if (j == null) continue;
+                    Vector3 p = j.position;
+                    if (nodes.Count > 0 && (p - nodes[nodes.Count - 1]).sqrMagnitude < 1e-6f) continue;
+                    nodes.Add(p);
+                }
+                nodes.Add(tip.position);
+                clr = world.MinDistanceChain(nodes, linkRadius);
+
+                // Лимиты и сингулярности по фактическим углам.
+                float[] angles = six.GetJointAngles();
+                if (angles != null && six.jointLimits != null)
+                {
+                    for (int i = 0; i < angles.Length && i < six.jointLimits.Length; i++)
+                    {
+                        if (angles[i] < six.jointLimits[i].x + 5f || angles[i] > six.jointLimits[i].y - 5f)
+                        { nearLimit = true; break; }
+                    }
+                }
+                wristSingular = angles != null && angles.Length > 4 && Mathf.Abs(angles[4]) < 8f;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[Reachability] проверка достижимости прервана (" +
+                                 e.GetType().Name + ": " + e.Message + ") — поза робота возвращена");
+                res.verdict = ReachVerdict.Unreachable;
+                res.reason = "проверка прервана";
+                res.clearance = -1f;
+                return res;
+            }
+            finally
+            {
+                // ВОЗВРАТ ПОЗЫ ВСЕГДА — даже при исключении (ради этого и заведён try/finally).
+                for (int i = 0; i < saved.Length; i++)
+                    if (six.jointTransforms[i] != null) six.jointTransforms[i].localRotation = saved[i];
+            }
 
             res.clearance = clr;
-            if (err > 0.03f || !ok && err > 0.03f)
+            if (!ok || err > 0.03f)
             {
                 res.verdict = ReachVerdict.Unreachable;
                 res.reason = "IK не сходится (ошибка " + (err * 1000f).ToString("0") + " мм)";

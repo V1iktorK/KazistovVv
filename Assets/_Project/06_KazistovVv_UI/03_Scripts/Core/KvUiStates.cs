@@ -263,18 +263,39 @@ namespace KazistovVvUI
             loadingBar.gameObject.SetActive(false);
         }
 
-        /// <summary>Начать длительную операцию (планирование, запись, экспорт).</summary>
+        /// <summary>
+        /// Начать длительную операцию (планирование, запись, экспорт).
+        ///
+        /// P2-10 (11.11.2026). ЧТО БЫЛО: `KazistovVvUIManager.UpdateUiStates()` зовёт `Begin`
+        /// КАЖДЫЙ кадр, пока идёт планирование, а `Begin` каждый раз выставлял
+        /// `SetAsLastSibling()` (перестановка в иерархии) и заново присваивал строку статуса.
+        /// Перестановка потомка помечает канвас грязным — весь интерфейс перестраивался 72 раза
+        /// в секунду. ЧЕМ ЭТО ГРОЗИЛО: перестройка канваса съедала кадр 13,9 мс именно во время
+        /// планирования, когда оператор ждёт отклика.
+        /// ТЕПЕРЬ повторный вызов с тем же текстом и прогрессом ничего не делает.
+        /// </summary>
         public static void Begin(string label, float progress = -1f)
         {
             if (instance == null) return;
+            string text = label ?? "";
+
+            if (instance.loading &&
+                instance.loadingProgress == progress &&
+                string.Equals(instance.loadingText, text, System.StringComparison.Ordinal) &&
+                (instance.loadingBar == null || instance.loadingBar.gameObject.activeSelf))
+            {
+                return;   // состояние не изменилось — ни перестановки, ни перестройки канваса
+            }
+
             instance.loading = true;
-            instance.loadingText = label ?? "";
+            instance.loadingText = text;
             instance.loadingProgress = progress;
             instance.loadingStart = Time.realtimeSinceStartup;
             if (instance.loadingBar != null)
             {
-                instance.loadingBar.gameObject.SetActive(true);
-                instance.loadingBar.SetAsLastSibling();
+                if (!instance.loadingBar.gameObject.activeSelf)
+                    instance.loadingBar.gameObject.SetActive(true);
+                instance.loadingBar.SetAsLastSibling();   // вызывается только при начале операции
             }
         }
 

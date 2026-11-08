@@ -56,13 +56,62 @@ namespace KazistovVvUI
                     MenuPath = "Робот/Модель робота/" + captured.Title,
                     Execute = delegate { ApplyModel(captured); },
                     // Доступно, когда в сцене есть стол: ставить робота некуда без стола.
-                    IsEnabled = delegate { return true; }
+                    IsEnabled = delegate { return SceneHasTable(); }
                 });
                 added++;
             }
 
             Debug.Log("[KvRobot] команд выбора модели зарегистрировано: " + added +
                       " (всего моделей " + KvRobotCatalog.All.Length + ")");
+        }
+
+        /// <summary>
+        /// ЕСТЬ ЛИ В СЦЕНЕ СТОЛ — УСЛОВИЕ ДОСТУПНОСТИ КОМАНД МОДЕЛЕЙ (P1-21, 11.11.2026).
+        ///
+        /// ЧТО БЫЛО. `IsEnabled` было `delegate { return true; }`, а строкой выше стоял комментарий
+        /// «Доступно, когда в сцене есть стол: ставить робота некуда без стола». То есть пункт меню
+        /// обещал проверку и не делал её: без стола команда выполнялась, робот появлялся в воздухе
+        /// (или падал на пол), а оператор считал, что «меню разрешило».
+        ///
+        /// ПОЧЕМУ С КЭШЕМ. `IsEnabled` спрашивается оболочкой часто (при отрисовке меню), а обход
+        /// сцены в каждом кадре — прямой удар по кадровому бюджету 72 Гц (раздел P2). Поэтому
+        /// результат живёт `TableCheckCacheSeconds`, а не «столько, сколько получится».
+        /// </summary>
+        public static bool SceneHasTable()
+        {
+            if (Time.unscaledTime - tableCheckAt < TableCheckCacheSeconds) return tableCheckResult;
+            tableCheckAt = Time.unscaledTime;
+
+            // `using System;` + `using UnityEngine;` делают `Object` неоднозначным (дефект E-…),
+            // поэтому тип назван полностью.
+            RegisteredObject[] objects = UnityEngine.Object.FindObjectsByType<RegisteredObject>(
+                FindObjectsInactive.Exclude);
+            bool found = false;
+            for (int i = 0; i < objects.Length; i++)
+            {
+                RegisteredObject item = objects[i];
+                if (item == null) continue;
+                string name = string.IsNullOrEmpty(item.DisplayName) ? item.name : item.DisplayName;
+                if (name != null && name.IndexOf("стол", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    found = true;
+                    break;
+                }
+            }
+            tableCheckResult = found;
+            return found;
+        }
+
+        /// <summary>Сколько секунд держится результат проверки «есть ли стол» (см. `SceneHasTable`).</summary>
+        public const float TableCheckCacheSeconds = 0.5f;
+
+        private static float tableCheckAt = -1000f;
+        private static bool tableCheckResult;
+
+        /// <summary>СБРОСИТЬ КЭШ ПРОВЕРКИ СТОЛА (после создания/удаления стола в том же кадре).</summary>
+        public static void InvalidateTableCache()
+        {
+            tableCheckAt = -1000f;
         }
 
         /// <summary>

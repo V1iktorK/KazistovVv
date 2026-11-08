@@ -148,7 +148,7 @@ namespace KazistovVvXr
         /// <summary>Включить/выключить зону достижимости (запомнить).</summary>
         public static void SetWorkspaceVisible(bool visible)
         {
-            PlayerPrefs.SetInt(KeyWorkspaceVisible, visible ? 1 : 0);
+            SetInt(KeyWorkspaceVisible, visible ? 1 : 0);
         }
 
         /// <summary>Лимиты суставов включены владельцем?</summary>
@@ -160,7 +160,7 @@ namespace KazistovVvXr
         /// <summary>Включить/выключить лимиты суставов (запомнить).</summary>
         public static void SetJointLimitsVisible(bool visible)
         {
-            PlayerPrefs.SetInt(KeyJointLimitsVisible, visible ? 1 : 0);
+            SetInt(KeyJointLimitsVisible, visible ? 1 : 0);
         }
 
         // ---------------------------------------------------- панель у руки ([D20], сессия §32)
@@ -196,7 +196,7 @@ namespace KazistovVvXr
         /// <summary>Показать или скрыть панель у руки.</summary>
         public static void SetQuickPanelVisible(bool visible)
         {
-            PlayerPrefs.SetInt(KeyQuickPanelVisible, visible ? 1 : 0);
+            SetInt(KeyQuickPanelVisible, visible ? 1 : 0);
         }
 
         /// <summary>Форма панели. Значение вне диапазона приводится к полумесяцу, а не падает.</summary>
@@ -209,7 +209,7 @@ namespace KazistovVvXr
 
         public static void SetQuickPanelShape(KvXrQuickShape shape)
         {
-            PlayerPrefs.SetInt(KeyQuickPanelShape, (int)shape);
+            SetInt(KeyQuickPanelShape, (int)shape);
         }
 
         /// <summary>Индекс формы — для сегментированного переключателя настроек.</summary>
@@ -245,7 +245,7 @@ namespace KazistovVvXr
 
         public static void SetQuickPanelHand(KvXrQuickHand hand)
         {
-            PlayerPrefs.SetInt(KeyQuickPanelHand, (int)hand);
+            SetInt(KeyQuickPanelHand, (int)hand);
         }
 
         /// <summary>Индекс руки — для переключателя настроек.</summary>
@@ -280,7 +280,7 @@ namespace KazistovVvXr
 
         public static void SetQuickPanelRadius(float meters)
         {
-            PlayerPrefs.SetFloat(KeyQuickPanelRadius, KvXrQuickPanelLayout.ClampRadius(meters));
+            SetFloat(KeyQuickPanelRadius, KvXrQuickPanelLayout.ClampRadius(meters));
         }
 
         /// <summary>Число кнопок на панели. Ограничено диапазоном 2…12.</summary>
@@ -292,7 +292,7 @@ namespace KazistovVvXr
 
         public static void SetQuickPanelButtonCount(int count)
         {
-            PlayerPrefs.SetInt(KeyQuickPanelButtonCount, KvXrQuickPanelLayout.ClampCount(count));
+            SetInt(KeyQuickPanelButtonCount, KvXrQuickPanelLayout.ClampCount(count));
         }
 
         /// <summary>Строка состояния панели для журнала и вкладки настроек.</summary>
@@ -323,7 +323,7 @@ namespace KazistovVvXr
         /// <summary>Задать способ перемещения (0 — телепорт, 1 — плавный ход).</summary>
         public static void SetMoveMode(KvXrMoveMode mode)
         {
-            PlayerPrefs.SetInt(KeyMoveMode, (int)mode);
+            SetInt(KeyMoveMode, (int)mode);
         }
 
         /// <summary>Индекс способа перемещения — для сегментированного переключателя настроек.</summary>
@@ -342,6 +342,8 @@ namespace KazistovVvXr
         public static void ResetMoveMode()
         {
             PlayerPrefs.DeleteKey(KeyMoveMode);
+            // Сброс — тоже смена настройки: кэши обязаны перечитать значение (P2-3).
+            KvXrSettingsChanged.Notify();
         }
 
         /// <summary>Скорость плавного хода, м/с (0,5…3).</summary>
@@ -353,7 +355,7 @@ namespace KazistovVvXr
 
         public static void SetSmoothSpeed(float metersPerSecond)
         {
-            PlayerPrefs.SetFloat(KeySmoothSpeed, Mathf.Clamp(metersPerSecond, MinSmoothSpeed, MaxSmoothSpeed));
+            SetFloat(KeySmoothSpeed, Mathf.Clamp(metersPerSecond, MinSmoothSpeed, MaxSmoothSpeed));
         }
 
         /// <summary>РАЗГОН/ТОРМОЖЕНИЕ плавного хода, м/с² (1…10).</summary>
@@ -365,7 +367,7 @@ namespace KazistovVvXr
 
         public static void SetMoveAcceleration(float metersPerSecondSquared)
         {
-            PlayerPrefs.SetFloat(KeyMoveAcceleration,
+            SetFloat(KeyMoveAcceleration,
                 Mathf.Clamp(metersPerSecondSquared, MinMoveAcceleration, MaxMoveAcceleration));
         }
 
@@ -378,7 +380,7 @@ namespace KazistovVvXr
 
         public static void SetWalkDeadzone(float fraction)
         {
-            PlayerPrefs.SetFloat(KeyWalkDeadzone, Mathf.Clamp(fraction, MinWalkDeadzone, MaxWalkDeadzone));
+            SetFloat(KeyWalkDeadzone, Mathf.Clamp(fraction, MinWalkDeadzone, MaxWalkDeadzone));
         }
 
         /// <summary>Виньетка комфорта включена (по умолчанию да).</summary>
@@ -389,7 +391,7 @@ namespace KazistovVvXr
 
         public static void SetVignetteEnabled(bool enabled)
         {
-            PlayerPrefs.SetInt(KeyVignette, enabled ? 1 : 0);
+            SetInt(KeyVignette, enabled ? 1 : 0);
         }
 
         /// <summary>Сила виньетки 0…0,8 (доля затемнения краёв экрана).</summary>
@@ -401,7 +403,7 @@ namespace KazistovVvXr
 
         public static void SetVignetteStrength(float strength)
         {
-            PlayerPrefs.SetFloat(KeyVignetteStrength,
+            SetFloat(KeyVignetteStrength,
                 Mathf.Clamp(strength, MinVignetteStrength, MaxVignetteStrength));
         }
 
@@ -426,7 +428,7 @@ namespace KazistovVvXr
 
         public static void SetTeleportDistance(float meters)
         {
-            PlayerPrefs.SetFloat(KeyTeleportDistance, Mathf.Clamp(meters, MinTeleportDistance, MaxTeleportDistance));
+            SetFloat(KeyTeleportDistance, Mathf.Clamp(meters, MinTeleportDistance, MaxTeleportDistance));
         }
 
         // ------------------------------------------------------------------ панель и мир
@@ -440,7 +442,7 @@ namespace KazistovVvXr
 
         public static void SetPanelDistance(float meters)
         {
-            PlayerPrefs.SetFloat(KeyPanelDistance, Mathf.Clamp(meters, MinPanelDistance, MaxPanelDistance));
+            SetFloat(KeyPanelDistance, Mathf.Clamp(meters, MinPanelDistance, MaxPanelDistance));
         }
 
         /// <summary>Масштаб мира (0,1…1): единица — «как в сцене».</summary>
@@ -452,7 +454,7 @@ namespace KazistovVvXr
 
         public static void SetWorldScale(float scale)
         {
-            PlayerPrefs.SetFloat(KeyWorldScale, Mathf.Clamp(scale, MinWorldScale, MaxWorldScale));
+            SetFloat(KeyWorldScale, Mathf.Clamp(scale, MinWorldScale, MaxWorldScale));
         }
 
         /// <summary>Рост оператора, метры (1,33…2,13) — от него считается уровень глаз.</summary>
@@ -464,7 +466,7 @@ namespace KazistovVvXr
 
         public static void SetOperatorHeight(float meters)
         {
-            PlayerPrefs.SetFloat(KeyOperatorHeight, Mathf.Clamp(meters, MinOperatorHeight, MaxOperatorHeight));
+            SetFloat(KeyOperatorHeight, Mathf.Clamp(meters, MinOperatorHeight, MaxOperatorHeight));
         }
 
         /// <summary>Готовая конфигурация рига по сохранённым настройкам.</summary>
@@ -486,7 +488,130 @@ namespace KazistovVvXr
 
         public static void SetPassthrough(bool on)
         {
-            PlayerPrefs.SetInt(KeyPassthrough, on ? 1 : 0);
+            SetInt(KeyPassthrough, on ? 1 : 0);
+        }
+
+        // ============================================================ ПЕРЕКЛЮЧАТЕЛЬ VR / MR
+        //
+        // ЗАЧЕМ ЭТОТ БЛОК (11.11.2026). До него «режим» приходилось включать ГАЛКОЙ
+        // «Режим комнаты (MR): ВКЛ/выкл»: у галки два состояния, но ОБА НЕ НАЗВАНЫ. Оператор
+        // видел «выкл» и не знал, что «выкл» — это VR, а не «ничего не выбрано». Кроме того
+        // галка была только в шлеме: подготовить режим заранее, с компьютера, было негде.
+        //
+        // ПРАВИЛА, КОТОРЫЕ ЗДЕСЬ СОБЛЮДЕНЫ:
+        //   1) ОДНО ХРАНИЛИЩЕ. Переключатель ничего не заводит заново: индекс 0/1 — это чтение
+        //      и запись ТОГО ЖЕ `KeyPassthrough`. Иначе появилось бы второе значение, и они
+        //      разошлись бы (ровно этот класс дефекта уже был в S44: `SetPassthrough` не звали
+        //      ниоткуда, и вся ветка MR была мёртвой).
+        //   2) НЕТ ЗАПИСИ ПРИ ЧТЕНИИ. Геттеры только читают PlayerPrefs — их можно звать из
+        //      EditMode-тестов и из UI каждый кадр.
+        //   3) ПЕРЕКЛЮЧАТЕЛЬ НЕ ОБЕЩАЕТ БОЛЬШЕ, ЧЕМ МОЖЕТ. На шлеме без сквозного вида выбор
+        //      «MR» не превращает приложение в MR: фактический режим решает
+        //      `KvXrPlatformModeSelector`. Поэтому у состояния есть честная строка
+        //      <see cref="ModeStatusLine"/>, а не только «ВКЛ/выкл».
+        //   4) СМЕНА ПРИМЕНЯЕТСЯ ПОСЛЕ ПЕРЕЗАПУСКА. Сквозной вид пересоздаёт XR-сцену, поэтому
+        //      и переключатель, и строка состояния ГОВОРЯТ об этом прямо.
+
+        /// <summary>Сколько положений у переключателя VR/MR (панели строятся по этому числу).</summary>
+        public const int ModeCount = 2;
+
+        /// <summary>Положение «виртуальная реальность» — то же число, что индекс VR.</summary>
+        public const int ModeVr = 0;
+
+        /// <summary>Положение «смешанная реальность».</summary>
+        public const int ModeMr = 1;
+
+        /// <summary>Полная подпись положения — то, что видит оператор в списке настроек.</summary>
+        public static string ModeLabel(int index)
+        {
+            return ModeFromIndex(index) == ModeMr
+                ? "Смешанная реальность (MR)"
+                : "Виртуальная реальность (VR)";
+        }
+
+        /// <summary>Короткая подпись положения — для кнопки в шлеме, где места мало.</summary>
+        public static string ModeShortLabel(int index)
+        {
+            return ModeFromIndex(index) == ModeMr ? "MR" : "VR";
+        }
+
+        /// <summary>
+        /// Индекс → положение. Значение вне диапазона приводится к VR, а не падает: мусор в
+        /// PlayerPrefs не должен оставлять приложение без названного режима.
+        /// </summary>
+        public static int ModeFromIndex(int index)
+        {
+            return index == ModeMr ? ModeMr : ModeVr;
+        }
+
+        /// <summary>Текущее положение переключателя (0 — VR, 1 — MR). Читает то же, что и галка MR.</summary>
+        public static int GetModeIndex()
+        {
+            return GetPassthrough() ? ModeMr : ModeVr;
+        }
+
+        /// <summary>
+        /// ЗАДАТЬ ПОЛОЖЕНИЕ ПЕРЕКЛЮЧАТЕЛЯ. Пишет ТО ЖЕ хранилище, что и <see cref="SetPassthrough"/>,
+        /// и сразу сохраняет PlayerPrefs: выбор обязан пережить перезапуск (именно этого требует
+        /// подпись «применится после перезапуска»).
+        /// </summary>
+        public static void SetModeIndex(int index)
+        {
+            SetPassthrough(ModeFromIndex(index) == ModeMr);
+            PlayerPrefs.Save();
+        }
+
+        /// <summary>Обратное положение — для одной кнопки-переключателя (шлем, горячая клавиша).</summary>
+        public static int NextModeIndex()
+        {
+            return GetModeIndex() == ModeMr ? ModeVr : ModeMr;
+        }
+
+        /// <summary>
+        /// ПЕРЕКЛЮЧИТЬ РЕЖИМ И ВЕРНУТЬ НОВОЕ ПОЛОЖЕНИЕ. Вызывающий пишет его в журнал — чтобы
+        /// переключение было ВИДНО, а не «что-то щёлкнуло» (правило проекта §37).
+        /// </summary>
+        public static int ToggleMode()
+        {
+            int next = NextModeIndex();
+            SetModeIndex(next);
+            return next;
+        }
+
+        /// <summary>
+        /// ЧЕСТНАЯ СТРОКА СОСТОЯНИЯ: что выбрано, что из этого выйдет и когда применится.
+        /// Отдельно назван случай «шлем не умеет MR» — иначе включённый переключатель и серый
+        /// экран выглядят как один и тот же дефект.
+        /// </summary>
+        /// <param name="deviceSupportsMr">шлем ФАКТИЧЕСКИ умеет сквозной вид (по возможностям OpenXR)</param>
+        public static string ModeStatusLine(bool deviceSupportsMr)
+        {
+            int index = GetModeIndex();
+            if (index == ModeMr)
+            {
+                return deviceSupportsMr
+                    ? "Выбрано: СМЕШАННАЯ РЕАЛЬНОСТЬ (MR) · применится после перезапуска приложения"
+                    : "Выбрано: СМЕШАННАЯ РЕАЛЬНОСТЬ (MR) · шлем не дал сквозной вид — " +
+                      "приложение останется в VR";
+            }
+
+            return deviceSupportsMr
+                ? "Выбрано: ВИРТУАЛЬНАЯ РЕАЛЬНОСТЬ (VR) · MR доступен — переключите здесь"
+                : "Выбрано: ВИРТУАЛЬНАЯ РЕАЛЬНОСТЬ (VR) · возможностей MR у устройства нет";
+        }
+
+        /// <summary>Строка состояния по фактическим возможностям текущего устройства.</summary>
+        public static string ModeStatusLine()
+        {
+            return ModeStatusLine(KvXrPlatformModeSelector.Current == KvXrPlatformMode.Mr);
+        }
+
+        /// <summary>Вернуть переключатель в VR (нужно сбросу настроек и тестам).</summary>
+        public static void ResetMode()
+        {
+            PlayerPrefs.DeleteKey(KeyPassthrough);
+            // Сброс режима — тоже смена настройки: правила ходьбы (P2-3) обязаны пересчитать режим.
+            KvXrSettingsChanged.Notify();
         }
 
         // ------------------------------------------------------------------ слои MR [D8]
@@ -518,7 +643,7 @@ namespace KazistovVvXr
 
         public static void SetShowPanel(bool on)
         {
-            PlayerPrefs.SetInt(KeyShowPanel, on ? 1 : 0);
+            SetInt(KeyShowPanel, on ? 1 : 0);
         }
 
         /// <summary>Сетка рабочей зоны робота — [D8] по умолчанию выключена.</summary>
@@ -529,7 +654,7 @@ namespace KazistovVvXr
 
         public static void SetShowWorkZone(bool on)
         {
-            PlayerPrefs.SetInt(KeyShowWorkZone, on ? 1 : 0);
+            SetInt(KeyShowWorkZone, on ? 1 : 0);
         }
 
         /// <summary>Достижимость руки — [D8] по умолчанию выключена.</summary>
@@ -540,7 +665,7 @@ namespace KazistovVvXr
 
         public static void SetShowReach(bool on)
         {
-            PlayerPrefs.SetInt(KeyShowReach, on ? 1 : 0);
+            SetInt(KeyShowReach, on ? 1 : 0);
         }
 
         /// <summary>Виртуальные стенды лаборатории в MR — [D8] по умолчанию выключены.</summary>
@@ -551,7 +676,7 @@ namespace KazistovVvXr
 
         public static void SetShowVirtualStands(bool on)
         {
-            PlayerPrefs.SetInt(KeyShowVirtualStands, on ? 1 : 0);
+            SetInt(KeyShowVirtualStands, on ? 1 : 0);
         }
 
         /// <summary>Чтение слоя по индексу — единый путь для панели настроек.</summary>
@@ -627,7 +752,7 @@ namespace KazistovVvXr
 
         public static void SetSecondaryRay(bool on)
         {
-            PlayerPrefs.SetInt(KeySecondaryRay, on ? 1 : 0);
+            SetInt(KeySecondaryRay, on ? 1 : 0);
         }
 
         /// <summary>По умолчанию луч идёт из ПРАВОЙ руки ([S1.3]).</summary>
@@ -662,7 +787,7 @@ namespace KazistovVvXr
 
         public static void SetRayHand(KvXrQuickHand hand)
         {
-            PlayerPrefs.SetInt(KeyRayHand, (int)hand);
+            SetInt(KeyRayHand, (int)hand);
         }
 
         public static int GetRayHandIndex()
@@ -684,7 +809,7 @@ namespace KazistovVvXr
 
         public static void SetGroupPanelRadius(float meters)
         {
-            PlayerPrefs.SetFloat(KeyGroupPanelRadius, KvXrGroupPanelLayout.ClampPanelRadius(meters));
+            SetFloat(KeyGroupPanelRadius, KvXrGroupPanelLayout.ClampPanelRadius(meters));
         }
 
         /// <summary>Чем показывать контроллеры. Мусор в значении приводит к мешу, а не к «ничего не видно».</summary>
@@ -696,7 +821,7 @@ namespace KazistovVvXr
 
         public static void SetControllerVisualMode(int modeIndex)
         {
-            PlayerPrefs.SetInt(KeyControllerVisuals, (int)KvXrControllerVisuals.ModeFromIndex(modeIndex));
+            SetInt(KeyControllerVisuals, (int)KvXrControllerVisuals.ModeFromIndex(modeIndex));
         }
 
         /// <summary>Включены ли жесты (по умолчанию — да).</summary>
@@ -707,7 +832,51 @@ namespace KazistovVvXr
 
         public static void SetGesturesEnabled(bool on)
         {
-            PlayerPrefs.SetInt(KeyGestures, on ? 1 : 0);
+            SetInt(KeyGestures, on ? 1 : 0);
+        }
+
+        // ============================================================================================
+        // ЕДИНАЯ ЗАПИСЬ НАСТРОЙОК ШЛЕМА НА ДИСК (P1-2, 11.11.2026).
+        //
+        // ЧТО БЫЛО. Два правила для одного хранилища: `SetModeIndex` и `ToggleMoveMode` звали
+        // `PlayerPrefs.Save()`, а все остальные сеттеры (панель у руки, зона достижимости, лимиты
+        // суставов, пастхру, виньетка, дистанции, масштаб мира, рост оператора, вторичный луч,
+        // рука луча, жесты) — нет. Unity пишет `PlayerPrefs` на диск при штатном выходе; при
+        // падении/принудительной остановке половина настроек терялась, половина нет — и «какая
+        // настройка слетела» зависело от того, какой сеттер её записал.
+        //
+        // ЧЕМ ЭТО ГРОЗИЛО. Наладчик настраивал позу панели и масштаб мира под свой стол, приложение
+        // падало, и после перезапуска масштаб оказывался прежним, а панель — на месте по умолчанию.
+        //
+        // ЧТО СТАЛО. Все сеттеры идут через эти две функции: запись + `Save()` в одном месте.
+        // Геттеры по-прежнему только читают (правило [K5]: чтение не меняет состояние).
+        //
+        // P2-3/P2-5 (11.11.2026). ЗАОДНО ЗДЕСЬ ЖЕ — ОПОВЕЩЕНИЕ О СМЕНЕ НАСТРОЙКИ.
+        // ЧТО БЫЛО. Часть сеттеров звали `KvXrSettingsChanged.Notify()` руками (панель настроек),
+        // а часть — нет: смена способа перемещения двойным X, показ панели кнопкой Y, режим VR/MR.
+        // Пока настройки читались ЖИВЬЁМ в кадре, это было незаметно. Но как только чтение стало
+        // кэшированным (P2-3, P2-5 — иначе бюджет 72 Гц не сходится), пропущенное оповещение
+        // означало бы «нажал Y — панель не появилась, нажал X — способ ходьбы не сменился».
+        //
+        // ЧЕМ ЭТО ГРОЗИЛО. Кэш без инвалидации — не оптимизация, а новый дефект: настройка
+        // записана, а поведение осталось прежним, и в журнале об этом ни слова.
+        //
+        // ТЕПЕРЬ оповещение делает сам путь записи: одна точка на все сеттеры, забыть нельзя.
+        // Слушатели (`KvXrLocomotion`, `KvXrUiPointer`, `KvXrGroupPanel`, `KvXrWalkRules`,
+        // `KvXrPanelAnchor`, `KvXrMrRoom`) только ЧИТАЮТ настройки, поэтому рекурсии нет.
+        // ============================================================================================
+        private static void SetInt(string key, int value)
+        {
+            PlayerPrefs.SetInt(key, value);
+            PlayerPrefs.Save();
+            KvXrSettingsChanged.Notify();
+        }
+
+        private static void SetFloat(string key, float value)
+        {
+            PlayerPrefs.SetFloat(key, value);
+            PlayerPrefs.Save();
+            KvXrSettingsChanged.Notify();
         }
 
         /// <summary>

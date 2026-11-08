@@ -27,6 +27,7 @@ namespace KazistovVvTests
     ///
     /// ЧЕГО ЗДЕСЬ НЕТ: проверки «шлем увидел руку» — это строка живого журнала и взгляд владельца.
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvXrS38Tests
     {
         private static readonly Vector3 Head = new Vector3(0f, 1.6f, 0f);
@@ -352,3 +353,4 @@ namespace KazistovVvTests
         private static KvHandFrame SemiPointing() { return Shaped(0.10f, 0.60f, 0.60f, 0.60f, 0.20f, 0.20f, 0.40f); }
     }
 }
+

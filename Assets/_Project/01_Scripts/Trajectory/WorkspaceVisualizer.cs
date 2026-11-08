@@ -424,15 +424,55 @@ public class WorkspaceVisualizer : MonoBehaviour
         var pivots = new Vector3[n];
         var axes = new Vector3[n];
         float sum = 0f;
+        bool framesOk = true;
         try
         {
             v.JointFrames(q, pivots, axes);
             for (int i = 0; i + 1 < v.Dof; i++) sum += Vector3.Distance(pivots[i], pivots[i + 1]);
         }
-        catch (System.Exception) { }
+        catch (System.Exception e)
+        {
+            // P1-19 (11.11.2026). ЧТО БЫЛО: пустой `catch` вокруг `JointFrames`. При исключении
+            // `sum` оставался нулём, сигнатура выглядела как «…|L0.000|…» и СОВПАДАЛА с той, что
+            // сохранилась при сборке, — `ConfigurationChanged()` решал, что зона построена верно,
+            // и больше её не пересобирал. Оператор видел зону достижимости, посчитанную по
+            // сломанной геометрии, и не узнавал об этом ни из интерфейса, ни из журнала.
+            // ТЕПЕРЬ: отказ виден в журнале, а сигнатура заведомо невалидна → зона пересоберётся.
+            framesOk = false;
+            Debug.LogWarning("[WorkspaceVisualizer] сигнатуру зоны построить не удалось (" +
+                             e.GetType().Name + ": " + e.Message +
+                             ") — зона будет пересобрана, а не «считается верной»");
+        }
+
+        if (!framesOk) return InvalidSignature(z.robot.robotName);
 
         return SignatureBuild(z.robot.robotName, v.Dof, sum, z.robot.transform.position,
             v.Lower, v.Upper, z.scara);
+    }
+
+    /// <summary>
+    /// ЗАВЕДОМО НЕВАЛИДНАЯ СИГНАТУРА (P1-19). Не совпадает ни с сохранённой, ни с другой
+    /// невалидной: два вызова дают РАЗНЫЕ строки — поэтому зона пересобирается, а не «залипает».
+    /// </summary>
+    public static string InvalidSignature(string robotName)
+    {
+        return "invalid|" + (robotName ?? "?") + "|" + System.Guid.NewGuid().ToString("N");
+    }
+
+    /// <summary>
+    /// ДОЛЯ ИСПОЛЬЗОВАННОГО ХОДА СУСТАВА (P3-14 / P1-19, 11.11.2026).
+    ///
+    /// ЧТО БЫЛО. Порог считался как `margin / 360`, хотя поля документированы как «доля хода
+    /// сустава»: для узкого сустава (±70°, ход 140°) индикатор загорался поздно — оператор
+    /// подходил к пределу вплотную, — а для широкого (±180°) вдвое раньше и мигал без причины.
+    ///
+    /// ДЛЯ ПРИЗМЫ `margin` приходит как «доля хода × 360°» (так его считает `LimitMargins`),
+    /// поэтому знаменатель остаётся 360 — иначе доля получилась бы бессмысленной.
+    /// </summary>
+    public static float MarginFraction(float margin, float rangeDeg, bool prismatic)
+    {
+        float travel = prismatic ? 360f : Mathf.Max(1e-4f, rangeDeg);
+        return Mathf.Clamp01(margin / travel);
     }
 
     /// <summary>Сборка строки сигнатуры — ЕДИНСТВЕННОЕ место, где задан её формат.</summary>
@@ -867,8 +907,7 @@ public class WorkspaceVisualizer : MonoBehaviour
             float margin = i < jointMargins.Length ? jointMargins[i] : 0f;
             float range = Mathf.Max(1e-4f, activeValidator.Upper[i] - activeValidator.Lower[i]);
             bool prism = activeValidator.IsPrismatic(i);
-            // margin уже в «градусах» (для призмы — доля хода × 360°), поэтому frac — доля хода.
-            float frac = Mathf.Clamp01(margin / 360f);
+            float frac = MarginFraction(margin, range, prism);
             Color c = margin <= criticalMarginDeg || frac <= criticalMarginFraction ? ColorBad
                     : (margin <= warningMarginDeg || frac <= warningMarginFraction ? ColorWarn : ColorOk);
 

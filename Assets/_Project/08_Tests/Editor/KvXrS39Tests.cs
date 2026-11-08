@@ -21,6 +21,7 @@ namespace KazistovVvTests
     ///
     /// ЧЕГО ЗДЕСЬ НЕТ: «видно ли курсор глазами» — это ваш взгляд в шлеме.
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvXrS39Tests
     {
         // ============================================================ 1. КУРСОР ЛУЧА
@@ -194,3 +195,4 @@ namespace KazistovVvTests
         }
     }
 }
+

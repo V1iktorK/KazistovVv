@@ -23,6 +23,7 @@ namespace KazistovVvTests
     ///   • голос без appID честно говорит «недоступен»;
     ///   • сцены остаются байт в байт.
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvXrS42Tests
     {
         // ============================================================ ОБЩЕЕ
@@ -555,3 +556,4 @@ namespace KazistovVvTests
         }
     }
 }
+

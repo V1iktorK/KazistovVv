@@ -70,6 +70,7 @@ namespace KazistovVvTests
     /// проверяется ровно тот код, который работает в проде, без правок продакшна и без записи файлов.
     /// </summary>
     [TestFixture]
+        [Category(KvTestCategories.Fast)]
     public class KvRobotExportTests
     {
         private const string RobotName = "KR6_R900";
@@ -988,3 +989,4 @@ namespace KazistovVvTests
            ========================================================================================== */
     }
 }
+

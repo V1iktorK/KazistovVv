@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 using KazistovVv.Core;
@@ -82,6 +83,8 @@ namespace KazistovVvAr
 
             if (logOnSpawn) Debug.Log("[KvAr] " + DescribeLastSpawn());
             CheckHeight();
+            LogMaterials(robot.gameObject);
+            ApplyFallbackLookIfPlaceholder(robot.gameObject);
             return true;
         }
 
@@ -125,6 +128,66 @@ namespace KazistovVvAr
             CurrentHeightMeters = MeasureHeightMeters(robot.gameObject);
             if (logOnSpawn) Debug.Log("[KvAr] " + DescribeLastSpawn());
             CheckHeight();
+            LogMaterials(robot.gameObject);
+            ApplyFallbackLookIfPlaceholder(robot.gameObject);
+            return true;
+        }
+
+        /// <summary>
+        /// СТРОКА-ДОКАЗАТЕЛЬСТВО О МАТЕРИАЛАХ. Пишется при каждой постановке робота, чтобы по
+        /// журналу планшета было видно ФАКТ: дошли ли материалы/текстуры до AR-сборки.
+        /// Предупреждение — если видимая геометрия похожа на заглушку («белые панели»).
+        /// </summary>
+        public void LogMaterials(GameObject robotRoot)
+        {
+            if (!logOnSpawn) return;
+            string summary = DescribeMaterials(robotRoot);
+            if (LooksLikePlaceholder(robotRoot))
+            {
+                Debug.LogWarning("[KvAr] МАТЕРИАЛЫ: " + summary +
+                                 " · ВНИМАНИЕ: похоже на заглушку (нет текстур/материала по " +
+                                 "умолчанию) — робот будет однотонным; проверить материалы в " +
+                                 "AR-сборке");
+            }
+            else
+            {
+                Debug.Log("[KvAr] МАТЕРИАЛЫ: " + summary);
+            }
+        }
+
+        /// <summary>
+        /// ЕСЛИ МАТЕРИАЛЫ НЕ ДОШЛИ ДО СБОРКИ — ДАТЬ РОБОТУ УЗНАВАЕМЫЙ ВИД (07.11.2026).
+        /// На фото планшета робот был ОДНОТОННОЙ СВЕТЛОЙ ПАНЕЛЬЮ без окраски и суставов. Когда
+        /// разбор материалов показывает заглушку (нет текстур / материал по умолчанию), модель
+        /// остаётся без окраски и «не читается» как робот. Красим видимые рендереры СОБСТВЕННЫМ
+        /// материалом AR (тот же URP-конвейер, что у остального AR-контента) и пишем это в журнал.
+        /// Нормальные материалы НЕ ТРОГАЕМ: правится только случай «белых панелей».
+        /// </summary>
+        public bool ApplyFallbackLookIfPlaceholder(GameObject robotRoot)
+        {
+            if (robotRoot == null) return false;
+            if (!LooksLikePlaceholder(robotRoot)) return false;
+
+            Material material = KazistovVvFeatures.KvRenderPipelineShaders.CreateLit(
+                "Материал_робота_AR (запасной)", new Color(0.93f, 0.45f, 0.08f));
+            if (material == null) return false;
+
+            Renderer[] renderers = robotRoot.GetComponentsInChildren<Renderer>(true);
+            int painted = 0;
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer renderer = renderers[i];
+                if (renderer == null) continue;
+                Material current = renderer.sharedMaterial;
+                // Правим ТОЛЬКО «пустые» места: материал по умолчанию или его отсутствие.
+                // Части с настоящими материалами остаются как есть.
+                if (current != null && current.shader != null && !IsDefaultMaterial(current)) continue;
+                renderer.sharedMaterial = material;
+                painted++;
+            }
+            if (painted == 0) return false;
+            Debug.Log("[KvAr] МАТЕРИАЛЫ: роботу назначен запасной материал AR (оранжевый, URP/Lit) " +
+                      "на " + painted + " рендереров — исходные материалы в сборку не дошли");
             return true;
         }
 
@@ -219,6 +282,126 @@ namespace KazistovVvAr
         public static bool IsPlausibleRobotHeight(float heightMeters)
         {
             return heightMeters >= 0.30f && heightMeters <= 2.50f;
+        }
+
+        /// <summary>
+        /// МАТЕРИАЛЫ ВИДИМОЙ ГЕОМЕТРИИ — СТРОКА В ЖУРНАЛ (07.11.2026).
+        ///
+        /// ЗАЧЕМ. На фотографиях планшета робот выглядел двумя-тремя однотонными светлыми
+        /// панелями без окраски и суставов — «белые плоские панели вместо частей робота». По
+        /// снимку нельзя отличить три причины: (1) материалы/текстуры не попали в AR-сборку,
+        /// (2) в шаблоне сцены остался материал по умолчанию, (3) всё в порядке, а виноват свет.
+        /// Эта строка даёт ФАКТ вместо догадки: сколько рендереров, какие шейдеры, у скольких
+        /// нет текстуры и у скольких материал по умолчанию.
+        /// </summary>
+        public static string DescribeMaterials(GameObject root, int maxSamples = 6)
+        {
+            if (root == null) return "рендереров 0";
+            Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+            if (renderers == null || renderers.Length == 0) return "рендереров 0";
+
+            var shaderCounts = new StringBuilder();
+            var seen = new Dictionary<string, int>();
+            var order = new List<string>();
+            int noTexture = 0;
+            int defaultMaterial = 0;
+            int noShader = 0;
+            int disabled = 0;
+            int samples = 0;
+
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer renderer = renderers[i];
+                if (renderer == null) continue;
+                if (!renderer.enabled) { disabled++; continue; }
+                Material material = renderer.sharedMaterial;
+                if (material == null || material.shader == null)
+                {
+                    noShader++;
+                    continue;
+                }
+                string shaderName = material.shader.name;
+                if (!seen.ContainsKey(shaderName)) { seen[shaderName] = 0; order.Add(shaderName); }
+                seen[shaderName] = seen[shaderName] + 1;
+
+                if (IsDefaultMaterial(material)) defaultMaterial++;
+                if (material.mainTexture == null) noTexture++;
+
+                if (samples < maxSamples && samples == 0)
+                {
+                    shaderCounts.Append(" · пример: «").Append(renderer.name).Append("» → ")
+                                .Append(shaderName).Append(" / «").Append(material.name).Append("»")
+                                .Append(material.mainTexture != null ? " текстура есть"
+                                    : " ТЕКСТУРЫ НЕТ");
+                }
+                samples++;
+            }
+
+            for (int i = 0; i < order.Count; i++)
+            {
+                if (i > 0) shaderCounts.Append(", ");
+                else shaderCounts.Append(" · шейдеры: ");
+                shaderCounts.Append("«").Append(order[i]).Append("»×").Append(seen[order[i]]);
+            }
+
+            return "рендереров " + renderers.Length +
+                   " (выключено " + disabled + ")" +
+                   " · без текстуры " + noTexture +
+                   " · материал по умолчанию " + defaultMaterial +
+                   " · без материала " + noShader +
+                   shaderCounts;
+        }
+
+        /// <summary>
+        /// ЭТО ЗАГЛУШКА, А НЕ МОДЕЛЬ. Дефект планшета 06.11.2026: вместо робота на экране
+        /// однотонные светлые панели. Признак заглушки — большинство видимых рендереров с
+        /// МАТЕРИАЛОМ ПО УМОЛЧАНИЮ (или вовсе без материала): значит материалы шаблона не дошли
+        /// до сборки. Отсутствие текстуры САМО ПО СЕБЕ признаком не считается: у промышленного
+        /// робота окраска часто задана цветом материала без картинки.
+        /// </summary>
+        public static bool LooksLikePlaceholder(GameObject root)
+        {
+            if (root == null) return false;
+            Renderer[] renderers = root.GetComponentsInChildren<Renderer>(false);
+            if (renderers == null || renderers.Length == 0) return false;
+
+            int suspicious = 0;
+            int counted = 0;
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer renderer = renderers[i];
+                if (renderer == null || !renderer.enabled) continue;
+                counted++;
+                Material material = renderer.sharedMaterial;
+                if (material == null || material.shader == null) { suspicious++; continue; }
+                if (IsDefaultMaterial(material)) suspicious++;
+            }
+            if (counted == 0) return false;
+            return suspicious * 2 >= counted;      // ≥ половины видимой геометрии
+        }
+
+        /// <summary>МАТЕРИАЛ ПО УМОЛЧАНИЮ (заглушка Unity) или служебный шейдер вместо окраски.</summary>
+        private static bool IsDefaultMaterial(Material material)
+        {
+            if (material == null) return true;
+            if (material.shader == null) return true;
+
+            string name = material.name ?? string.Empty;
+            string shader = material.shader.name ?? string.Empty;
+
+            // 1) встроенный материал Unity (у него стоит флаг «не сохранять»)
+            if ((material.hideFlags & HideFlags.DontSave) != 0) return true;
+            // 2) имя материала по умолчанию
+            if (name.IndexOf("default", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            // 3) шейдер чужого конвейера или служебный
+            if (shader == "Standard") return true;
+            if (shader == "Sprites/Default") return true;
+            if (shader == "Unlit/Color") return true;
+            if (shader == "Unlit/Texture") return true;
+            if (shader.IndexOf("InternalErrorShader", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            // 4) у материала вообще нет цвета — это не окраска, а заготовка
+            if (!material.HasProperty("_BaseColor") && !material.HasProperty("_Color")) return true;
+            return false;
         }
     }
 }

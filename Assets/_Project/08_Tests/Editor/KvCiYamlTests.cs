@@ -28,6 +28,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Синтаксис и структура конфигурации CI.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvCiYamlTests
     {
         private static string Root
@@ -186,3 +187,4 @@ namespace KazistovVvTests
         }
     }
 }
+

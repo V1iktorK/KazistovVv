@@ -291,15 +291,59 @@ namespace KazistovVvXr
 
                 manager.enabled = true;
 
-                // Композиционный слой passthrough создаётся подсистемой камеры Meta; если фича
-                // не включена в сборке, подсистемы не будет и кадров камеры не появится.
-                return manager.enabled;
+                // «ПРОВЕРКА ФАКТОМ» БЫЛА ФИКТИВНОЙ (исправлено 11.11.2026).
+                //
+                // ЧТО БЫЛО. Здесь стояло возвращение ЗНАЧЕНИЯ ТОГО ЖЕ ПОЛЯ, которому строкой выше
+                // присвоено `true`. Результат НИКОГДА не мог быть false, и заявленный в шапке класса
+                // принцип («true ТОЛЬКО если включение подтверждено фактом») не выполнялся: на шлеме
+                // без фичи passthrough приложение объявляло себя MR, оператор видел чёрный экран, а
+                // журнал утверждал, что сквозной вид включён.
+                //
+                // ЧТО СТАЛО. Подтверждение — НАЛИЧИЕ ЗАПУЩЕННОЙ ПОДСИСТЕМЫ КАМЕРЫ: композиционный
+                // слой passthrough создаёт именно она. Нет подсистемы — нет и слоя, значит false
+                // с причиной, а не «включено».
+                bool cameraSubsystemRunning = HasRunningCameraSubsystem();
+                if (!cameraSubsystemRunning)
+                {
+                    LastError = "сквозной вид Meta не подтверждён: подсистема камеры не запущена " +
+                                "(фича «Meta Quest: Camera (Passthrough)» не включена в сборке?)";
+                    Debug.LogWarning("[KvMr] " + LastError);
+                    return false;
+                }
+
+                return true;
             }
             catch (Exception e)
             {
                 LastError = "AR Foundation недоступен (" + e.GetType().Name + ": " + e.Message + ")";
                 return false;
             }
+        }
+
+        /// <summary>
+        /// ЕСТЬ ЛИ РЕАЛЬНО ЗАПУЩЕННАЯ ПОДСИСТЕМА КАМЕРЫ. Именно она создаёт композиционный слой
+        /// сквозного вида, поэтому только она и может служить доказательством.
+        ///
+        /// Вынесено отдельным методом, чтобы проверялось тестом и чтобы «факт» был в одном месте:
+        /// раньше доказательством считалось присваивание в поле рядом.
+        /// </summary>
+        public static bool HasRunningCameraSubsystem()
+        {
+            try
+            {
+                var subsystems = new System.Collections.Generic.List<UnityEngine.XR.ARSubsystems.XRCameraSubsystem>();
+                SubsystemManager.GetSubsystems(subsystems);
+                for (int i = 0; i < subsystems.Count; i++)
+                {
+                    var subsystem = subsystems[i];
+                    if (subsystem != null && subsystem.running) return true;
+                }
+            }
+            catch (Exception)
+            {
+                // Отсутствие подсистемного API — это тоже «не подтверждено», а не повод падать.
+            }
+            return false;
         }
 
         /// <summary>

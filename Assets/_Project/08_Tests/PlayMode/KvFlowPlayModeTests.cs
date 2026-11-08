@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -38,6 +39,7 @@ namespace KazistovVvTests
     /// PlayMode-тесты в предопределённой сборке `Assembly-CSharp` не находятся раннером.
     /// </summary>
     [UnityPlatform(RuntimePlatform.WindowsEditor)]
+        [Category("Slow")]   // Slow: см. KvTestCategories в EditMode-сборке
     public class KvFlowPlayModeTests
     {
         /// <summary>Сцена проекта (зарегистрирована в EditorBuildSettings).</summary>
@@ -76,6 +78,13 @@ namespace KazistovVvTests
         [UnitySetUp]
         public IEnumerator LoadMainSceneAndWaitForValidator()
         {
+            // P4-9 (12.11.2026). ЧТО БЫЛО: на время загрузки сцены СТАВИЛСЯ
+            // `LogAssert.ignoreFailingMessages = true` — то есть глушились ВСЕ ошибки лога
+            // целиком. Ошибка самой загрузки сцены (сломанный префаб, отсутствующий ассет,
+            // исключение в Awake) при этом молча проглатывалась, и тест «проходил».
+            // ЧТО СТАЛО: ожидаемый шум HDRP отсекается ПО ПОДСТРОКЕ в собственном приёмнике,
+            // а любая ДРУГАЯ ошибка за время загрузки собирается и валит тест с текстом.
+            StartLogCapture();
             LogAssert.ignoreFailingMessages = true;
 
             if (SceneManager.GetActiveScene().name != SceneName)
@@ -98,13 +107,68 @@ namespace KazistovVvTests
             }
 
             // Сцена поднялась — дальше консоль проверяется СТРОГО.
+            StopLogCapture();
             LogAssert.ignoreFailingMessages = false;
+            AssertNoUnexpectedLoadErrors();
 
             Assert.IsNotNull(flow, "в сцене «" + SceneName + "» нет TrajectoryFlowController");
             Assert.IsNotNull(flow.Validator, "поток не привязал робота (flow.Validator = null)");
             Assert.IsTrue(flow.Validator.Ready, "flow.Validator.Ready не стал true за " +
                                                 ReadyTimeoutSec.ToString("0") + " с");
             v = flow.Validator;
+        }
+
+        // ================================================================== отсев известного шума
+
+        /// <summary>
+        /// ИЗВЕСТНЫЙ ШУМ ЗАГРУЗКИ СЦЕНЫ (P4-9). Единственная строка — предупреждение HDRP об
+        /// атласе отражений: атлас в настройках HDRP мал для этой сцены. Это НЕ ошибка
+        /// проверяемого кода и НЕ предмет теста. Всё остальное ошибкой считается.
+        /// </summary>
+        private static readonly string[] KnownSceneLoadNoise =
+        {
+            "No more space in Reflection Probe Atlas"
+        };
+
+        private readonly List<string> unexpectedLogErrors = new List<string>();
+        private bool capturingLog;
+
+        /// <summary>
+        /// ПРИЁМНИК ЛОГА: копит ТОЛЬКО ошибки и исключения, кроме известного шума. Висит на
+        /// `Application.logMessageReceived` — то есть видит те же сообщения, что и Test Framework,
+        /// но не мешает ему (флаг `ignoreFailingMessages` на время загрузки всё равно включён).
+        /// </summary>
+        private void OnLogMessage(string condition, string stackTrace, LogType type)
+        {
+            if (!capturingLog) return;
+            if (type != LogType.Error && type != LogType.Exception && type != LogType.Assert) return;
+            if (!string.IsNullOrEmpty(condition))
+            {
+                for (int i = 0; i < KnownSceneLoadNoise.Length; i++)
+                    if (condition.Contains(KnownSceneLoadNoise[i])) return;
+            }
+            unexpectedLogErrors.Add(type + ": " + condition);
+        }
+
+        private void StartLogCapture()
+        {
+            unexpectedLogErrors.Clear();
+            capturingLog = true;
+            Application.logMessageReceived += OnLogMessage;
+        }
+
+        private void StopLogCapture()
+        {
+            capturingLog = false;
+            Application.logMessageReceived -= OnLogMessage;
+        }
+
+        /// <summary>Загрузка сцены не имеет права молча проглотить ни одной ошибки.</summary>
+        private void AssertNoUnexpectedLoadErrors()
+        {
+            Assert.AreEqual(0, unexpectedLogErrors.Count,
+                "за время загрузки сцены были ошибки, кроме известного шума HDRP:\n" +
+                string.Join("\n", unexpectedLogErrors.ToArray()));
         }
 
         /// <summary>
@@ -114,6 +178,7 @@ namespace KazistovVvTests
         [UnityTearDown]
         public IEnumerator RestoreStrictLogChecks()
         {
+            StopLogCapture();
             LogAssert.ignoreFailingMessages = false;
             yield return null;
         }
@@ -336,3 +401,4 @@ namespace KazistovVvTests
         }
     }
 }
+

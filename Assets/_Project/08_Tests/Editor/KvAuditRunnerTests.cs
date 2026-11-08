@@ -27,6 +27,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Корневой скрипт проверки: отказы и вердикт.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvAuditRunnerTests
     {
         private static string ScriptPath
@@ -158,3 +159,4 @@ namespace KazistovVvTests
         }
     }
 }
+

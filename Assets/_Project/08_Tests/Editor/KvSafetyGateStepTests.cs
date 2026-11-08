@@ -28,6 +28,7 @@ using TrajectoryCore;
 namespace KazistovVvTests
 {
     /// <summary>Проверка на шаге исполнения: застревание, зазор, устойчивость.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvSafetyGateStepTests
     {
         private static readonly double[] Pose = { 0, 0, 0, 0, 0, 0 };
@@ -228,3 +229,4 @@ namespace KazistovVvTests
         }
     }
 }
+

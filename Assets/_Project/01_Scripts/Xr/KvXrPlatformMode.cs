@@ -124,8 +124,15 @@ namespace KazistovVvXr
         /// <summary>
         /// ЗАПОМНИТЬ РЕЖИМ И НАПЕЧАТАТЬ ЕГО ОДНОЙ СТРОКОЙ.
         ///
-        /// Строка обязана быть: по ней на устройстве видно, почему приложение в VR, хотя шлем
-        /// умеет MR. Без неё «серый экран» и «выключенный сквозной вид» неразличимы.
+        /// P1-5 (11.11.2026). ЧТО БЫЛО: масштаб мира жил в ДВУХ местах и ни одно не применялось к
+        /// геометрии. Здесь — `WorldScale = worldScale` (аргумент, всегда 1.0 от вызывающих), а в
+        /// `KvXrSettings.GetWorldScale()` — настоящая настройка (0,1…1), которая уходила только в
+        /// `KvXrRigConfig` и читалась ЛИШЬ в `Describe()`. То есть журнал мог напечатать «мир 0.50×»,
+        /// а стол и робот оставались 1:1 — наладчик делал замер по журналу и подтверждал ложь.
+        ///
+        /// ЧТО СТАЛО: масштаб берётся из ОДНОГО источника (`KvXrSettings.GetWorldScale`) и
+        /// ПРИМЕНЯЕТСЯ к корню мира (`ApplyWorldScaleTo`), а `WorldScale` и строка журнала несут
+        /// ФАКТИЧЕСКИ применённое значение.
         /// </summary>
         public static KvXrPlatformMode Apply(bool passthroughAvailable, bool spatialAnchorsAvailable,
             bool cameraAvailable, float worldScale = DefaultWorldScale)
@@ -138,6 +145,36 @@ namespace KazistovVvXr
             Reason = Describe(Current, passthroughAvailable, spatialAnchorsAvailable, cameraAvailable);
             Debug.Log("[KvXr] РЕЖИМ: " + Reason);
             return Current;
+        }
+
+        /// <summary>
+        /// ПРИМЕНИТЬ НАСТРОЕННЫЙ МАСШТАБ МИРА К КОРНЮ (P1-5, 11.11.2026). Возвращает ФАКТИЧЕСКИ
+        /// применённый масштаб — его и печатает журнал, чтобы «напечатано» и «сделано» были одним
+        /// числом. Корень может быть null (виртуальной геометрии в сцене нет) — тогда масштаб
+        /// остаётся в модели, но к геометрии не применяется, и это честно сообщается в журнале.
+        /// </summary>
+        public static float ApplyWorldScaleTo(Transform worldRoot)
+        {
+            float scale = KvXrSettings.GetWorldScale();
+            if (scale <= 0.0001f) scale = DefaultWorldScale;
+
+            if (worldRoot != null)
+            {
+                Vector3 current = worldRoot.localScale;
+                if (Mathf.Abs(current.x - scale) > 0.0001f ||
+                    Mathf.Abs(current.y - scale) > 0.0001f ||
+                    Mathf.Abs(current.z - scale) > 0.0001f)
+                {
+                    // Меняется КОРЕНЬ мира, поэтому компенсируем позицию, чтобы «нулевая» точка мира
+                    // не уехала: масштаб меняет геометрию вокруг начала координат корня.
+                    worldRoot.localScale = new Vector3(scale, scale, scale);
+                }
+            }
+
+            WorldScale = scale;
+            Debug.Log("[KvXr] МАСШТАБ МИРА: применён " + scale.ToString("0.000") +
+                      (worldRoot != null ? " к корню «" + worldRoot.name + "»" : " · корня нет, к геометрии не применён"));
+            return scale;
         }
 
         /// <summary>Строка-объяснение режима (используется и в журнале, и в тесте).</summary>

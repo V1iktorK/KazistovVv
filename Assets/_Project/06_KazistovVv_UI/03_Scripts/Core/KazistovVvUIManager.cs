@@ -207,6 +207,78 @@ namespace KazistovVvUI
             }
         }
 
+        /// <summary>
+        /// ПАНЕЛЬ РЕАЛЬНО ВИДНА ОПЕРАТОРУ — ФЛАГ `Shown` И ГЕОМЕТРИЯ ВМЕСТЕ (задача R6-1, 11.11.2026).
+        ///
+        /// ЧЕМ ЭТО ОТЛИЧАЕТСЯ ОТ `IsPanelVisible`. `IsPanelVisible` отвечает на вопрос «включён ли
+        /// флаг видимости» — этого достаточно для галочки в меню, но НЕЛЬЗЯ решать по нему
+        /// «показать или скрыть по повторному нажатию».
+        ///
+        /// ЧТО БЫЛО. `TogglePanel` переключал флаг: `SetPanel(id, !IsPanelVisible(id))`. Если панель
+        /// была «включена», но стояла за экраном или была нулевого размера (сохранённая раскладка
+        /// на устройстве, другая ориентация, другой масштаб интерфейса), ПЕРВОЕ нажатие её
+        /// ЗАКРЫВАЛО — а оператор не видел ни открытия, ни закрытия. На планшете в AR это и
+        /// выглядело как «команда выполнена, панели нет» (находка R6-1).
+        ///
+        /// ЧТО СТАЛО. Здесь «видна» = флаг + панель попадает в экран (см. `KvDockGeometry`).
+        /// Повторное нажатие закрывает только то, что оператор действительно видит.
+        /// </summary>
+        public bool IsPanelEffectivelyVisible(string id)
+        {
+            if (!IsPanelVisible(id)) return false;
+            if (id != "tree" && id != "properties" && id != "settings" && id != "hotkeys")
+                return true;   // визуализации (метрики/лимиты) рисуются в мире — геометрию не считаем
+
+            KvDockPanel panel = DockById(id);
+            if (panel == null || panel.Root == null) return false;
+
+            // ПРЯМОУГОЛЬНИК ПАНЕЛИ И ЭКРАН — В ОДНОЙ СИСТЕМЕ КООРДИНАТ (исправлено 12.11.2026).
+            //
+            // ЧТО БЫЛО В ПЕРВОЙ ВЕРСИИ ЭТОЙ ПРАВКИ. Экран брался как `Screen.width / canvas.scaleFactor`,
+            // то есть в координатах [0…ширина], а прямоугольник панели — через
+            // `canvasRect.InverseTransformPoint`, то есть с началом в ЦЕНТРЕ канваса ([-w/2…w/2]):
+            // у канваса точка опоры 0,5. Две разные системы координат сравнивались напрямую, и
+            // Е2Е это поймал — проверка «3.1б панель реально попадает в экран» покраснела на
+            // исправной панели.
+            // ЧТО СТАЛО. Обе стороны берутся в координатах КАНВАСА: экран — это `canvasRect.rect`,
+            // а прямоугольник панели сдвигается на `canvasRect.rect.min`, то есть в ту же систему.
+            Rect canvasLocal = canvasRect != null ? canvasRect.rect : new Rect(0f, 0f, Screen.width, Screen.height);
+            Vector2 screen = new Vector2(canvasLocal.width, canvasLocal.height);
+            if (screen.x <= 0f || screen.y <= 0f) screen = new Vector2(Screen.width, Screen.height);
+
+            Rect area;
+            if (canvasRect != null)
+            {
+                Vector3[] corners = new Vector3[4];
+                panel.Root.GetWorldCorners(corners);
+                Vector2 a = canvasRect.InverseTransformPoint(corners[0]);
+                Vector2 b = canvasRect.InverseTransformPoint(corners[2]);
+                area = Rect.MinMaxRect(Mathf.Min(a.x, b.x), Mathf.Min(a.y, b.y),
+                                       Mathf.Max(a.x, b.x), Mathf.Max(a.y, b.y));
+                // Сдвиг начала координат в левый-нижний угол канваса.
+                area.x -= canvasLocal.xMin;
+                area.y -= canvasLocal.yMin;
+            }
+            else
+            {
+                area = panel.Root.rect;
+            }
+            return KvDockGeometry.IsVisibleOnScreen(area, screen);
+        }
+
+        /// <summary>Панель по id — чтобы не размазывать switch по всему классу.</summary>
+        public KvDockPanel DockById(string id)
+        {
+            switch (id)
+            {
+                case "tree": return treeDock;
+                case "properties": return propertiesDock;
+                case "settings": return settingsDock;
+                case "hotkeys": return hotkeyDock;
+                default: return null;
+            }
+        }
+
         private Camera MainCamera
         {
             get { return Camera.main != null ? Camera.main : UnityEngine.Object.FindAnyObjectByType<Camera>(); }
@@ -277,8 +349,25 @@ namespace KazistovVvUI
 
         void Awake()
         {
-            if (FindObjectsByType<KazistovVvUIManager>(FindObjectsInactive.Include).Length > 1)
+            // ОСТАВЛЯЕМ ОДИН МЕНЕДЖЕР — И УДАЛЯЕМ ИМЕННО ДУБЛИКАТ, А НЕ СЕБЯ.
+            //
+            // ЧТО БЫЛО (найдено 11.11.2026). Проверка стояла по ЧИСЛУ найденных менеджеров в сцене
+            // (`FindObjectsByType` с подсчётом `Length > 1`). `Destroy` отложен до конца кадра,
+            // поэтому при ДВУХ менеджерах КАЖДЫЙ видел «нас двое» и уничтожал себя. Итог: интерфейс
+            // не собирался ВООБЩЕ — ни меню, ни тулбара, ни панелей, — и никакой ошибки при этом
+            // не появлялось.
+            //
+            // А второй менеджер — это штатный сценарий: `FreeFlyCameraController.EnsureKazistovVvUi()`
+            // создаёт его, если в сцене своего нет. Достаточно одной лишней копии, чтобы экран
+            // остался пустым.
+            //
+            // ЧТО СТАЛО. Признак дубликата — `Instance != null && Instance != this`, как уже
+            // правильно сделано в `KvVirtualCursor`. `!= null` для Unity-объекта означает «живой»,
+            // поэтому «фальшиво-нулевая» ссылка после перезагрузки домена не мешает подняться.
+            if (Instance != null && Instance != this)
             {
+                Debug.LogWarning("[KazistovVv] второй менеджер интерфейса '" + name +
+                                 "' удалён — активным остаётся '" + Instance.name + "'");
                 Destroy(gameObject);
                 return;
             }
@@ -299,6 +388,11 @@ namespace KazistovVvUI
             KvLoc.Changed -= OnLanguageChanged;
             RuntimeRegistry.Changed -= OnRegistryChanged;
             KvCommands.Clear();
+            // P2-7 / R1-2: копии материалов усиления света — НАШИ, значит уничтожаем их сами.
+            // Иначе каждая пересборка интерфейса оставляла бы в памяти комплект копий на объект.
+            foreach (Material copy in boostCopies.Values)
+                if (copy != null) Destroy(copy);
+            boostCopies.Clear();
         }
 
         /// <summary>
@@ -438,6 +532,27 @@ namespace KazistovVvUI
         }
 
         /// <summary>
+        /// МЕСТА, ГДЕ УЖЕ ПОЖАЛОВАЛИСЬ НА НЕДОСТУПНЫЙ legacy-ввод (P3-4, 11.11.2026).
+        ///
+        /// ЧТО БЫЛО. Три места оболочки перехватывали отказ старой системы ввода ПУСТЫМ
+        /// перехватом — при этом каждое вызывается КАЖДЫЙ кадр. ЧЕМ ЭТО ГРОЗИЛО. С одной стороны,
+        /// «не работает Ctrl+P / выбор робота / поворот при постановке» без единой зацепки в
+        /// журнале; с другой — если писать туда без ограничения, предупреждение повторялось бы
+        /// 60 раз в секунду и его перестали бы читать. ТЕПЕРЬ сообщение выдаётся ОДИН раз на
+        /// место (ключ — название места), дальше молча.
+        /// </summary>
+        private static readonly HashSet<string> legacyInputWarned = new HashSet<string>();
+
+        /// <summary>Предупредить об отказе legacy-ввода ОДИН раз на место (см. `legacyInputWarned`).</summary>
+        private static void WarnLegacyInputOnce(string site, Exception e)
+        {
+            if (!legacyInputWarned.Add(site)) return;
+            Debug.LogWarning("[UI] старая система ввода недоступна: " + site + " (" +
+                             (e == null ? "исключение без описания" : e.GetType().Name + ": " + e.Message) +
+                             ") — остаётся только новая система ввода; сообщение одно на место");
+        }
+
+        /// <summary>
         /// ЭТАП 5/7: ГЛОБАЛЬНЫЕ горячие клавиши интерфейса.
         /// Ctrl+P (и Ctrl+Shift+P) — палитра команд, F12 — окно горячих клавиш.
         /// Существующие бинды НЕ меняются: обе клавиши в проекте ранее не использовались.
@@ -462,7 +577,16 @@ namespace KazistovVvUI
                     paletteKey = Input.GetKeyDown(KeyCode.P);
                     hotkeysKey = Input.GetKeyDown(KeyCode.F12);
                 }
-                catch { }
+                catch (Exception e)
+                {
+                    // P3-4 (11.11.2026). ЧТО БЫЛО. ПУСТОЙ перехват. Эта ветка — единственный путь
+                    // для Ctrl+P и F12, когда новой системе ввода клавиатуру не отдали; если
+                    // legacy тоже бросал, оба сочетания молча переставали работать.
+                    // ЧЕМ ЭТО ГРОЗИЛО. «Палитра команд не открывается» без единой строки в журнале:
+                    // искать причину негде. ТЕПЕРЬ причина называется (одно сообщение на место,
+                    // чтобы не залить журнал кадровыми повторами).
+                    WarnLegacyInputOnce("Ctrl+P / F12 (палитра и горячие клавиши)", e);
+                }
             }
 
             if (ctrl && paletteKey) OpenCommandPalette();
@@ -515,6 +639,20 @@ namespace KazistovVvUI
             if (logUiEvents) Debug.Log("[KazistovVv] " + message);
         }
 
+        /// <summary>
+        /// ЖУРНАЛ «ПО ФАКТУ» — ПЕЧАТАЕТСЯ ВСЕГДА, В ОТЛИЧИЕ ОТ `Log`.
+        ///
+        /// ЗАЧЕМ ОТДЕЛЬНЫЙ МЕТОД. `Log` пишет только при включённом `logUiEvents`, а `logUiEvents`
+        /// на устройстве выключен по умолчанию. Дефект R6-1 («команда выполнена, панели нет»)
+        /// нельзя ни подтвердить, ни опровергнуть именно из-за этого: в журнале нет ни одного
+        /// числа о состоянии панели. Здесь — только СОБЫТИЯ (открытие/починка раскладки), не кадр,
+        /// поэтому на частоту кадров это не влияет.
+        /// </summary>
+        private static void QaLog(string message)
+        {
+            Debug.Log("[KazistovVv] ПАНЕЛИ: " + message);
+        }
+
         // ------------------------------------------------------------------ сборка оболочки
 
         private void EnsureEventSystem()
@@ -562,9 +700,16 @@ namespace KazistovVvUI
             float menuH = KvMenuBar.Height;
             // ФИКС 8+9: раскладка тулбара и компактный режим берутся из настроек
             // (PlayerPrefs), поэтому переживают перезапуск и пересборку оболочки.
+            //
+            // P1-3 (11.11.2026). ЧТО БЫЛО: «Число рядов тулбара» сохранялось из вкладки настроек
+            // (`KvSettings.ToolbarRows`, clamp 1…6), но в сборку тулбара уходила КОНСТАНТА
+            // `MaxToolbarRows = 4`. Оператор ставил 6, меню отвечало «сохранено», а тулбар
+            // оставался четырёхрядным — обещание интерфейса без реализации.
+            // ТЕПЕРЬ передаётся сохранённое значение; диапазон зажимается тем же полем настроек.
+            int toolbarRows = Mathf.Clamp(KvSettings.ToolbarRows, 1, MaxToolbarRows);
             toolbar.Build(canvasRect, canvas, ToolbarLayout(), SelectRobotByWorkbench,
                 new[] { "Робот (6 осей)", "SCARA" },
-                KvSettings.ToolbarLayout, MaxToolbarRows, KvSettings.ToolbarCompact);
+                KvSettings.ToolbarLayout, toolbarRows, KvSettings.ToolbarCompact);
             toolbar.Root.anchoredPosition = new Vector2(0f, -menuH);
 
             treeDock = MakeDock("tree", KvLoc.T("panel.tree", "Дерево моделей"), "tree",
@@ -633,6 +778,7 @@ namespace KazistovVvUI
             KvPanelLayout saved = KvLayoutStore.Load(key);
             KvDockPanel panel = gameObject.AddComponent<KvDockPanel>();
             panel.Build(canvasRect, canvas, title, icon, side, thickness, key);
+            EnsureDockRendersAboveOverlays(panel);
             if (saved != null)
             {
                 panel.ApplySavedLayout(saved);
@@ -652,6 +798,43 @@ namespace KazistovVvUI
             };
             return panel;
         }
+
+        /// <summary>
+        /// ПАНЕЛЬ ОБЯЗАНА РИСОВАТЬСЯ ПОВЕРХ ПОСТОРОННИХ ОВЕРЛЕЕВ (задача R6-1, 11.11.2026).
+        ///
+        /// ЧТО БЫЛО. Dock-панели жили в общем канвасе оболочки с обычным порядком сортировки. В AR
+        /// поверх того же экрана висит ВТОРОЙ канвас (`KvArUi`, `sortingOrder = 300`) со своим
+        /// «ПК-видом»: меню, тулбар, панель дерева слева во всю высоту, нижние строки. Панель
+        /// настроек — широкая нижняя полоса: она оказывалась ПОД этим оверлеем.
+        ///
+        /// ЧЕМ ЭТО ГРОЗИЛО. На планшете команда «Настройки» выполнялась (строка в журнале есть), а на
+        /// экране не менялось ничего — ровно находка R6-1. Хуже всего, что за переключателем VR/MR
+        /// владелец идёт именно в «Настройки»: путь был недоступен, хотя в редакторе Е2Е проходил.
+        ///
+        /// ЧТО СТАЛО. Каждая dock-панель получает собственный вложенный канвас с `overrideSorting`
+        /// и высоким порядком: панель рисуется выше любых оверлеев, в том числе выше AR-слоя.
+        /// `GraphicRaycaster` на вложенном канвасе нужен, чтобы ввод по-прежнему доходил до кнопок
+        /// внутри панели.
+        /// </summary>
+        private static void EnsureDockRendersAboveOverlays(KvDockPanel panel)
+        {
+            if (panel == null || panel.Root == null) return;
+            GameObject go = panel.Root.gameObject;
+            if (go.GetComponent<Canvas>() == null)
+            {
+                Canvas order = go.AddComponent<Canvas>();
+                order.overrideSorting = true;
+                order.sortingOrder = DockSortingOrder;
+            }
+            if (go.GetComponent<UnityEngine.UI.GraphicRaycaster>() == null)
+                go.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+        }
+
+        /// <summary>
+        /// ПОРЯДОК СОРТИРОВКИ DOCK-ПАНЕЛЕЙ. Заведомо выше AR-оверлея (`KvArUi` = 300) и любых
+        /// внутриигровых оверлеев: панель — это интерфейс оператора, её не должен закрывать никто.
+        /// </summary>
+        public const int DockSortingOrder = 500;
 
         private void SavePanelState(string key, KvDockPanel panel)
         {
@@ -1359,7 +1542,12 @@ namespace KazistovVvUI
             };
             c.SetToolbarRows = delegate (int rows)
             {
-                KvSettings.ToolbarRows = rows;
+                // P1-3 (11.11.2026). Второй дефект того же места: настройка принимала 1…6,
+                // а тулбар физически поддерживает не больше `MaxToolbarRows`. Если бы мы просто
+                // передавали значение дальше, цифра «6» сохранялась бы и НЕ применялась — та же
+                // ложь, другим способом. Поэтому диапазон зажимается ЗДЕСЬ, на входе: что нельзя
+                // применить, то и не запоминается.
+                KvSettings.ToolbarRows = Mathf.Clamp(rows, 1, MaxToolbarRows);
                 RebuildShell();
             };
             // ФИКС 8: раскладка тулбара (0 — авто, 1 — широко, 2 — «5 в ряд») —
@@ -1405,6 +1593,27 @@ namespace KazistovVvUI
                 KvSettings.GamepadHud = value;
             };
 
+            // --- ПЕРЕКЛЮЧАТЕЛЬ VR / MR (11.11.2026)
+            //
+            // ОДНА НАСТРОЙКА НА ДВА ИНТЕРФЕЙСА. Панель компьютера и экран «Настройки» в шлеме
+            // пишут одно и то же значение (`KazistovVvXr.KvXrSettings`), поэтому здесь нет ни
+            // своей копии, ни «локального режима»: иначе компьютер и шлем показывали бы разное,
+            // и поверить было бы некому.
+            //
+            // ЧТО ПРОИСХОДИТ ПРИ СМЕНЕ. Только сохранение и строка в журнал. Сквозной вид
+            // нельзя включить на ходу — он пересоздаёт XR-сцену, — поэтому обе панели честно
+            // пишут «применится после перезапуска» вместо молчаливого «нажал и ничего».
+            c.GetMode = delegate { return KazistovVvXr.KvXrSettings.GetModeIndex(); };
+            c.SetMode = delegate (int index)
+            {
+                KazistovVvXr.KvXrSettings.SetModeIndex(index);
+                Log("Режим приложения: " + KazistovVvXr.KvXrSettings.ModeLabel(
+                        KazistovVvXr.KvXrSettings.GetModeIndex()) +
+                    " · применится после перезапуска");
+                if (status != null)
+                    status.SetMessage(KazistovVvXr.KvXrSettings.ModeStatusLine(), KvTheme.Accent);
+            };
+
             // --- ЭТАПЫ 3/5/7: сервисные действия панели настроек
             c.OpenPalette = OpenCommandPalette;
             c.OpenHotkeys = delegate { ShowHotkeys(true); };
@@ -1437,8 +1646,15 @@ namespace KazistovVvUI
                 case "tool.flashlight":
                 case "tree.autorefresh":
                 case "scene.phantoms":
-                case "ui.toolbar.layout":
-                case "ui.toolbar.compact":
+                // P3-1 (11.11.2026). ЧТО БЫЛО. Здесь объявлялись существующими ещё два id —
+                // `ui.toolbar.layout` и `ui.toolbar.compact`, — хотя обработчиков у них нет ни в
+                // `GetFeature`, ни в `ApplyVisualization` (раскладка и компактность тулбара идут
+                // своими путями: `SetToolbarLayout`/`SetToolbarCompact`). Идентификаторов нет и в
+                // схеме настроек (`KvSettingsSchema.Features`), то есть переключателей не существовало.
+                // ЧЕМ ЭТО ГРОЗИЛО. Тумблер, если бы он появился, показывал бы чужое состояние и на
+                // нажатие отвечал бы «нет обработчика» — обещание без обработчика, ровно тот дефект,
+                // который `HasFeature` и должен предотвращать. Убраны: `HasFeature` снова означает
+                // «обработчик есть».
                 case "ui.gamepadhud":
                     return true;
                 default:
@@ -1446,6 +1662,18 @@ namespace KazistovVvUI
             }
         }
 
+        /// <summary>
+        /// СОСТОЯНИЕ ПЕРЕКЛЮЧАТЕЛЯ ФУНКЦИИ.
+        ///
+        /// P3-1 (11.11.2026). ЧТО БЫЛО. `default: return KvSettings.ShowPhantoms;` — то есть для
+        /// ЛЮБОГО неизвестного id возвращалось состояние «Фантомы». При этом `HasFeature` объявлял
+        /// существующими `ui.toolbar.layout` и `ui.toolbar.compact`, которых здесь не было.
+        /// ЧЕМ ЭТО ГРОЗИЛО. Неизвестная функция показывала ЧУЖОЕ состояние: тумблер выглядел
+        /// «включённым» ровно потому, что включены фантомы, а нажатие уходило в ветку «нет
+        /// обработчика». Оператор видел исправный переключатель, который ничего не переключает.
+        /// ТЕПЕРЬ неизвестный id честно отвечает `false` («состояния нет»), а мёртвые id из
+        /// `HasFeature` убраны — «нет обработчика» и «выключено» больше не выглядят одинаково.
+        /// </summary>
         private bool GetFeature(string id)
         {
             bool stageHandled;
@@ -1467,8 +1695,16 @@ namespace KazistovVvUI
                 case "vis.metrics": return CurrentMetrics();
                 case "tool.flashlight": return CameraRig != null && CameraRig.FlashlightOn;
                 case "tree.autorefresh": return autoRebuildTree;
+                // P3-1 (11.11.2026). ЯВНЫЙ случай для «Фантомов»: раньше состояние этой функции
+                // возвращал `default` — и постольку, поскольку он же обслуживал ЛЮБОЙ неизвестный
+                // id, «Фантомы» были единственными, кому он подходил. Теперь `default` честно
+                // отвечает false, и «Фантомы» обязаны иметь свой `case`, иначе тумблер залипнет
+                // выключенным (это была бы та же ошибка, только с другой стороны).
+                case "scene.phantoms": return KvSettings.ShowPhantoms;
                 case "ui.gamepadhud": return KvSettings.GamepadHud;
-                default: return KvSettings.ShowPhantoms;
+                // P3-1 (11.11.2026): было `return KvSettings.ShowPhantoms` для ЛЮБОГО неизвестного
+                // id — «Фантомы» отдавали своё состояние всем чужим функциям. Теперь честное false.
+                default: return false;
             }
         }
 
@@ -1547,6 +1783,14 @@ namespace KazistovVvUI
                     break;
                 // ЭТАП 9: индикатор геймпада (настройка «Виртуальный геймпад»)
                 case "ui.gamepadhud":
+                    // P3-1 (11.11.2026). ЧТО БЫЛО. Ветка была ПУСТОЙ (`break` без единого
+                    // оператора), то есть обработчик объявлен, а значение никуда не писалось.
+                    // ЧЕМ ЭТО ГРОЗИЛО. Тумблер «Виртуальный геймпад» на вкладке «Функции»
+                    // щёлкал, писал в журнал «включена», а `KvSettings.GamepadHud` не менялся:
+                    // индикатор не появлялся, и следующее открытие настроек показывало прежнее
+                    // состояние. Ровно «нажал — и ничего».
+                    // ТЕПЕРЬ значение действительно сохраняется (индикатор читает его каждый кадр).
+                    KvSettings.GamepadHud = value;
                     break;
                 case "scene.phantoms":
                     // ИСПРАВЛЕНО 18.09.2026: пункт «Фантомы» был объявлен в настройках, но
@@ -1613,13 +1857,87 @@ namespace KazistovVvUI
             LayoutDock(StatusHeight);
         }
 
-        /// <summary>Переключить панель.</summary>
+        /// <summary>
+        /// ПЕРЕКЛЮЧИТЬ ПАНЕЛЬ (R6-1, 11.11.2026).
+        ///
+        /// ЧТО БЫЛО: `SetPanel(id, !IsPanelVisible(id))` — решение по ФЛАГУ. Панель, включённая но
+        /// стоящая за экраном/нулевого размера, при первом нажатии ЗАКРЫВАЛАСЬ, и оператор видел
+        /// «команда выполнена, ничего не появилось». На планшете в AR это и воспроизводилось.
+        /// ЧТО СТАЛО: закрываем только то, что оператор реально видит; иначе — ПОКАЗЫВАЕМ и, если
+        /// раскладка уехала, возвращаем панель на штатное место.
+        /// </summary>
         public void TogglePanel(string id)
         {
-            SetPanel(id, !IsPanelVisible(id));
+            if (IsPanelEffectivelyVisible(id)) SetPanel(id, false);
+            else ShowPanel(id);
         }
 
-        /// <summary>Открыть панель настроек на вкладке (0 функции … 4 справка).</summary>
+        /// <summary>
+        /// ПОКАЗАТЬ ПАНЕЛЬ ГАРАНТИРОВАННО: включить флаг, при необходимости починить раскладку и
+        /// записать в журнал, что именно получилось. Геометрия — числа, а не слова: по этой строке
+        /// на устройстве сразу видно, уехала панель или её закрыл кто-то другой.
+        /// </summary>
+        public void ShowPanel(string id)
+        {
+            SetPanel(id, true);
+            if (IsPanelEffectivelyVisible(id)) return;
+
+            KvDockPanel panel = DockById(id);
+            if (panel == null) return;
+
+            // РАСКЛАДКА УЕХАЛА — ВОЗВРАЩАЕМ НА ШТАТНОЕ МЕСТО.
+            // Источник «уехавшей» раскладки — сохранённое в PlayerPrefs состояние с другого
+            // разрешения/ориентации (планшет, телефон, другая плотность). Починить дешевле, чем
+            // объяснять оператору, что панель «где-то есть».
+            QaLog("панель «" + id + "» включена, но не видна — раскладка сброшена на штатную (" +
+                  DescribeDock(panel) + ")");
+            panel.SetCollapsed(false);
+            panel.SetSide(DefaultSideOf(id));
+            panel.SetThickness(DefaultThicknessOf(id));
+            panel.SetVisible(true);
+            LayoutDock(StatusHeight);
+            QaLog("панель «" + id + "» после сброса раскладки: " + DescribeDock(panel) +
+                  " · видна: " + (IsPanelEffectivelyVisible(id) ? "да" : "НЕТ"));
+        }
+
+        /// <summary>Штатная сторона панели по id — та же, что при сборке оболочки.</summary>
+        private static KvDockSide DefaultSideOf(string id)
+        {
+            switch (id)
+            {
+                case "tree": return KvDockSide.Left;
+                case "properties": return KvDockSide.Right;
+                case "settings": return KvDockSide.Bottom;
+                default: return KvDockSide.Float;
+            }
+        }
+
+        /// <summary>Штатная толщина панели по id — та же, что при сборке оболочки.</summary>
+        private float DefaultThicknessOf(string id)
+        {
+            switch (id)
+            {
+                case "tree": return treePanelWidth;
+                case "properties": return propertiesPanelWidth;
+                case "settings": return settingsPanelHeight;
+                default: return 340f;
+            }
+        }
+
+        /// <summary>Состояние панели одной строкой — для журнала устройства и для отчёта.</summary>
+        public string DescribeDock(KvDockPanel panel)
+        {
+            if (panel == null) return "панели нет";
+            Rect r = panel.Root != null ? panel.Root.rect : new Rect();
+            return "сторона " + panel.Side + " · толщина " + panel.Thickness.ToString("0") +
+                   " · включена " + (panel.Shown ? "да" : "нет") +
+                   " · свёрнута " + (panel.Collapsed ? "да" : "нет") +
+                   " · размер " + r.width.ToString("0") + "×" + r.height.ToString("0");
+        }
+
+        /// <summary>
+        /// ОТКРЫТЬ ПАНЕЛЬ НАСТРОЕК НА ВКЛАДКЕ (0 функции … 4 справка).
+        /// </summary>
         public void ShowSettings(int tab)
         {
             // ФИКС 10 (§22): «настройки не открываются» — потому что команда лишь включала
@@ -1628,8 +1946,8 @@ namespace KazistovVvUI
             // невозможен. Теперь открытие настроек принудительно показывает оболочку
             // и освобождает курсор (панель обязана быть кликабельной).
             if (!uiVisible) SetVisibleInternal(true);
-            if (settingsDock != null) settingsDock.SetVisible(true);
             if (settings != null) settings.SetTab(tab);
+            ShowPanel("settings");      // включает панель и, если раскладка уехала, чинит её
             LayoutDock(StatusHeight);
             KvMouseCursor.Release("открытие настроек (вкладка " + tab + ")");
         }
@@ -2005,14 +2323,26 @@ namespace KazistovVvUI
                 Log("Выбран узел: " + node.DisplayName + " [" + node.Kind + "]");
         }
 
+        /// <summary>
+        /// АКТИВНЫЙ РОБОТ ДЛЯ ПАНЕЛИ СВОЙСТВ — ИЗ КЭША, А НЕ ОБХОДОМ СЦЕНЫ (P2-2, 11.11.2026).
+        ///
+        /// ЧТО БЫЛО. Метод вызывается из `Update()` и каждый кадр делал
+        /// `FindObjectsByType&lt;RobotController&gt;(FindObjectsInactive.Include)` — полный обход
+        /// сцены с аллокацией массива, только чтобы узнать, какой робот подсвечен.
+        ///
+        /// ЧЕМ ЭТО ГРОЗИЛО. Оболочка ПК живёт и в шлеме (MR): на 72 Гц один только этот обход
+        /// вместе с обходами потока траекторий (P2-1) съедал заметную долю кадра, а панель
+        /// свойств меняется максимум при смене робота — то есть событием.
+        ///
+        /// ТЕПЕРЬ список роботов берётся из `RobotSceneCache` (тот же кэш, что в P2-1: инвалидация
+        /// по событию реестра сцены, по загрузке сцены и по возрасту записи).
+        /// </summary>
         private void TrackActiveRobotForProperties()
         {
             if (properties == null) return;
 
             RobotController current = null;
-            var robots = UnityEngine.Object.FindObjectsByType<RobotController>(
-                FindObjectsInactive.Include);
-            foreach (RobotController rc in robots)
+            foreach (RobotController rc in RobotSceneCache.All)
             {
                 if (rc != null && rc.isActive) { current = rc; break; }
             }
@@ -2199,6 +2529,13 @@ namespace KazistovVvUI
         {
             if (f == null || f.Validator == null || !f.Validator.Ready) return float.NaN;
             if (f.Validator.Lower == null || index >= f.Validator.Lower.Length) return float.NaN;
+
+            // P3-12 (11.11.2026). ЧТО БЫЛО: проверялся ТОЛЬКО `Lower`, а затем читался `Upper[index]`.
+            // Если `Upper` короче (незаполненный массив в инспекторе) — `IndexOutOfRangeException`
+            // прямо при отрисовке свойств, то есть панель «Свойства» падала на выборе сустава.
+            // ЧЕМ ЭТО ГРОЗИЛО: оператор видел пустую/замершую панель без причины в журнале.
+            if (f.Validator.Upper == null || index >= f.Validator.Upper.Length) return float.NaN;
+
             double lo = f.Validator.Lower[index], hi = f.Validator.Upper[index];
             return (float)Math.Min(q - lo, hi - q);
         }
@@ -2698,7 +3035,14 @@ namespace KazistovVvUI
                     if (Input.GetKeyDown(KeyCode.Alpha1)) pick = 0;
                     else if (Input.GetKeyDown(KeyCode.Alpha2)) pick = 1;
                 }
-                catch { }
+                catch (Exception e)
+                {
+                    // P3-4 (11.11.2026). ЧТО БЫЛО. ПУСТОЙ перехват в единственном пути выбора типа
+                    // робота клавишами 1/2, когда новой системе ввода клавиатуру не отдали.
+                    // ЧЕМ ЭТО ГРОЗИЛО. Окно выбора робота открывалось и не реагировало на клавиши
+                    // без единой строки в журнале — «зависло» вместо «нет ввода».
+                    WarnLegacyInputOnce("выбор типа робота клавишами 1/2", e);
+                }
             }
             if (pick >= 0) OnRobotTypeChosen(pick);
         }
@@ -2730,7 +3074,14 @@ namespace KazistovVvUI
                         if (Input.GetKey(KeyCode.LeftArrow) || Input.GetKey(KeyCode.A)) rot -= 90f;
                         if (Input.GetKey(KeyCode.RightArrow) || Input.GetKey(KeyCode.D)) rot += 90f;
                     }
-                    catch { }
+                    catch (Exception e)
+                    {
+                        // P3-4 (11.11.2026). ЧТО БЫЛО. ПУСТОЙ перехват в повороте робота при
+                        // постановке (стрелки/A-D) — единственный путь, когда новой системе ввода
+                        // клавиатуру не отдали. ЧЕМ ЭТО ГРОЗИЛО. Робот ставился «лицом как вышло»,
+                        // и никакого сообщения: оператор крутил клавиши, которые молча не читались.
+                        WarnLegacyInputOnce("поворот робота при постановке (стрелки/A-D)", e);
+                    }
                 }
                 if (rot != 0f)
                 {
@@ -3027,6 +3378,32 @@ namespace KazistovVvUI
                 BoostRenderers(table.transform);
         }
 
+        /// <summary>
+        /// Копии материалов, созданные усилением света. Ключ — исходный материал, значение — его
+        /// копия. Уничтожаются в `OnDestroy` менеджера.
+        /// </summary>
+        private readonly System.Collections.Generic.Dictionary<Material, Material> boostCopies =
+            new System.Collections.Generic.Dictionary<Material, Material>();
+
+        /// <summary>
+        /// УСИЛЕНИЕ СВЕТА НА ОБЪЕКТЕ — БЕЗ КОПИИ МАТЕРИАЛА НА КАЖДЫЙ РЕНДЕРЕР (P2-7 / R1-2).
+        ///
+        /// ЧТО БЫЛО. `Material m = r.material;` внутри цикла по ВСЕМ рендерерам объекта: у робота
+        /// их десятки, и КАЖДЫЙ получал собственную копию материала. Копии не уничтожались вовсе
+        /// (`BoostedObjectMarker` только запрещал повторное усиление). В редакторе вдобавок на
+        /// каждую копию печаталось предупреждение Unity «Instantiating material due to calling
+        /// renderer.material».
+        ///
+        /// ЧЕМ ЭТО ГРОЗИЛО. Тот же класс дефекта, из-за которого прогон однажды записал цвет
+        /// выделения прямо в ассет `04_Materials/Robot/Robot_HDRP.mat` (P2-7 → P4-15): рендерер
+        /// перестаёт ссылаться на общий материал, и правка «на месте» меняет уже невидимую копию,
+        /// а исходный материал остаётся с чужим цветом.
+        ///
+        /// ЧТО СТАЛО. Копия создаётся ЯВНО и ОДИН РАЗ на исходный материал: все рендереры с тем же
+        /// `sharedMaterial` делят одну копию, копии учитываются в `boostCopies` и уничтожаются
+        /// вместе с менеджером. `MaterialPropertyBlock` здесь не подошёл бы: усиление включает
+        /// ключевое слово `_EMISSION`, а ключевые слова через блок свойств задать нельзя.
+        /// </summary>
         private void BoostRenderers(Transform root)
         {
             if (root == null) return;
@@ -3036,27 +3413,49 @@ namespace KazistovVvUI
             foreach (Renderer r in root.GetComponentsInChildren<Renderer>(true))
             {
                 if (r == null) continue;
-                Material m = r.material;
-                if (m == null) continue;
-                if (m.HasProperty("_BaseColor"))
+                Material source = r.sharedMaterial;
+                if (source == null) continue;
+                Material m;
+                if (!boostCopies.TryGetValue(source, out m) || m == null)
                 {
-                    Color c = m.GetColor("_BaseColor");
-                    m.SetColor("_BaseColor", new Color(
-                        Mathf.Min(1.4f, c.r * lightBoostAlbedo),
-                        Mathf.Min(1.4f, c.g * lightBoostAlbedo),
-                        Mathf.Min(1.4f, c.b * lightBoostAlbedo),
-                        c.a));
+                    m = new Material(source);
+                    m.name = source.name + "_boost";
+                    boostCopies[source] = m;
+                    BoostMaterial(m);
                 }
-                if (m.HasProperty("_Smoothness"))
-                    m.SetFloat("_Smoothness", Mathf.Min(0.95f, m.GetFloat("_Smoothness") + lightBoostSmoothness));
+                r.sharedMaterial = m;          // копия наша — присваиваем как общую
+            }
+        }
 
-                if (m.HasProperty("_EmissiveColor"))
-                {
-                    Color c = m.HasProperty("_BaseColor") ? m.GetColor("_BaseColor") : Color.white;
-                    float k = Mathf.Clamp01(lightBoostEmissive);
-                    m.SetColor("_EmissiveColor", new Color(c.r * k, c.g * k, c.b * k, 1f));
-                    m.EnableKeyword("_EMISSION");
-                }
+        /// <summary>
+        /// ОДНОКРАТНОЕ УСИЛЕНИЕ КОПИИ МАТЕРИАЛА.
+        ///
+        /// Вынесено отдельно намеренно: усиление ДОЛЖНО применяться ровно один раз, в момент
+        /// создания копии. Если применить его к уже усиленной копии (второй объект сцены с тем же
+        /// исходным материалом), альбедо умножилось бы дважды, а «плюс к гладкости» сложился бы
+        /// дважды — материал уезжал бы в белый.
+        /// </summary>
+        private void BoostMaterial(Material m)
+        {
+            if (m == null) return;
+            if (m.HasProperty("_BaseColor"))
+            {
+                Color c = m.GetColor("_BaseColor");
+                m.SetColor("_BaseColor", new Color(
+                    Mathf.Min(1.4f, c.r * lightBoostAlbedo),
+                    Mathf.Min(1.4f, c.g * lightBoostAlbedo),
+                    Mathf.Min(1.4f, c.b * lightBoostAlbedo),
+                    c.a));
+            }
+            if (m.HasProperty("_Smoothness"))
+                m.SetFloat("_Smoothness", Mathf.Min(0.95f, m.GetFloat("_Smoothness") + lightBoostSmoothness));
+
+            if (m.HasProperty("_EmissiveColor"))
+            {
+                Color c = m.HasProperty("_BaseColor") ? m.GetColor("_BaseColor") : Color.white;
+                float k = Mathf.Clamp01(lightBoostEmissive);
+                m.SetColor("_EmissiveColor", new Color(c.r * k, c.g * k, c.b * k, 1f));
+                m.EnableKeyword("_EMISSION");
             }
         }
 
@@ -3484,13 +3883,56 @@ namespace KazistovVvUI
                 KvTheme.Accent);
         }
 
-        /// <summary>ЭТАП 6: скопировать имя узла в буфер обмена.</summary>
-        public void CopyNodeName(ProjectNode node)
+        /// <summary>
+        /// ЭТАП 6: скопировать имя узла в буфер обмена.
+        ///
+        /// P3-2 (11.11.2026). ЧТО БЫЛО. Запись в буфер стояла в однострочном `try` с ПУСТЫМ
+        /// перехватом, а строкой ниже шло БЕЗУСЛОВНОЕ «Имя скопировано в буфер». Отказ записи
+        /// (платформа без буфера, исключение, пустое значение) не проверялся вообще.
+        /// ЧЕМ ЭТО ГРОЗИЛО. Подтверждение операции, которой НЕ БЫЛО: оператор шёл вставлять имя и
+        /// получал старое содержимое буфера. Хуже — по такому «успеху» строятся дальнейшие шаги
+        /// (вставка в поле, отчёт), и ошибка всплывала далеко от места.
+        /// ТЕПЕРЬ успех ПРОВЕРЯЕТСЯ: значение читается обратно из буфера и сравнивается; если
+        /// записать не удалось — сообщение об ОШИБКЕ с причиной, зелёного подтверждения нет.
+        /// </summary>
+        public bool CopyNodeName(ProjectNode node)
         {
-            if (node == null) return;
-            try { GUIUtility.systemCopyBuffer = node.DisplayName; } catch { }
-            SetPlanStatus(KvLoc.T("ctx.copied", "Имя скопировано в буфер") + ": " + node.DisplayName,
-                KvTheme.Ok);
+            if (node == null) return false;
+
+            string wanted = node.DisplayName ?? "";
+            if (wanted.Length == 0)
+            {
+                SetPlanStatus(KvLoc.T("ctx.copyfailed", "Не удалось скопировать имя в буфер") +
+                              ": у узла пустое имя", KvTheme.Warn);
+                return false;
+            }
+
+            string problem = null;
+            try
+            {
+                GUIUtility.systemCopyBuffer = wanted;
+                // ПРОВЕРКА РЕЗУЛЬТАТА, А НЕ «ИСКЛЮЧЕНИЯ НЕ БЫЛО»: на части платформ запись в буфер
+                // проходит молча и ничего не делает, поэтому читаем обратно и сравниваем.
+                string actual = GUIUtility.systemCopyBuffer;
+                if (!string.Equals(actual, wanted, System.StringComparison.Ordinal))
+                    problem = "буфер обмена вернул другое значение";
+            }
+            catch (System.Exception e)
+            {
+                problem = e.GetType().Name + ": " + e.Message;
+            }
+
+            if (problem == null)
+            {
+                SetPlanStatus(KvLoc.T("ctx.copied", "Имя скопировано в буфер") + ": " + wanted,
+                    KvTheme.Ok);
+                return true;
+            }
+
+            Debug.LogWarning("[UI] Копирование имени узла не удалось (" + problem + "): «" + wanted + "»");
+            SetPlanStatus(KvLoc.T("ctx.copyfailed", "Не удалось скопировать имя в буфер") +
+                          ": " + problem, KvTheme.Warn);
+            return false;
         }
 
         /// <summary>ЭТАП 6: удалить узлы (точки — из истории, waypoints — из маршрута).</summary>

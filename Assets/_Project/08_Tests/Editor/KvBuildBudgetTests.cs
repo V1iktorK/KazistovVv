@@ -28,6 +28,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Бюджет сборки: вес ассетов и настройки импорта текстур.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvBuildBudgetTests
     {
         /// <summary>
@@ -203,3 +204,4 @@ namespace KazistovVvTests
         }
     }
 }
+

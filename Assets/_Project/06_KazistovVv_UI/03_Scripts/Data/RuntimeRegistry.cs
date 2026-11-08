@@ -15,14 +15,53 @@ namespace KazistovVvUI
         /// <summary>Событие изменения реестра (после добавления/удаления).</summary>
         public static event Action Changed;
 
+        /// <summary>
+        /// СООБЩИТЬ ОБ ИЗМЕНЕНИИ РЕЕСТРА. Здесь же сбрасывается кэш списка роботов
+        /// (P2-1/P2-2, 11.11.2026): появление/исчезновение робота в реестре — и есть то событие,
+        /// по которому `RobotSceneCache` обязан пересобраться. Иначе кэш показывал бы оператору
+        /// прежний набор роботов до истечения своего срока.
+        /// </summary>
         public static void NotifyChanged()
         {
+            RobotSceneCache.Invalidate();
             Changed?.Invoke();
         }
 
         public static void Clear()
         {
             Roots.Clear();
+        }
+
+        /// <summary>
+        /// СТАТИКА НЕ ДОЛЖНА ПЕРЕЖИВАТЬ СМЕНУ СЦЕНЫ И ПРОГОНА (P2-9, 11.11.2026).
+        ///
+        /// ЧТО БЫЛО. `Roots` — статический список, в который `RebuildFromScene` складывает узлы с
+        /// ССЫЛКАМИ НА ОБЪЕКТЫ СЦЕНЫ (`Transform`, `RobotController`). Список не чистился ни при
+        /// выходе из PlayMode, ни при смене сцены: ссылки на уничтоженные объекты оставались
+        /// жить, а «фальшиво-нулевые» Unity-объекты в них выглядят как непустые.
+        ///
+        /// ЧЕМ ЭТО ГРОЗИЛО. Между прогонами (и при отключённой перезагрузке домена) дерево
+        /// показывало роботов прошлой сцены, а `FindRobotNode` мог вернуть узел с мёртвым
+        /// роботом — выбор в дереве «работал», но ни к чему не приводил.
+        ///
+        /// ТЕПЕРЬ список сбрасывается в самой ранней точке старта и при выгрузке сцены.
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics()
+        {
+            Roots.Clear();
+            Changed = null;
+            UnityEngine.SceneManagement.SceneManager.sceneUnloaded -= OnSceneUnloaded;
+            UnityEngine.SceneManagement.SceneManager.sceneUnloaded += OnSceneUnloaded;
+        }
+
+        private static void OnSceneUnloaded(UnityEngine.SceneManagement.Scene scene)
+        {
+            // Сами ссылки на объекты ушедшей сцены держать нельзя; подписчиков события НЕ трогаем:
+            // оболочка интерфейса может жить в DontDestroyOnLoad, и сброс `Changed` молча лишил бы
+            // её обновлений дерева (это была бы новая ошибка вместо исправленной утечки).
+            Roots.Clear();
+            RobotSceneCache.Invalidate();
         }
 
         /// <summary>Полное перестроение реестра из сцены.</summary>

@@ -38,6 +38,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Поза головы применяется к камере; проверяется только доказанное.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvHeadTrackingRigTests
     {
         private static string Find(string fileName)
@@ -160,3 +161,4 @@ namespace KazistovVvTests
         }
     }
 }
+

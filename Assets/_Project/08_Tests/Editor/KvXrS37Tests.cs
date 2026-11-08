@@ -35,6 +35,7 @@ namespace KazistovVvTests
     /// ЧЕГО ЗДЕСЬ НЕТ И БЫТЬ НЕ МОЖЕТ: проверки «шлем отдал кисти» или «модель видна глазами».
     /// Это подтверждается только строкой живого журнала и взглядом владельца в шлеме.
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvXrS37Tests
     {
         // ============================================================ 1. РАДИУС ПАНЕЛИ (§37.2)
@@ -764,3 +765,4 @@ namespace KazistovVvTests
         private static KvHandFrame Relaxed() { return Shaped(0.38f, 0.38f, 0.38f, 0.38f, 0.20f, 0.15f); }
     }
 }
+

@@ -24,6 +24,7 @@ using NUnit.Framework;
 namespace KazistovVvTests
 {
     /// <summary>Шрифт CJK из проекта: путь поиска, свободные лицензии, устойчивость.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvBundledFontTests
     {
         /// <summary>
@@ -87,8 +88,12 @@ namespace KazistovVvTests
                 "поиск шрифта в проекте не должен бросать, даже если файла нет");
 
             // Файла нет — и это НОРМАЛЬНО, поэтому проверяем не «нашёлся», а «поиск не сломался».
+            //
+            // P4-1 (11.11.2026). ЧТО БЫЛО: `if (font == null) Assert.Pass(...)` — NUnit считает это
+            // ПРОЙДЕННЫМ, то есть проверка «поиск отработал» проходила, ничего не утверждая.
+            // ЧТО СТАЛО: оба исхода проверяются как факты, без «выхода из теста».
             if (font == null)
-                Assert.Pass("шрифта в проекте пока нет — поиск отработал штатно и вернул null");
+                Assert.IsNull(font, "поиск отсутствующего шрифта обязан вернуть null, а не «что-нибудь»");
             else
                 Assert.IsNotNull(font.name, "найденный шрифт обязан иметь имя для журнала");
         }
@@ -127,3 +132,4 @@ namespace KazistovVvTests
         }
     }
 }
+

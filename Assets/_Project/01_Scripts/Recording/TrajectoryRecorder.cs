@@ -22,7 +22,30 @@ public class TrajectoryRecorder : MonoBehaviour
     private List<TrajectoryPoint> trajectory = new List<TrajectoryPoint>();
     private bool isRecording = false;
     private float startTime;
-    
+    private float lastPointTime = -1f;
+
+    // ------------------------------------------------- ПРЕДОХРАНИТЕЛИ ЗАПИСИ (P2-9, 11.11.2026)
+    //
+    // ЧТО БЫЛО. Список точек пополнялся КАЖДЫЙ кадр и ничем не ограничивался: `new TrajectoryPoint`
+    // плюс `new float[]` из `GetJointAngles()` на кадр, без предела и без прореживания. Запись
+    // в файл (`File.WriteAllText`) шла без `try/catch` и без создания каталога.
+    //
+    // ЧЕМ ЭТО ГРОЗИЛО. Длительная запись (а оператор пишет движение минутами) съедала память
+    // шлема мусором и в конце падала на записи файла: несуществующий каталог из настроек или
+    // занятый файл — и исключение из `Update`/`StopRecording` без сохранения. Траектория
+    // терялась целиком, хотя «Запись окончена. Точек: N» уже было напечатано.
+    //
+    // ТЕПЕРЬ: предел точек, прореживание по времени (меньше мусора на кадр), запись файла в
+    // `try/catch` с созданием каталога и честным сообщением об отказе.
+    /// <summary>Предел числа точек в одной записи: ~10 минут на 20 Гц.</summary>
+    public const int MaxPoints = 12000;
+
+    /// <summary>Минимальный интервал между точками, с (50 Гц — быстрее ручного движения не нужно).</summary>
+    public const float MinPointIntervalSeconds = 0.02f;
+
+    /// <summary>Сколько точек записано сейчас (для журнала и проверки предела).</summary>
+    public int PointCount { get { return trajectory.Count; } }
+
     void Update()
     {
         if (InputManager.Instance == null)
@@ -38,6 +61,18 @@ public class TrajectoryRecorder : MonoBehaviour
 
         if (isRecording && robot != null && robot.tcp != null)
         {
+            // ПРЕДЕЛ И ПРОРЕЖИВАНИЕ (P2-9): без них список рос без границы, а `GetJointAngles()`
+            // создавал новый массив на каждый кадр.
+            if (trajectory.Count >= MaxPoints)
+            {
+                Debug.LogWarning("[TrajectoryRecorder] достигнут предел " + MaxPoints +
+                                 " точек — запись остановлена, дальше точки не добавляются");
+                StopRecording();
+                return;
+            }
+            if (lastPointTime >= 0f && Time.time - lastPointTime < MinPointIntervalSeconds) return;
+            lastPointTime = Time.time;
+
             trajectory.Add(new TrajectoryPoint
             {
                 time = Time.time - startTime,
@@ -53,6 +88,7 @@ public class TrajectoryRecorder : MonoBehaviour
         trajectory.Clear();
         isRecording = true;
         startTime = Time.time;
+        lastPointTime = -1f;
         Debug.Log("[TrajectoryRecorder] ▶ Запись начата");
     }
 
@@ -86,9 +122,23 @@ public class TrajectoryRecorder : MonoBehaviour
             now.Year, now.Month, now.Day, now.Hour, now.Minute, now.Second);
         string path = Path.Combine(directory, "trajectory_" + stamp + ".json");
 
-        string json = JsonUtility.ToJson(new TrajectoryDataWrapper { points = trajectory.ToArray() }, true);
-        File.WriteAllText(path, json);
-        Debug.Log("[TrajectoryRecorder] Сохранено: " + path);
+        // ЗАПИСЬ ПОД ЗАЩИТОЙ (P2-9). ЧТО БЫЛО: `File.WriteAllText` без `try/catch` и без
+        // `Directory.CreateDirectory` — каталога из настроек могло не быть, и исключение
+        // уносило всю запись молча. ТЕПЕРЬ каталог создаётся, а отказ виден в журнале.
+        try
+        {
+            if (!Directory.Exists(directory)) Directory.CreateDirectory(directory);
+
+            string json = JsonUtility.ToJson(new TrajectoryDataWrapper { points = trajectory.ToArray() }, true);
+            File.WriteAllText(path, json);
+            Debug.Log("[TrajectoryRecorder] Сохранено: " + path);
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError("[TrajectoryRecorder] НЕ сохранено (" + path + "): " +
+                           e.GetType().Name + ": " + e.Message +
+                           " · точек в памяти: " + trajectory.Count + " — их можно записать повторно");
+        }
     }
 }
 

@@ -31,6 +31,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Сцены проекта: ни одной потерянной ссылки на скрипт.</summary>
+        [Category(KvTestCategories.Slow)]
     public class KvSceneIntegrityTests
     {
         /// <summary>
@@ -168,3 +169,4 @@ namespace KazistovVvTests
         }
     }
 }
+

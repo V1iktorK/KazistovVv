@@ -35,6 +35,7 @@ namespace KazistovVvTests
     /// Тесты написаны ДО правки и на прежнем коде обязаны падать (правило [K5]).
     /// Ни одного GameObject, ни одной записи в настройки, ни зависимости от времени.
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvBuildTests
     {
         private string _root;
@@ -300,5 +301,62 @@ namespace KazistovVvTests
                 "эти скрипты содержат кириллицу, но БЕЗ BOM — Windows PowerShell 5.1 их не разберёт " +
                 "(дефект A19): " + string.Join(", ", offenders.ToArray()));
         }
+
+        /// <summary>
+        /// P0-11: ОСТАТКИ АССЕТОВ XR-СИМУЛЯЦИИ В `Assets/XR/Temp`.
+        ///
+        /// ЧТО БЫЛО. Сборщик AR Foundation (`SimulationSettingsBuildProcessor`) переносит
+        /// `XRSimulationPreferences` и `XRSimulationRuntimeSettings` в `Assets/XR/Temp` на время
+        /// сборки и возвращает их в `OnPostprocessBuild`. Если сборка прервалась, ассеты остаются
+        /// в Temp, и СЛЕДУЮЩАЯ сборка не может их перенести:
+        ///     Failed to move the asset (…) to a temporary location: … Destination path name does not exist
+        /// ЧЕМ ЭТО ГРОЗИЛО. Факт 11.11.2026: в проекте лежали остатки от 03.10.2026 (оба .asset),
+        /// сборка ругалась на перенос, гейт «чистой консоли» был красным, и было неясно, что
+        /// попало в APK. Git остатки не видит — каталог внесён в `.gitignore`.
+        ///
+        /// ЧТО ПРОВЕРЯЕТСЯ. Каталога нет ЛИБО он пуст (кроме .meta), правильные копии на месте, и
+        /// инструменты (сборщик + сторожа) умеют его убирать — иначе дефект вернётся молча.
+        /// На старом коде тест падал: остатки лежали в каталоге.
+        /// </summary>
+        [Test]
+        public void XrSimulation_NoLeftoverTempAssets()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string tempDir = Path.Combine(projectRoot, "Assets", "XR", "Temp");
+
+            if (Directory.Exists(tempDir))
+            {
+                var leftovers = new List<string>();
+                foreach (string file in Directory.GetFiles(tempDir))
+                {
+                    if (string.Equals(Path.GetExtension(file), ".meta", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    leftovers.Add(Path.GetFileName(file));
+                }
+                Assert.AreEqual(0, leftovers.Count,
+                    "в Assets/XR/Temp остались ассеты прерванной сборки (" +
+                    string.Join(", ", leftovers.ToArray()) +
+                    ") — следующая сборка не сможет их перенести (P0-11). Удалите каталог Assets/XR/Temp");
+            }
+
+            // Правильные копии обязаны быть там, где их ищет пакет: иначе XR-симуляция не работает.
+            Assert.IsTrue(File.Exists(Path.Combine(projectRoot, "Assets", "XR", "Resources",
+                "XRSimulationRuntimeSettings.asset")),
+                "нет Assets/XR/Resources/XRSimulationRuntimeSettings.asset — настройки XR-симуляции потеряны");
+            Assert.IsTrue(File.Exists(Path.Combine(projectRoot, "Assets", "XR", "UserSimulationSettings",
+                "Resources", "XRSimulationPreferences.asset")),
+                "нет Assets/XR/UserSimulationSettings/Resources/XRSimulationPreferences.asset — " +
+                "настройки XR-симуляции потеряны");
+
+            // Инструменты обязаны уметь убирать остатки: проверка без лечения возвращает дефект.
+            string toolsRoot = Path.Combine(projectRoot, "Tools");
+            string builder = File.ReadAllText(Path.Combine(toolsRoot, "xr-build-apk-ascii.ps1"));
+            StringAssert.Contains("Assets/XR/Temp", builder,
+                "сборщик не убирает остатки Assets/XR/Temp — сборка снова упадёт на переносе ассетов");
+            string guards = File.ReadAllText(Path.Combine(toolsRoot, "repo-guards.ps1"));
+            StringAssert.Contains("Assets/XR/Temp", guards,
+                "сторожа не проверяют остатки Assets/XR/Temp — дефект вернётся незаметно (каталог в .gitignore)");
+        }
     }
 }
+

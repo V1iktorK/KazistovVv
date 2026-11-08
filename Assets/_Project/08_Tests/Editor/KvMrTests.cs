@@ -34,6 +34,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>MR: пробы, выбор бэкенда, сквозной вид, постановка на реальную поверхность, документы.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvMrTests
     {
         private static string ProjectRoot
@@ -315,7 +316,12 @@ namespace KazistovVvTests
             string panel = ReadScript("KvXrGroupPanel.cs");
             StringAssert.Contains("Режим комнаты (MR)", panel,
                 "в настройках шлема нет переключателя режима комнаты — MR негде включить");
-            StringAssert.Contains("SetPassthrough", panel,
+            // 11.11.2026: переключатель больше не пишет `SetPassthrough` НАПРЯМУЮ — он пишет через
+            // общий `KvXrSettings.SetModeIndex` (одна логика на шлем и на ПК). Требование «панель
+            // обязана ПИСАТЬ настройку, а не только показывать надпись» осталось тем же, поэтому
+            // проверяется запись через общий путь; что этот путь доходит до `SetPassthrough`,
+            // отдельно проверяет `KvVrMrSwitchTests.Switch_PersistsToPlayerPrefs`.
+            StringAssert.Contains("KvXrSettings.ToggleMode()", panel,
                 "переключатель режима комнаты должен ПИСАТЬ настройку, а не только показывать надпись");
             StringAssert.Contains("ModeLine", panel,
                 "в меню нет строки режима — владелец не отличит VR-версию от MR");
@@ -411,3 +417,4 @@ namespace KazistovVvTests
         }
     }
 }
+

@@ -21,6 +21,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Линейка и сетка: числа, которые видит оператор.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvMeasureKitTests
     {
         // ---------------------------------------------------------------- 1. ЛИНЕЙКА
@@ -193,3 +194,4 @@ namespace KazistovVvTests
         }
     }
 }
+

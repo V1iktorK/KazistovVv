@@ -48,6 +48,15 @@ public class VRInputProvider : InputProvider
     private float lastPlayTime = -10f;
     private float lastSwitchTime = -10f;
 
+    /// <summary>Курок был нажат в прошлом кадре — нужно, чтобы отличить НАЖАТИЕ от УДЕРЖАНИЯ.</summary>
+    private bool selectWasHeld;
+    /// <summary>Грип был нажат в прошлом кадре.</summary>
+    private bool grabWasHeld;
+    /// <summary>Нажатие курка произошло именно в этом кадре.</summary>
+    private bool selectDownThisFrame;
+    /// <summary>Нажатие грипа произошло именно в этом кадре.</summary>
+    private bool grabDownThisFrame;
+
     void Update()
     {
         Vector2 move = KvXrInputSource.LeftStick;
@@ -55,6 +64,32 @@ public class VRInputProvider : InputProvider
         float k = stickSmoothing <= 0f ? 1f : 1f - Mathf.Exp(-Time.deltaTime / stickSmoothing);
         smoothMove = Vector2.Lerp(smoothMove, move, k);
         smoothLook = Vector2.Lerp(smoothLook, look, k);
+
+        // ФРОНТ НАЖАТИЯ СЧИТАЕТСЯ ЗДЕСЬ, ОДИН РАЗ ЗА КАДР.
+        //
+        // ЧТО БЫЛО (найдено 11.11.2026). `GetSelectDown()` возвращал УРОВЕНЬ курка
+        // (`RightTrigger >= triggerThreshold`), то есть был равен `GetSelectHeld()`. Контракт
+        // `InputProvider`: «Down» — нажато ИМЕННО В ЭТОМ КАДРЕ (так его реализуют мышь и геймпад).
+        // Цена ошибки: любой вызывающий срабатывал КАЖДЫЙ кадр удержания. Живой пример —
+        // `CalibrationTool`: одно длинное нажатие курка мгновенно заполняло все три точки
+        // калибровки и применяло случайную калибровку робота.
+        bool selectHeldNow = KvXrInputSource.RightTrigger >= triggerThreshold;
+        selectDownThisFrame = Edge(selectHeldNow, selectWasHeld);
+        selectWasHeld = selectHeldNow;
+
+        bool grabHeldNow = KvXrInputSource.RightGrip >= gripThreshold;
+        grabDownThisFrame = Edge(grabHeldNow, grabWasHeld);
+        grabWasHeld = grabHeldNow;
+    }
+
+    /// <summary>
+    /// ФРОНТ НАЖАТИЯ: «нажато сейчас и не было нажато в прошлом кадре». Чистая функция —
+    /// проверяется тестом без шлема (правило проекта: то, что нельзя проверить руками, проверяется
+    /// как чистая функция).
+    /// </summary>
+    public static bool Edge(bool heldNow, bool wasHeld)
+    {
+        return heldNow && !wasHeld;
     }
 
     // ------------------------------------------------------------------ указатель
@@ -83,14 +118,16 @@ public class VRInputProvider : InputProvider
     // ------------------------------------------------------------------ действия
 
     /// <summary>Выбор: курок. Именно он ставит точку — как Enter на десктопе.</summary>
-    public override bool GetSelectDown() { return KvXrInputSource.RightTrigger >= triggerThreshold; }
+    public override bool GetSelectDown() { return selectDownThisFrame; }
 
-    public override bool GetSelectHeld() { return GetSelectDown(); }
+    /// <summary>Выбор удерживается (уровень, не фронт).</summary>
+    public override bool GetSelectHeld() { return KvXrInputSource.RightTrigger >= triggerThreshold; }
 
     /// <summary>Захват: грип. Им оператор «берёт» робота и таскает его по сцене.</summary>
-    public override bool GetGrabDown() { return KvXrInputSource.RightGrip >= gripThreshold; }
+    public override bool GetGrabDown() { return grabDownThisFrame; }
 
-    public override bool GetGrabHeld() { return GetGrabDown(); }
+    /// <summary>Захват удерживается (уровень, не фронт).</summary>
+    public override bool GetGrabHeld() { return KvXrInputSource.RightGrip >= gripThreshold; }
 
     /// <summary>Смена робота: левый стик вбок — то же, что F на десктопе.</summary>
     public override bool GetSwitchRobotDown()

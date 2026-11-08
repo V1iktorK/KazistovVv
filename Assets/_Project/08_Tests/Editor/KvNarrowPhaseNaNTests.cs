@@ -27,6 +27,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Нечисловые данные в GJK: отказ вместо ложного препятствия.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvNarrowPhaseNaNTests
     {
         /// <summary>
@@ -123,3 +124,4 @@ namespace KazistovVvTests
         }
     }
 }
+

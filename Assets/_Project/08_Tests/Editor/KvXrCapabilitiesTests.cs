@@ -27,6 +27,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Пробы возможностей MR/AR: три состояния, честный выбор, читаемая строка.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvXrCapabilitiesTests
     {
         // ---------------------------------------------------------------- 1. ТРИСТАТЕЗНАЯ ЛОГИКА
@@ -201,3 +202,4 @@ namespace KazistovVvTests
         }
     }
 }
+

@@ -26,6 +26,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Имена и манифест резервной видеозаписи.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvRecordingFallbackTests
     {
         /// <summary>
@@ -213,3 +214,4 @@ namespace KazistovVvTests
         }
     }
 }
+

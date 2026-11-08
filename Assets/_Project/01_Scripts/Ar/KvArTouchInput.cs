@@ -96,7 +96,19 @@ namespace KazistovVvAr
         private Vector2 touchStart;
         private Vector2 touchLast;
         private float touchStartTime;
+        /// <summary>
+        /// ПОВОРОТ МИРА ПАЛЬЦЕМ ВЫКЛЮЧЕН (06.11.2026). Владелец просил «нормально работающий
+        /// гироскоп, без спора с пальцем»: обзор на планшете поворачивается ПОВОРОТОМ УСТРОЙСТВА
+        /// (AR-камера/гироскоп), а палец больше не крутит мир — иначе два вращения складывались
+        /// и казалось, что гироскоп «врёт». Поле оставлено для режима отладки.
+        /// </summary>
+        public bool allowDragRotate = false;
+
+        /// <summary>Поворот мира двумя пальцами тоже выключен — два пальца только масштаб.</summary>
+        public bool allowTwoFingerRotate = false;
+
         private bool dragging;
+        private bool dragBlockedLogged;
         private bool startedOverUi;
         private bool startedOverPanel;
         private float dragAccumulatedDegrees;
@@ -125,6 +137,9 @@ namespace KazistovVvAr
         private Material laserMaterial;
         private GameObject ringGo;
         private LineRenderer ring;
+
+        /// <summary>Выбранный объект (чтобы не показывать «Выбрано: …» для удалённого объекта).</summary>
+        private GameObject selectedObject;
 
         void Awake()
         {
@@ -228,10 +243,13 @@ namespace KazistovVvAr
             if (!dragging && moved > tapMaxMovePixels && !startedOverUi && !startedOverPanel)
             {
                 dragging = true;
-                Debug.Log("[KvAr] КАСАНИЕ: перетаскивание — поворот вида вокруг сцены");
+                // ЧЕСТНЫЙ ЛОГ (06.11.2026): поворот пальцем выключен, обзор — поворотом планшета.
+                Debug.Log(allowDragRotate
+                    ? "[KvAr] КАСАНИЕ: перетаскивание — поворот вида вокруг сцены"
+                    : "[KvAr] КАСАНИЕ: перетаскивание (обзор — поворотом планшета, палец мир не крутит)");
             }
 
-            if (dragging && world != null)
+            if (dragging && allowDragRotate && world != null)
             {
                 float dx = touch.deltaPosition.x;
                 float degrees = -dx * dragDegreesPerPixel;
@@ -252,6 +270,11 @@ namespace KazistovVvAr
             if (tap && !startedOverUi)
             {
                 HandleTap(touchLast);
+            }
+            else if (dragging && !allowDragRotate && !dragBlockedLogged)
+            {
+                dragBlockedLogged = true;
+                Debug.Log("[KvAr] ОБЗОР: поворот пальцем выключен — поворачивайте планшет (гироскоп/AR-камера)");
             }
             else if (dragging && dragAccumulatedDegrees > 0.5f)
             {
@@ -310,7 +333,7 @@ namespace KazistovVvAr
                     }
                 }
 
-                if (Mathf.Abs(angleDelta) > 0.5f && world != null)
+                if (allowTwoFingerRotate && Mathf.Abs(angleDelta) > 0.5f && world != null)
                 {
                     world.RotateView(angleDelta);
                     ViewRotateCount++;
@@ -474,6 +497,7 @@ namespace KazistovVvAr
             if (registered == null) return false;
 
             RobotController robot = registered.GetComponentInParent<RobotController>();
+            selectedObject = registered.gameObject;
             SelectedLabel = robot != null
                 ? "робот «" + robot.robotName + "»"
                 : "объект «" + (string.IsNullOrEmpty(registered.DisplayName)
@@ -608,7 +632,7 @@ namespace KazistovVvAr
             if (ui != null)
                 ui.SetHint(MovePointMode
                     ? "Режим точки: ведите пальцем — точка движется, два пальца — отмена"
-                    : "Обычный режим: тап — подтверждение, перетаскивание — поворот вида");
+                    : "Обычный режим: тап — подтверждение · обзор — поворотом планшета · щипок — масштаб");
         }
 
         /// <summary>ВЕКТОР ДВИЖЕНИЯ ТОЧКИ ИЗ ДЕЛЬТЫ ПАЛЬЦА (по осям камеры, в горизонтали/вертикали).</summary>
@@ -687,6 +711,30 @@ namespace KazistovVvAr
                 float angle = i * Mathf.PI * 2f / ring.positionCount;
                 ring.SetPosition(i, center + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * radius);
             }
+        }
+
+        /// <summary>СБРОСИТЬ ВЫБОР ОБЪЕКТА (очистка рабочего пространства).</summary>
+        public void ClearSelection()
+        {
+            SelectedLabel = string.Empty;
+            selectedObject = null;
+            if (ringGo != null) ringGo.SetActive(false);
+            if (ui != null) ui.HideHint();
+            Debug.Log("[KvAr] ВЫБОР: сброшен (очистка рабочего пространства)");
+        }
+
+        /// <summary>
+        /// СБРОС УСТАРЕВШЕГО ВЫБОРА (07.11.2026). Дефект планшета: подсказка показывала
+        /// «Выбрано: робот «Robot»», когда робота в мире уже не было (удалён/очищен), — строка
+        /// врала. Если выбранный объект уничтожен, выбор снимается сам.
+        /// </summary>
+        public bool ClearSelectionIfGone()
+        {
+            if (string.IsNullOrEmpty(SelectedLabel)) return false;
+            if (selectedObject != null) return false;
+            Debug.Log("[KvAr] ВЫБОР: сброшен — выбранного объекта больше нет в сцене");
+            ClearSelection();
+            return true;
         }
 
         /// <summary>СБРОС ВИДА: угол обзора к базовому, поворот мира к позе якоря.</summary>

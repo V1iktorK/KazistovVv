@@ -36,6 +36,7 @@ namespace KazistovVvTests
     /// обязаны падать (это и есть доказательство «до»). Менять их после прогона нельзя
     /// (правило [K5]) — правится код и настройки.
     /// </summary>
+        [Category(KvTestCategories.Slow)]
     public class KvRenderPipelineTests
     {
         private const string UrpAssetPath = "Assets/Settings/Mobile_RPAsset.asset";
@@ -822,3 +823,4 @@ namespace KazistovVvTests
         }
     }
 }
+

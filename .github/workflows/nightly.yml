@@ -1,0 +1,235 @@
+name: Nightly
+
+# ================================================================================================
+#  НОЧНОЙ ГЛУБОКИЙ ПРОГОН (добавлен 11.11.2026).
+#
+#  ЗАЧЕМ ОТДЕЛЬНЫЙ КОНВЕЙЕР, А НЕ ЕЩЁ ОДИН JOB В CI. Между «проверкой на каждый коммит» и
+#  «полной проверкой» разные бюджеты:
+#    • на коммит нужны минуты — иначе никто не будет ждать и начнут игнорировать красное;
+#    • PlayMode требует раннера С ГРАФИКОЙ (в -nographics прогон виснет, измерено ~40 минут);
+#    • сборка APK идёт ~70 минут, нужен Android SDK и ключ подписи;
+#    • Е2Е поднимает настоящую сцену и настоящий uGUI.
+#  Поэтому тяжёлое — здесь, по расписанию, с сохранением артефактов на две недели.
+#
+#  ЧТО ИМЕННО ПРОВЕРЯЕТСЯ НОЧЬЮ:
+#    1) полный EditMode-прогон (те же ~1150 тестов, но с запасом по времени);
+#    2) PlayMode-тесты полного сценария робота;
+#    3) Е2Е панели «Настройки» и переключателя VR/MR (KvE2eSettingsDiag);
+#    4) сборка APK — доказательство, что проект СБИРАЕТСЯ, а не только проходит тесты.
+#
+#  ЕСЛИ ЧЕГО-ТО НЕТ (нет лицензии / нет GPU-раннера / нет ключа) — соответствующий job НЕ
+#  притворяется выполненным: он либо не запускается (и это видно), либо падает с объяснением.
+# ================================================================================================
+
+on:
+  schedule:
+    - cron: '30 1 * * *'      # 01:30 UTC = 04:30 МСК
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  UNITY_VERSION: '6000.5.6f1'
+
+jobs:
+  # ------------------------------------------------------------------ 1. EditMode, полный прогон
+  editmode-full:
+    name: "EditMode (полный)"
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-nightly-${{ runner.os }}-${{ env.UNITY_VERSION }}-${{ hashFiles('Packages/packages-lock.json', 'ProjectSettings/ProjectVersion.txt') }}
+          restore-keys: |
+            Library-${{ runner.os }}-${{ env.UNITY_VERSION }}-
+
+      - name: "Проверка лицензии"
+        id: license
+        shell: pwsh
+        run: |
+          $ok = (-not [string]::IsNullOrWhiteSpace("${{ secrets.UNITY_LICENSE }}")) -or
+                ((-not [string]::IsNullOrWhiteSpace("${{ secrets.UNITY_EMAIL }}")) -and
+                 (-not [string]::IsNullOrWhiteSpace("${{ secrets.UNITY_PASSWORD }}")))
+          if ($ok) { "present=true" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8 }
+          else {
+            "present=false" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+            Write-Host "::error::Лицензия Unity не настроена — ночная проверка НЕ выполнена."
+          }
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+
+      - name: "Провалить, если лицензии нет"
+        if: steps.license.outputs.present != 'true'
+        shell: pwsh
+        run: exit 1
+
+      - name: "EditMode-тесты"
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: ${{ env.UNITY_VERSION }}
+          testMode: EditMode
+          artifactsPath: nightly-editmode
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          checkName: "EditMode (ночь)"
+          customParameters: -nographics
+
+      - name: "Отчёт тестов"
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: "EditMode (ночь, NUnit)"
+          path: 'nightly-editmode/**/*.xml'
+          reporter: dotnet-nunit
+          fail-on-error: false
+          list-tests: failed
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nightly-editmode
+          path: nightly-editmode
+          if-no-files-found: warn
+          retention-days: 14
+
+  # ------------------------------------------------------------------ 2. PlayMode (нужна графика)
+  playmode:
+    name: "PlayMode: полный сценарий робота"
+    runs-on: windows-latest
+    timeout-minutes: 150
+    needs: [editmode-full]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-nightly-${{ runner.os }}-${{ env.UNITY_VERSION }}-${{ hashFiles('Packages/packages-lock.json', 'ProjectSettings/ProjectVersion.txt') }}
+          restore-keys: |
+            Library-${{ runner.os }}-${{ env.UNITY_VERSION }}-
+
+      - name: "PlayMode-тесты"
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: ${{ env.UNITY_VERSION }}
+          testMode: PlayMode
+          artifactsPath: nightly-playmode
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          checkName: "PlayMode (ночь)"
+
+      - name: "Е2Е: панель «Настройки» и переключатель VR/MR"
+        shell: pwsh
+        run: |
+          # Прогон БЕЗ -nographics: поднимается настоящая сцена и настоящий uGUI.
+          # KvE2eSettingsDiag сам завершает редактор: 0 — прошло, 2 — провалы.
+          $unity = "C:\Program Files\Unity\Hub\Editor\${{ env.UNITY_VERSION }}\Editor\Unity.exe"
+          if (-not (Test-Path $unity)) {
+            Write-Host "::error::Unity не найден: $unity — Е2Е НЕ выполнен"
+            exit 1
+          }
+          & $unity -batchmode -projectPath "${{ github.workspace }}" `
+                   -executeMethod KvE2eSettingsDiag.Run `
+                   -logFile "${{ github.workspace }}\Logs\e2e-settings.log"
+          $code = $LASTEXITCODE
+          Write-Host "код возврата Е2Е: $code"
+          if ($code -ne 0) { Write-Host "::error::Е2Е провален (код $code)"; exit 1 }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nightly-playmode
+          path: |
+            nightly-playmode
+            Logs/e2e-settings.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  # ------------------------------------------------------------------ 3. Сборка APK
+  android:
+    name: "Сборка APK (доказательство собираемости)"
+    runs-on: windows-latest
+    timeout-minutes: 240
+    needs: [editmode-full]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-android-${{ runner.os }}-${{ env.UNITY_VERSION }}-${{ hashFiles('Packages/packages-lock.json', 'ProjectSettings/ProjectVersion.txt') }}
+          restore-keys: |
+            Library-${{ runner.os }}-${{ env.UNITY_VERSION }}-
+
+      - name: "Собрать APK"
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          ANDROID_KEYALIAS_NAME: ${{ secrets.ANDROID_KEYALIAS_NAME }}
+          ANDROID_KEYALIAS_PASS: ${{ secrets.ANDROID_KEYALIAS_PASS }}
+        with:
+          unityVersion: ${{ env.UNITY_VERSION }}
+          targetPlatform: Android
+          androidExportType: androidPackage
+          buildName: KazistovVv
+          versioning: None
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nightly-apk
+          path: build
+          if-no-files-found: error
+          retention-days: 7
+
+  # ------------------------------------------------------------------ 4. Гейт
+  gate:
+    name: "Итог ночи"
+    runs-on: ubuntu-latest
+    needs: [editmode-full, playmode, android]
+    if: always()
+    steps:
+      - name: "Свести вердикт"
+        run: |
+          echo "editmode-full: ${{ needs.editmode-full.result }}"
+          echo "playmode:      ${{ needs.playmode.result }}"
+          echo "android:       ${{ needs.android.result }}"
+          for job in "editmode-full:${{ needs.editmode-full.result }}" \
+                     "playmode:${{ needs.playmode.result }}" \
+                     "android:${{ needs.android.result }}"; do
+            name="${job%%:*}"; result="${job##*:}"
+            case "$result" in
+              success) echo "  ✅ $name" ;;
+              skipped) echo "::error::$name ПРОПУЩЕН, а не пройден. Ночь не проверена."; exit 1 ;;
+              cancelled) echo "::error::$name отменён."; exit 1 ;;
+              *) echo "::error::$name провален ($result)."; exit 1 ;;
+            esac
+          done
+          echo "Ночь проверена полностью."

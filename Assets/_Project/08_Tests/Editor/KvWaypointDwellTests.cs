@@ -24,6 +24,7 @@ using TrajectoryCore;
 namespace KazistovVvTests
 {
     /// <summary>Вставка выдержек в маршрут: время, копии поз, границы.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvWaypointDwellTests
     {
         /// <summary>
@@ -222,3 +223,4 @@ namespace KazistovVvTests
         }
     }
 }
+

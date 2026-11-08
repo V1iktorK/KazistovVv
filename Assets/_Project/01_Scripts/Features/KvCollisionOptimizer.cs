@@ -108,10 +108,23 @@ namespace KazistovVvFeatures
         public KvCollisionBenchmark Benchmark { get { return benchmark; } }
         public bool PreviewVisible { get { return preview; } }
 
-        /// <summary>Оптимизация включена (тумблер в настройках).</summary>
+        /// <summary>
+        /// Оптимизация включена (тумблер в настройках).
+        ///
+        /// ЧТО БЫЛО (P1-4, 11.11.2026). Геттер звал `Load()`, а `Load()` не только читал
+        /// `PlayerPrefs`, но и ПИСАЛ в глобальный реестр `CollisionProxies.Enabled`. То есть
+        /// ОДНО ЧТЕНИЕ свойства откатывало глобальный флаг прокси столкновений — а это
+        /// предохранитель зазоров, который считает столкновения робота с миром.
+        ///
+        /// ЧЕМ ЭТО ГРОЗИЛО. Любая проверка «включено ли» (в т.ч. из UI каждый кадр) возвращала
+        /// реестр к значению из `PlayerPrefs`: включённая оптимизация выключалась на ходу, и
+        /// проверки столкновений шли по другой геометрии — оператор видел «проходит сквозь стол».
+        ///
+        /// Теперь: чтение НИЧЕГО не меняет (правило [K5]), загрузка — один раз в `Bind`.
+        /// </summary>
         public bool Enabled
         {
-            get { Load(); return enabled; }
+            get { return enabled; }
             set
             {
                 Load();
@@ -128,12 +141,24 @@ namespace KazistovVvFeatures
             }
         }
 
+        /// <summary>
+        /// ПРОЧИТАТЬ НАСТРОЙКУ И ПРИМЕНИТЬ К РЕЕСТРУ — РОВНО ОДИН РАЗ (см. `Enabled`).
+        /// Вызывается из `Bind`, то есть при подключении к потоку траекторий, а не из геттера.
+        /// </summary>
         private void Load()
         {
             if (loaded) return;
             loaded = true;
             enabled = PlayerPrefs.GetInt(EnabledPrefsKey, 0) != 0;
             CollisionProxies.Enabled = enabled;
+        }
+
+        /// <summary>СОСТОЯНИЕ ДЛЯ ЖУРНАЛА: загружено ли из настроек и что стоит в реестре.</summary>
+        public string DescribeEnabledState()
+        {
+            return "прокси: " + (enabled ? "включены" : "выключены") +
+                   " · из настроек " + (loaded ? "прочитано" : "ещё нет") +
+                   " · реестр " + (CollisionProxies.Enabled ? "включён" : "выключен");
         }
 
         public void Bind(TrajectoryFlowController controller, CollisionWorld collisionWorld,

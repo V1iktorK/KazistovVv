@@ -203,7 +203,7 @@ _Скопировать целиком и отдать агенту. Промт 
 **Единственная правильная команда сборки:**
 
 ```powershell
-$env:KAZISTOVVV_KEYPASS="KazistovVv2026"
+$env:KAZISTOVVV_KEYPASS="<пароль ключа — у владельца, НЕ в репозитории>"
 $env:KAZISTOVVV_KEYSTORE="C:\Users\Ольга\OneDrive\Documentos\новое пространство\KazistovVv\keystore\kazistovvv.keystore"
 $env:GRADLE_USER_HOME="C:\GradleHome"
 powershell -ExecutionPolicy Bypass -File "C:\Users\Ольга\OneDrive\Documentos\новое пространство\KazistovVv\Tools\build-android.ps1" -Install -Run
@@ -452,7 +452,7 @@ Test-Path "<проект>\Temp\UnityLockfile"
 Только после зелёных тестов:
 
 ```powershell
-$env:KAZISTOVVV_KEYPASS="KazistovVv2026"
+$env:KAZISTOVVV_KEYPASS="<пароль ключа — у владельца, НЕ в репозитории>"
 $env:KAZISTOVVV_KEYSTORE="<проект>\keystore\kazistovvv.keystore"
 $env:GRADLE_USER_HOME="C:\GradleHome"
 powershell -ExecutionPolicy Bypass -File "<проект>\Tools\build-android.ps1" -Install -Run

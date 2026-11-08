@@ -26,6 +26,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Статусы плана не противоречат друг другу.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvPlanStatusTests
     {
         private static string PlanPath
@@ -145,3 +146,4 @@ namespace KazistovVvTests
         }
     }
 }
+

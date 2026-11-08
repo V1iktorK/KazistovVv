@@ -24,6 +24,7 @@ namespace KazistovVv.Tests
     /// ЕСЛИ ЭТОТ ТЕСТ УПАЛ — значит добавили команду и забыли положить её в группу. Лечится
     /// одной строкой в `KvToolbarGroups`.
     /// </summary>
+        [Category(KazistovVvTests.KvTestCategories.Slow)]
     public class KvXrMenuCoverageTests
     {
         private static string ProjectRoot
@@ -188,8 +189,15 @@ namespace KazistovVv.Tests
         {
             string file = Path.Combine(ScriptsRoot, "06_KazistovVv_UI", "03_Scripts", "Zones",
                 "KvToolbarGroups.cs");
-            if (!File.Exists(file))
-                Assert.Ignore("KvToolbarGroups.cs не найден по ожидаемому пути");
+
+            // P4-2 (11.11.2026). ЧТО БЫЛО: `Assert.Ignore`, если файл не найден, — единственный
+            // «пропущенный» тест набора: путь переименовали, а прогон остался зелёным.
+            // ЧТО СТАЛО: пропавший файл — провал проверки (иначе «свалка в Прочее» никем не
+            // контролируется).
+            Assert.IsTrue(File.Exists(file),
+                "KvToolbarGroups.cs не найден по пути " + file + " — проверка «Прочее не свалка» " +
+                "больше не работает (P4-2)");
+
             string text = File.ReadAllText(file);
 
             Match m = Regex.Match(text,
@@ -198,9 +206,16 @@ namespace KazistovVv.Tests
             Assert.IsTrue(m.Success, "Группа «misc» не найдена в KvToolbarGroups.Build()");
 
             int count = Regex.Matches(m.Groups[1].Value, @"""[a-z][a-z0-9]*(?:\.[a-z0-9]+)+""").Count;
+
+            // СТРАХОВКА ОТ ВАКУУМА (P4-2): ноль команд означает, что разбор не сработал, а не что
+            // группа пуста — иначе тест «проходил» бы на сломанном парсере.
+            Assert.Greater(count, 0, "в группе «Прочее» не разобрано ни одной команды — проверка " +
+                                     "потеряла смысл (P4-2)");
+
             Assert.LessOrEqual(count, 20,
                 "В группе «Прочее» " + count + " команд — это уже свалка. Разложите их по смыслу: " +
                 "постобработка в «Постобработку», зоны в «Визуализацию», файлы в «Запись и экспорт».");
         }
     }
 }
+

@@ -20,6 +20,7 @@ namespace KazistovVvTests
     /// Тесты написаны ДО подключения к сцене и живут отдельно от неё: это чистая арифметика
     /// решения, и она обязана быть верной независимо от того, что видно в шлеме.
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvGazeDwellTests
     {
         /// <summary>Время накапливается шагами и упирается в порог, а не растёт бесконечно.</summary>
@@ -115,3 +116,4 @@ namespace KazistovVvTests
         }
     }
 }
+

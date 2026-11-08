@@ -25,6 +25,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Строка режима: фактический масштаб, разделитель, безопасные значения.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvXrModeScaleTests
     {
         /// <summary>
@@ -135,3 +136,4 @@ namespace KazistovVvTests
         }
     }
 }
+

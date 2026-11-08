@@ -39,6 +39,23 @@ namespace TrajectoryCore
     public class IkSolver
     {
         public float positionTolerance = 0.004f;  // 4 мм
+
+        /// <summary>
+        /// ДОПУСК IK ДЛЯ SCARA, метры (P1-17, 11.11.2026).
+        ///
+        /// ЧТО БЫЛО. В `SolveScara` стояло «магическое» `sol.fkError &lt;= 0.05f` — 5 см, — тогда
+        /// как `positionTolerance` равен 4 мм и 6-осевой отбраковывает решения по
+        /// `positionTolerance * 2f`. Для одного проекта это два разных представления о «попал»:
+        /// SCARA принимала решение с ошибкой 4,9 см как годное, и оператор видел, что кончик
+        /// останавливается в 5 см от цели, — а планировщик считал позу достигнутой.
+        ///
+        /// ПОЧЕМУ ДОПУСК ВСЁ ЖЕ ШИРЕ. У SCARA схват/«палец» (`z_5`) вынесен вдоль оси инструмента:
+        /// FTC-точка модели и точка, которой оператор целится, расходятся на конструктивную длину
+        /// пальца, поэтому честная ошибка по TCP на этой модели больше. Число названо, объяснено и
+        /// живёт рядом с `positionTolerance`, а не внутри метода.
+        /// </summary>
+        public float scaraFkTolerance = 0.05f;
+
         public int ccdIterations = 120;
         public int ccdSeeds = 6;
 
@@ -103,6 +120,13 @@ namespace TrajectoryCore
             var list = SolveAll(target, seed);
             LastAnalyticCount = list.Count;
             if (v == null || seed == null) return list;
+
+            // P1-18: ДЛИНА СИДА ПРОВЕРЯЕТСЯ. Ниже идут `s[1]…s[5]`; для робота с 5 осями
+            // (`seed.Length == 5`) обращение `s[5] += 180` бросало `IndexOutOfRangeException`
+            // прямо в генерации вариантов, и вызывающий видел пустой список вместо ветвей.
+            // `SolveAll` такую проверку (`seed.Length < 6`) делал, а этот метод — нет.
+            if (seed.Length < 6) return list;
+
             if (v.Dof == 3) return list;   // SCARA: аналитических ветвей (≤4) достаточно
             if (list.Count >= maxSolutions) return list;
 
@@ -300,9 +324,11 @@ namespace TrajectoryCore
                         fkError = (v.TcpAt(q) - target).magnitude,
                         nearSingularity = singular
                     };
-                    if (sol.fkError <= 0.05f) list.Add(sol);   // допуск 5 см: z_5 — «палец» стержня
+                    if (sol.fkError <= scaraFkTolerance) list.Add(sol);   // допуск SCARA — см. `scaraFkTolerance`
                     bestErr = System.Math.Min(bestErr, (float)sol.fkError);
-                    _ = radial;
+                    // `radial` больше не считается: задний вылет уже выражен поворотом азимута на
+                    // 180° (P1-18). Прежняя переменная вычислялась и «гасилась» `_ = radial;`, то
+                    // есть шапка метода обещала различие вылетов, которого в коде не было.
                 }
             }
             LastScaraDebug += " | лучший err=" + (bestErr == float.MaxValue ? "n/a" : bestErr.ToString("0.000"));

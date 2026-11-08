@@ -27,6 +27,7 @@ namespace KazistovVvTests
     ///
     /// ТЕСТ НЕ КАСАЕТСЯ СЦЕНЫ И СБОРКИ: панель создаётся в памяти и уничтожается в конце.
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvXrPanelTargetTests
     {
         /// <summary>Точность сравнения смещений на канвасе, метры (смещения задаются с 0,001 м).</summary>
@@ -215,3 +216,4 @@ namespace KazistovVvTests
         }
     }
 }
+

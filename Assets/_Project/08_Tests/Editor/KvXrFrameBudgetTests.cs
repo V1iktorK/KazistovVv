@@ -26,6 +26,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>XR-слой: в кадровом коде нет лишних аллокаций.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvXrFrameBudgetTests
     {
         private static string XrDir
@@ -214,3 +215,4 @@ namespace KazistovVvTests
         }
     }
 }
+

@@ -20,12 +20,20 @@
       powershell -ExecutionPolicy Bypass -File Tools\stage-a-restore-tests.ps1
 #>
 param(
-    [string]$Project = "C:\KazistovVv_Build",
-    [string]$Backup = "C:\KazistovVv_Build\_backups_consolidated\folders\urp_switch_2026-10-05_2114",
+    [string]$Project = (Split-Path -Parent $PSScriptRoot),
+    # P4-12 (12.11.2026): умолчание бэкапа — ВНУТРИ проекта, а не жёстким путём к ASCII-копии
+    # на машине владельца. Смысл бэкапа — сравнить вернувшиеся файлы по хешам; путь к нему не
+    # должен зависеть от того, где лежит рабочая копия.
+    [string]$Backup = "",
     [switch]$WhatIfOnly
 )
 
 $ErrorActionPreference = 'Continue'
+
+# P4-12 (12.11.2026): путь бэкапа по умолчанию — относительно проекта, а не жёстко к ASCII-копии.
+if (-not $Backup) {
+    $Backup = Join-Path $Project '_backups_consolidated\folders\urp_switch_2026-10-05_2114'
+}
 
 $tests = Join-Path $Project 'Assets\_Project\08_Tests'
 $parked = Join-Path $Project '_tests_parked_for_build'

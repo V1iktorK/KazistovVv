@@ -29,6 +29,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Реестр публичных методов без вызовов: каждый обоснован.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvDeadMethodTests
     {
         /// <summary>
@@ -161,3 +162,4 @@ namespace KazistovVvTests
         }
     }
 }
+

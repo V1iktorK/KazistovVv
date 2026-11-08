@@ -27,6 +27,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Гигиена репозитория: артефакты и секреты не должны попадать в git.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvRepositoryHygieneTests
     {
         /// <summary>
@@ -246,3 +247,4 @@ namespace KazistovVvTests
         }
     }
 }
+

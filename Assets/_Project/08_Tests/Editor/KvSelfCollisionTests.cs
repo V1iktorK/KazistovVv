@@ -27,6 +27,7 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Правило самоколлизии: соседи не считаются, далёкие звенья — считаются.</summary>
+        [Category(KvTestCategories.Fast)]
     public class KvSelfCollisionTests
     {
         /// <summary>
@@ -226,3 +227,4 @@ namespace KazistovVvTests
         }
     }
 }
+

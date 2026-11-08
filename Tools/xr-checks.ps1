@@ -13,14 +13,27 @@
     не в тот проект. Рабочий проект после §28 — `C:\KazistovVv_Build\`.
 #>
 param(
-    [string]$Project = "C:\KazistovVv_Build",
+    [string]$Project = (Split-Path -Parent $PSScriptRoot),
     [string]$Tag = "xr-baseline",
     [int]$GateTimeoutMinutes = 25,
     [int]$TestsTimeoutMinutes = 30
 )
 
 $ErrorActionPreference = 'Continue'
-$unity = "C:\Program Files\Unity\Hub\Editor\6000.5.6f1\Editor\Unity.exe"
+# P4-12 (12.11.2026): версия Unity — ИЗ ПРОЕКТА (ProjectVersion.txt), а не из жёсткого пути.
+# Жёсткий путь ломался при любом обновлении движка и уводил проверки в чужой проект.
+$unity = ""
+$versionFile = Join-Path $Project 'ProjectSettings\ProjectVersion.txt'
+if (Test-Path $versionFile) {
+    $found = Select-String -Path $versionFile -Pattern 'm_EditorVersion:\s*(\S+)'
+    if ($found) {
+        $unity = Join-Path $env:ProgramFiles ("Unity\Hub\Editor\" + $found.Matches[0].Groups[1].Value + "\Editor\Unity.exe")
+    }
+}
+if (-not $unity -or -not (Test-Path $unity)) {
+    Write-Host "ОШИБКА: Unity.exe не найден (версия из ProjectVersion.txt). Задайте путь переменной окружения или ключом."
+    exit 1
+}
 $logs = Join-Path $Project 'Logs'
 New-Item -ItemType Directory -Path $logs -Force | Out-Null
 

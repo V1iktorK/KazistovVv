@@ -163,6 +163,7 @@ namespace TrajectoryCore
                 {
                     if (renderers[i] == null || renderers[i].sharedMaterial == null) continue;
                     cachedTableMaterial = renderers[i].sharedMaterial;
+                    tableMaterialIsOurs = false;   // материал сцены — НЕ наш, уничтожать нельзя
                     return cachedTableMaterial;
                 }
             }
@@ -170,10 +171,41 @@ namespace TrajectoryCore
             // 2) запасной путь: материал того же вида, что у пола XR-сцены
             cachedTableMaterial = KazistovVvFeatures.KvRenderPipelineShaders.CreateLit(
                 "Материал_стола_XR", new Color(0.42f, 0.44f, 0.47f));
+            tableMaterialIsOurs = true;            // создан нами — учтён для уничтожения (P2-9)
             return cachedTableMaterial;
         }
 
         private static Material cachedTableMaterial;
+
+        /// <summary>
+        /// СБРОСИТЬ СТАТИЧЕСКИЙ МАТЕРИАЛ (P2-9, 11.11.2026).
+        ///
+        /// ЧТО БЫЛО. `cachedTableMaterial` — статическое поле; если материал был СОЗДАН нами
+        /// (запасной путь `CreateLit`), он не уничтожался никогда, а ссылка на него переживала
+        /// выход из PlayMode: следующий прогон получал материал прошлой сцены, а сам материал
+        /// оставался в нативной памяти.
+        ///
+        /// ЧЕМ ЭТО ГРОЗИЛО. В редакторе — «столы розовые/серые не те» после перезапуска и утечка
+        /// материала на каждый прогон; на шлеме — тот же материал, но уже ничей.
+        ///
+        /// ТЕПЕРЬ кэш сбрасывается на старте прогона, а созданный нами материал уничтожается.
+        /// Материал, ВЗЯТЫЙ у стола сцены, не наш — его уничтожать нельзя (об этом флаг
+        /// <see cref="tableMaterialIsOurs"/>).
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics()
+        {
+            if (tableMaterialIsOurs && cachedTableMaterial != null)
+            {
+                if (Application.isPlaying) Object.Destroy(cachedTableMaterial);
+                else Object.DestroyImmediate(cachedTableMaterial);
+            }
+            cachedTableMaterial = null;
+            tableMaterialIsOurs = false;
+        }
+
+        /// <summary>Материал стола создан нами — значит его и уничтожать (см. `ResetStatics`).</summary>
+        private static bool tableMaterialIsOurs;
 
         /// <summary>Назначить материал ВСЕМ частям стола (столешница и ножки).</summary>
         private static void ApplyTableMaterial(GameObject root)

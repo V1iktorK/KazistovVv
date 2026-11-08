@@ -23,6 +23,7 @@ namespace KazistovVvTests
     ///
     /// Ни одного GameObject, ни одной записи в настройки: тесты только читают файл проекта.
     /// </summary>
+        [Category(KvTestCategories.Fast)]
     public class KvQualityLevelTests
     {
         private const string QualitySettingsPath = "ProjectSettings/QualitySettings.asset";
@@ -122,3 +123,4 @@ namespace KazistovVvTests
         }
     }
 }
+

@@ -48,6 +48,13 @@ namespace KazistovVvAr
         /// <summary>Строить интерфейс сразу при старте.</summary>
         public bool buildOnStart = true;
 
+        /// <summary>
+        /// ВЫСОТА СТРОКИ «ПОД ПАЛЕЦ» — ДОЛЯ ВЫСОТЫ ЭКРАНА (07.11.2026). Замер по фото планшета
+        /// 2560×1600: строка тулбара была ≈5,3 мм, дерево проекта ≈5,3 мм, правые кнопки ≈7,7 мм —
+        /// это меньше трети пальца, попасть трудно. 6,5 % высоты экрана ≈ 10,4 мм.
+        /// </summary>
+        public float touchRowScreenFraction = 0.065f;
+
         /// <summary>Писать в журнал о построении (обязательная строка-доказательство).</summary>
         public bool logOnBuild = true;
 
@@ -60,6 +67,8 @@ namespace KazistovVvAr
         private Text messageText;
         private Button messageButton;
         private Text messageButtonText;
+        private GameObject messageCancelRoot;
+        private Action messageCancelAction;
         private Action messageAction;
         private readonly List<Button> buttons = new List<Button>();
 
@@ -119,6 +128,53 @@ namespace KazistovVvAr
             }
         }
 
+        /// <summary>
+        /// ВЫСОТА СТРОКИ ПОД ПАЛЕЦ В ЕДИНИЦАХ КАНВАСА. Считается от фактической высоты экрана и
+        /// масштаба канваса, поэтому одинаково читается на 2560×1600 и на другом планшете.
+        /// </summary>
+        public float TouchRowHeightUi()
+        {
+            float fraction = Mathf.Clamp(touchRowScreenFraction, 0.03f, 0.12f);
+            return Mathf.Round(Mathf.Clamp(CanvasHeightUi() * fraction, 48f, 220f));
+        }
+
+        /// <summary>ВЫСОТА ЭКРАНА В ЕДИНИЦАХ КАНВАСА (для раскладки без обрезки снизу).</summary>
+        private float CanvasHeightUi()
+        {
+            return Screen.height > 0 ? Screen.height / UiScaleFactor() : referenceResolution.y;
+        }
+
+        /// <summary>ШИРИНА ЭКРАНА В ЕДИНИЦАХ КАНВАСА (строка инструментов обязана влезть целиком).</summary>
+        private float CanvasWidthUi()
+        {
+            return Screen.width > 0 ? Screen.width / UiScaleFactor() : referenceResolution.x;
+        }
+
+        /// <summary>
+        /// МАСШТАБ КАНВАСА. `canvas.scaleFactor` в момент построения интерфейса ещё равен 1 —
+        /// `CanvasScaler` применяет масштаб на своём первом обновлении, то есть ПОСЛЕ постройки.
+        /// Из-за этого размеры считались в «сырых» пикселях: на планшете 2560×1600 строка вышла
+        /// 143 px вместо 104, а 13 кнопок инструментов заняли 2544 ед. при доступных 1821 —
+        /// правые кнопки («Экспорт», «Сохранить», «Демо») уехали за экран (факт по
+        /// `Logs/ar-fix2-screen.png`). Поэтому масштаб считаем ТОЙ ЖЕ формулой, что у
+        /// `CanvasScaler.ScaleWithScreenSize` с `matchWidthOrHeight = 0.5`.
+        /// </summary>
+        private float UiScaleFactor()
+        {
+            // ВАЖНО: `canvas.scaleFactor` в момент постройки равен 1 — это НЕ применённый масштаб,
+            // а значение по умолчанию (CanvasScaler выставит своё на первом обновлении). Поэтому
+            // проверять его бессмысленно: масштаб всегда считаем формулой CanvasScaler.
+            float refW = Mathf.Max(1f, referenceResolution.x);
+            float refH = Mathf.Max(1f, referenceResolution.y);
+            float logWidth = Mathf.Log(Mathf.Max(1f, Screen.width) / refW, 2f);
+            float logHeight = Mathf.Log(Mathf.Max(1f, Screen.height) / refH, 2f);
+            float scale = Mathf.Pow(2f, Mathf.Lerp(logWidth, logHeight, UiScaleMatch));
+            return scale > 0.01f ? scale : 1f;
+        }
+
+        /// <summary>Как в `CanvasScaler`: 0 — по ширине, 1 — по высоте, 0,5 — поровну.</summary>
+        private const float UiScaleMatch = 0.5f;
+
         /// <summary>ПОСТРОИТЬ ИНТЕРФЕЙС (идемпотентно).</summary>
         public void EnsureBuilt()
         {
@@ -134,7 +190,7 @@ namespace KazistovVvAr
             CanvasScaler scaler = canvasGo.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = referenceResolution;
-            scaler.matchWidthOrHeight = 0.5f;
+            scaler.matchWidthOrHeight = UiScaleMatch;
             canvasGo.AddComponent<GraphicRaycaster>();
 
             BuildPcChrome(canvasGo.transform);
@@ -144,9 +200,17 @@ namespace KazistovVvAr
             HideMessage();
 
             if (logOnBuild)
+            {
+                float rowUi = TouchRowHeightUi();
                 Debug.Log("[KvAr] ИНТЕРФЕЙС: ПК-вид построен · меню 6 · дерево · инструменты · " +
                           "опорное разрешение " + referenceResolution.x.ToString("0") + "×" +
-                          referenceResolution.y.ToString("0"));
+                          referenceResolution.y.ToString("0") +
+                          " · канвас " + CanvasWidthUi().ToString("0") + "×" +
+                          CanvasHeightUi().ToString("0") + " ед. · масштаб " +
+                          UiScaleFactor().ToString("0.000") +
+                          " · строка под палец " + rowUi.ToString("0") + " ед. (≈" +
+                          (rowUi * UiScaleFactor()).ToString("0") + " px)");
+            }
         }
 
         // ================================================================ ПК-КАРКАС
@@ -156,6 +220,22 @@ namespace KazistovVvAr
             Color bar = new Color(0.035f, 0.045f, 0.055f, 0.96f);
             Color line = new Color(0.78f, 0.82f, 0.86f, 0.95f);
 
+            // РАЗМЕРЫ ПОД ПАЛЕЦ: высота строки считается от экрана (≈10 мм), а не берётся
+            // «как на ПК». Раскладка ПК-вида сохраняется — меняются только высоты строк.
+            float touch = TouchRowHeightUi();
+            float menuHeight = touch;
+            float toolbarHeight = touch;
+            float statusHeight = Mathf.Round(Mathf.Max(48f, touch * 0.62f));
+            float buttonHeightUi = touch - 8f;
+            // СТРОКА ИНСТРУМЕНТОВ ОБЯЗАНА ВЛЕЗТЬ ЦЕЛИКОМ: ширина кнопок считается от ширины
+            // экрана. Раньше 13 кнопок по 142 ед. требовали 1950 ед. при экране 1859 ед. —
+            // последняя («Демо») не попадала на экран вовсе (факт по Logs/ar-fix-screen.png).
+            float toolbarPitch = Mathf.Max(96f, (CanvasWidthUi() - 16f) / 13f);
+            float toolbarButtonWidth = Mathf.Max(88f, toolbarPitch - 8f);
+            int fontSizeMenu = Mathf.RoundToInt(Mathf.Clamp(touch * 0.30f, 22f, 34f));
+            int fontSizeTools = Mathf.RoundToInt(Mathf.Clamp(touch * 0.27f, 20f, 30f));
+            int fontSizeFooter = Mathf.RoundToInt(Mathf.Clamp(touch * 0.30f, 22f, 34f));
+
             // ВЕРХНЕЕ МЕНЮ С РАБОЧИМИ ПУНКТАМИ
             GameObject menu = new GameObject("PcMenuBar", typeof(RectTransform), typeof(Image));
             menu.transform.SetParent(parent, false);
@@ -164,7 +244,7 @@ namespace KazistovVvAr
             menuRect.anchorMax = new Vector2(1f, 1f);
             menuRect.pivot = new Vector2(0.5f, 1f);
             menuRect.anchoredPosition = Vector2.zero;
-            menuRect.sizeDelta = new Vector2(0f, 50f);
+            menuRect.sizeDelta = new Vector2(0f, menuHeight);
             menu.GetComponent<Image>().color = bar;
             menu.GetComponent<Image>().raycastTarget = false;
             menuBar = menu.transform;
@@ -175,8 +255,8 @@ namespace KazistovVvAr
                 int index = i;
                 CreateButton(menu.transform, "Menu_" + menus[i], menus[i],
                     delegate { ToggleMenu(menus[index]); },
-                    new Vector2(132f, 46f), 24,
-                    new Vector2(8f + i * 138f, 2f), TextAnchor.MiddleCenter);
+                    new Vector2(152f, buttonHeightUi), fontSizeMenu,
+                    new Vector2(8f + i * 158f, 4f), TextAnchor.MiddleCenter);
             }
 
             // СТРОКА ИНСТРУМЕНТОВ (как панель инструментов ПК)
@@ -186,14 +266,15 @@ namespace KazistovVvAr
             toolsRect.anchorMin = new Vector2(0f, 1f);
             toolsRect.anchorMax = new Vector2(1f, 1f);
             toolsRect.pivot = new Vector2(0.5f, 1f);
-            toolsRect.anchoredPosition = new Vector2(0f, -50f);
-            toolsRect.sizeDelta = new Vector2(0f, 52f);
+            toolsRect.anchoredPosition = new Vector2(0f, -menuHeight);
+            toolsRect.sizeDelta = new Vector2(0f, toolbarHeight);
             tools.GetComponent<Image>().color = new Color(0.02f, 0.03f, 0.04f, 0.92f);
             tools.GetComponent<Image>().raycastTarget = false;
             toolbar = tools.transform;
 
             string[][] quick =
             {
+                new[] { "Очистить", "workspace.clear" },
                 new[] { "Скриншот", "shot.screenshot" },
                 new[] { "Запись", "record.toggle" },
                 new[] { "Стоп", "estop" },
@@ -212,8 +293,8 @@ namespace KazistovVvAr
                 string label = quick[i][0];
                 string id = quick[i][1];
                 CreateButton(toolbar, "Tool_" + id, label, delegate { Execute(id); },
-                    new Vector2(142f, 44f), 21,
-                    new Vector2(8f + i * 150f, 4f), TextAnchor.MiddleCenter);
+                    new Vector2(toolbarButtonWidth, buttonHeightUi), fontSizeTools,
+                    new Vector2(8f + i * toolbarPitch, 4f), TextAnchor.MiddleCenter);
             }
 
             // ДЕРЕВО ПРОЕКТА СЛЕВА — КНОПКИ, КОТОРЫЕ ДЕЙСТВУЮТ
@@ -223,8 +304,11 @@ namespace KazistovVvAr
             treeRect.anchorMin = new Vector2(0f, 0f);
             treeRect.anchorMax = new Vector2(0f, 1f);
             treeRect.pivot = new Vector2(0f, 0f);
-            treeRect.anchoredPosition = new Vector2(0f, 40f);
-            treeRect.sizeDelta = new Vector2(268f, -142f);
+            treeRect.anchoredPosition = new Vector2(0f, statusHeight);
+            // ВЫСОТА = экран − строка состояния − меню − инструменты. Без вычитания строки
+            // состояния панель дерева заезжала на строку инструментов и закрывала первые
+            // кнопки «Очистить» и «Скриншот» (видно на снимке Logs/ar-fix-screen.png).
+            treeRect.sizeDelta = new Vector2(300f, -(statusHeight + menuHeight + toolbarHeight));
             Image treeBg = tree.GetComponent<Image>();
             treeBg.color = new Color(0.03f, 0.04f, 0.05f, 0.9f);
             treeBg.raycastTarget = false;
@@ -243,14 +327,25 @@ namespace KazistovVvAr
                 new[] { "Этапы 13–36", "features.open" },
                 new[] { "Все команды", "group:robot" }
             };
+            float treePitch = touch + 8f;
+            float treeRowHeight = touch;
+            // ДЕРЕВО ОБЯЗАНО ВЛЕЗТЬ ЦЕЛИКОМ: если строки «под палец» не помещаются по высоте,
+            // сжимаем ИХ, а не обрезаем последние пункты (иначе «Все команды» недоступны).
+            float treeSpace = CanvasHeightUi() - menuHeight - toolbarHeight - statusHeight - 16f;
+            float fitPitch = treeSpace / Mathf.Max(1, treeRows.Length);
+            if (fitPitch < treePitch)
+            {
+                treePitch = Mathf.Max(32f, fitPitch);
+                treeRowHeight = Mathf.Max(28f, treePitch - 6f);
+            }
             for (int i = 0; i < treeRows.Length; i++)
             {
                 string label = treeRows[i][0];
                 string action = treeRows[i][1];
                 CreateButton(treePanel, "Tree_" + label, "▸ " + label,
                     delegate { TreeAction(action); },
-                    new Vector2(252f, 44f), 21,
-                    new Vector2(8f, -8f - i * 48f), TextAnchor.MiddleLeft);
+                    new Vector2(284f, treeRowHeight), fontSizeTools,
+                    new Vector2(8f, -8f - i * treePitch), TextAnchor.MiddleLeft);
             }
 
             // НИЖНЯЯ СТРОКА СОСТОЯНИЯ (как в ПК; без верхней подсказки)
@@ -261,15 +356,21 @@ namespace KazistovVvAr
             bottomRect.anchorMax = new Vector2(1f, 0f);
             bottomRect.pivot = new Vector2(0.5f, 0f);
             bottomRect.anchoredPosition = Vector2.zero;
-            bottomRect.sizeDelta = new Vector2(0f, 40f);
+            bottomRect.sizeDelta = new Vector2(0f, statusHeight);
             Image bottomBg = bottom.GetComponent<Image>();
             bottomBg.color = bar;
             bottomBg.raycastTarget = false;
 
-            footerLeft = AddText(bottom.transform, "FooterLeft", "Готово", 20, line,
-                TextAnchor.MiddleLeft, new Vector2(16f, 0f), new Vector2(0f, 0f));
-            footerRight = AddText(bottom.transform, "FooterRight", "Камера: вкл", 20, line,
-                TextAnchor.MiddleRight, new Vector2(-16f, 0f), new Vector2(-400f, 0f));
+            // СТРОКА СОСТОЯНИЯ: левая и правая части не должны наезжать друг на друга.
+            // Раньше оба текста растягивались на всю ширину, и «Стол: нет» сходился с
+            // «Камера: вкл» (видно на снимке Logs/ar-fix-screen.png).
+            float footerSplit = CanvasWidthUi() * 0.56f;
+            footerLeft = AddText(bottom.transform, "FooterLeft", "Готово", fontSizeFooter,
+                line, TextAnchor.MiddleLeft, new Vector2(16f, 0f),
+                new Vector2(-(CanvasWidthUi() - footerSplit), 0f));
+            footerRight = AddText(bottom.transform, "FooterRight", "Камера: вкл",
+                fontSizeFooter, line,
+                TextAnchor.MiddleRight, new Vector2(footerSplit, 0f), new Vector2(-16f, 0f));
 
             // ПАНЕЛЬ МЕНЮ (выпадающая) И ПАНЕЛЬ КОМАНД — создаются один раз
             BuildMenuPanel(parent);
@@ -284,11 +385,30 @@ namespace KazistovVvAr
             rect.anchorMin = new Vector2(0f, 1f);
             rect.anchorMax = new Vector2(0f, 1f);
             rect.pivot = new Vector2(0f, 1f);
-            rect.anchoredPosition = new Vector2(8f, -102f);
-            rect.sizeDelta = new Vector2(560f, 500f);
+            // Под меню и тулбаром (их высота теперь «под палец», а не 50 + 52 пикселя).
+            rect.anchoredPosition = new Vector2(8f, -(TopChromeHeightUi() + 8f));
+            rect.sizeDelta = new Vector2(620f, 600f);
             Image bg = menuPanel.GetComponent<Image>();
             bg.color = new Color(0.04f, 0.05f, 0.06f, 0.98f);
             menuPanel.SetActive(false);
+        }
+
+        /// <summary>ВЫСОТА ВЕРХНЕГО КАРКАСА (меню + строка инструментов), единицы канваса.</summary>
+        private float TopChromeHeightUi()
+        {
+            return TouchRowHeightUi() * 2f;
+        }
+
+        /// <summary>ВЫСОТА НИЖНЕЙ СТРОКИ СОСТОЯНИЯ, единицы канваса.</summary>
+        private float StatusBarHeightUi()
+        {
+            return Mathf.Round(Mathf.Max(48f, TouchRowHeightUi() * 0.62f));
+        }
+
+        /// <summary>ВЫСОТА ВКЛАДОК ГРУПП В ПАНЕЛИ КОМАНД, единицы канваса.</summary>
+        private float TabHeightUi()
+        {
+            return Mathf.Round(Mathf.Max(38f, TouchRowHeightUi() * 0.72f));
         }
 
         private void BuildCommandPanel(Transform parent)
@@ -299,8 +419,8 @@ namespace KazistovVvAr
             rect.anchorMin = new Vector2(0f, 0f);
             rect.anchorMax = new Vector2(0f, 1f);
             rect.pivot = new Vector2(0f, 0f);
-            rect.anchoredPosition = new Vector2(272f, 40f);
-            rect.sizeDelta = new Vector2(900f, -142f);
+            rect.anchoredPosition = new Vector2(308f, StatusBarHeightUi());
+            rect.sizeDelta = new Vector2(900f, -TopChromeHeightUi());
             Image bg = commandPanel.GetComponent<Image>();
             bg.color = new Color(0.035f, 0.045f, 0.055f, 0.97f);
 
@@ -330,24 +450,27 @@ namespace KazistovVvAr
             rowsRect.anchorMin = Vector2.zero;
             rowsRect.anchorMax = Vector2.one;
             rowsRect.offsetMin = new Vector2(10f, 10f);
-            rowsRect.offsetMax = new Vector2(-10f, -96f);
+            // Строки начинаются ПОД вкладками групп (их высота теперь «под палец»).
+            rowsRect.offsetMax = new Vector2(-10f, -(52f + TabHeightUi() + 10f));
 
             // ГРУППЫ КОМАНД (8) — вкладки с КОРОТКИМИ именами (как вкладки ПК-панели)
             KvToolbarGroup[] groups = KvToolbarGroups.All;
             string[] shortNames = { "Робот", "Траектория", "Постобр.", "Визуал.", "Экспорт", "Сеть", "Настройки", "Прочее" };
+            float tabHeight = TabHeightUi();
             for (int i = 0; i < groups.Length && i < 8; i++)
             {
                 string id = groups[i].Id;
                 string shortTitle = i < shortNames.Length ? shortNames[i] : ShortGroupTitle(groups[i].Title);
                 CreateButton(commandPanel.transform, "GroupTab_" + id, shortTitle,
                     delegate { OpenCommands(id); },
-                    new Vector2(92f, 38f), 14,
-                    new Vector2(8f + i * 96f, -52f), TextAnchor.MiddleCenter);
+                    new Vector2(100f, tabHeight), Mathf.RoundToInt(Mathf.Clamp(tabHeight * 0.34f, 16f, 26f)),
+                    new Vector2(8f + i * 104f, -52f), TextAnchor.MiddleCenter);
             }
 
             CreateButton(commandPanel.transform, "CloseCommands", "Закрыть",
                 delegate { ClosePanels(); },
-                new Vector2(88f, 38f), 15, new Vector2(800f, -52f), TextAnchor.MiddleCenter);
+                new Vector2(100f, tabHeight), Mathf.RoundToInt(Mathf.Clamp(tabHeight * 0.34f, 16f, 26f)),
+                new Vector2(800f, -52f), TextAnchor.MiddleCenter);
 
             commandPanel.SetActive(false);
         }
@@ -422,6 +545,14 @@ namespace KazistovVvAr
         public void Execute(string commandId)
         {
             if (string.IsNullOrEmpty(commandId)) return;
+
+            if (commandId == "workspace.clear" || commandId == "workspace.clear.confirmed")
+            {
+                ShowConfirm(
+                    "Очистить рабочее пространство?\nБудут удалены все столы, роботы, точки и траектории.\nМир вернётся к камере.",
+                    "ОЧИСТИТЬ", RequestClearWorkspace);
+                return;
+            }
 
             if (commandId.StartsWith("group:", StringComparison.Ordinal))
             {
@@ -508,7 +639,8 @@ namespace KazistovVvAr
             menuOpenTitle = menuTitle;
             menuPanel.SetActive(true);
 
-            Text title = AddText(menuPanel.transform, "MenuTitle", menuTitle, 24,
+            Text title = AddText(menuPanel.transform, "MenuTitle", menuTitle,
+                Mathf.RoundToInt(Mathf.Clamp(TouchRowHeightUi() * 0.26f, 22f, 30f)),
                 new Color(0.75f, 0.80f, 0.86f), TextAnchor.MiddleLeft,
                 new Vector2(16f, 0f), new Vector2(0f, 0f));
             RectTransform titleRect = (RectTransform)title.transform;
@@ -518,6 +650,16 @@ namespace KazistovVvAr
             titleRect.anchoredPosition = new Vector2(0f, -8f);
             titleRect.sizeDelta = new Vector2(0f, 36f);
 
+            float rowHeight = TouchRowHeightUi() - 8f;
+            float rowPitch = TouchRowHeightUi();
+            // ВЫПАДАЮЩЕЕ МЕНЮ ОБЯЗАНО ВЛЕЗТЬ НА ЭКРАН: длинный раздел не должен уходить за низ.
+            float menuSpace = CanvasHeightUi() - TopChromeHeightUi() - StatusBarHeightUi() - 80f;
+            float fitPitch = menuSpace / Mathf.Max(1, ids.Length);
+            if (fitPitch < rowPitch)
+            {
+                rowPitch = Mathf.Max(30f, fitPitch);
+                rowHeight = Mathf.Max(26f, rowPitch - 6f);
+            }
             for (int r = 0; r < ids.Length; r++)
             {
                 string commandId = ids[r];
@@ -525,8 +667,9 @@ namespace KazistovVvAr
                 string caption = cmd != null ? cmd.LocalizedTitle : commandId + "  (нет)";
                 Button row = CreateButton(menuPanel.transform, "MenuItem_" + commandId, caption,
                     delegate { Execute(commandId); },
-                    new Vector2(540f, 44f), 20,
-                    new Vector2(10f, -52f - r * 46f), TextAnchor.MiddleLeft);
+                    new Vector2(600f, rowHeight),
+                    Mathf.RoundToInt(Mathf.Clamp(TouchRowHeightUi() * 0.25f, 20f, 28f)),
+                    new Vector2(10f, -52f - r * rowPitch), TextAnchor.MiddleLeft);
                 Image rowBg = row.GetComponent<Image>();
                 if (rowBg != null)
                 {
@@ -537,7 +680,7 @@ namespace KazistovVvAr
             }
 
             RectTransform rect = (RectTransform)menuPanel.transform;
-            rect.sizeDelta = new Vector2(560f, 64f + ids.Length * 46f);
+            rect.sizeDelta = new Vector2(620f, 64f + ids.Length * rowPitch);
         }
         /// <summary>ОТКРЫТЬ ПАНЕЛЬ КОМАНД ГРУППЫ (все команды проекта с листанием).</summary>
         public void OpenCommands(string groupId = "robot")
@@ -568,11 +711,16 @@ namespace KazistovVvAr
             commandTitle.text = "Команды · " + (group != null ? group.Title : commandGroupId) +
                                 " (" + commands.Length + ")";
 
-            const int pageSize = 12;
+            const int pageSize = 8;
             int pages = Mathf.Max(1, Mathf.CeilToInt(commands.Length / (float)pageSize));
             commandPage = Mathf.Clamp(commandPage, 0, pages - 1);
             commandPageText.text = (commandPage + 1) + " / " + pages;
 
+            // СТРОКИ ПОД ПАЛЕЦ, НО БЕЗ ОБРЕЗКИ: шаг сжимается, если страница не влезает целиком.
+            float rowsSpace = CanvasHeightUi() - TopChromeHeightUi() - StatusBarHeightUi() -
+                              10f - (52f + TabHeightUi() + 10f) - 12f;
+            float rowPitch = Mathf.Max(30f, Mathf.Min(TouchRowHeightUi(), rowsSpace / pageSize));
+            float rowHeight = Mathf.Max(26f, rowPitch - 6f);
             int start = commandPage * pageSize;
             int end = Mathf.Min(commands.Length, start + pageSize);
             for (int i = start; i < end; i++)
@@ -583,8 +731,9 @@ namespace KazistovVvAr
                 int row = i - start;
                 CreateButton(commandRowsRoot.transform, "Cmd_" + id, label,
                     delegate { Execute(id); },
-                    new Vector2(860f, 44f), 20,
-                    new Vector2(6f, -4f - row * 48f), TextAnchor.MiddleLeft);
+                    new Vector2(860f, rowHeight),
+                    Mathf.RoundToInt(Mathf.Clamp(rowPitch * 0.25f, 20f, 28f)),
+                    new Vector2(6f, -4f - row * rowPitch), TextAnchor.MiddleLeft);
             }
 
             if (pages > 1)
@@ -630,7 +779,8 @@ namespace KazistovVvAr
                 case "Правка":
                     return new[]
                     {
-                        "edit.undo", "edit.redo", "edit.reset", "ui.resetlayout", "ui.toggle"
+                        "workspace.clear", "edit.undo", "edit.redo", "edit.reset",
+                        "ui.resetlayout", "ui.toggle"
                     };
                 case "Вид":
                     return new[]
@@ -687,8 +837,8 @@ namespace KazistovVvAr
             rowRect.anchorMin = new Vector2(0.5f, 0f);
             rowRect.anchorMax = new Vector2(0.5f, 0f);
             rowRect.pivot = new Vector2(0.5f, 0f);
-            rowRect.anchoredPosition = new Vector2(0f, 48f);
-            rowRect.sizeDelta = new Vector2(1600f, 64f);
+            rowRect.anchoredPosition = new Vector2(0f, StatusBarHeightUi() + 8f);
+            rowRect.sizeDelta = new Vector2(1600f, Mathf.Round(Mathf.Max(64f, TouchRowHeightUi() * 0.8f)));
 
             Image bg = row.AddComponent<Image>();
             bg.color = new Color(0f, 0f, 0f, 0.5f);
@@ -719,8 +869,8 @@ namespace KazistovVvAr
             rowRect.anchorMin = new Vector2(1f, 1f);
             rowRect.anchorMax = new Vector2(1f, 1f);
             rowRect.pivot = new Vector2(1f, 1f);
-            rowRect.anchoredPosition = new Vector2(-16f, -112f);
-            rowRect.sizeDelta = new Vector2(buttonWidth + 8f, 420f);
+            rowRect.anchoredPosition = new Vector2(-16f, -(TopChromeHeightUi() + 16f));
+            rowRect.sizeDelta = new Vector2(buttonWidth + 8f, 4f * (TouchRowHeightUi() + 10f) + 20f);
 
             VerticalLayoutGroup layout = row.AddComponent<VerticalLayoutGroup>();
             layout.spacing = 10f;
@@ -787,6 +937,36 @@ namespace KazistovVvAr
             labelRect.anchorMax = Vector2.one;
             labelRect.offsetMin = Vector2.zero;
             labelRect.offsetMax = Vector2.zero;
+
+            // ВТОРАЯ КНОПКА — «ОТМЕНА» ДЛЯ ПОДТВЕРЖДЕНИЯ ОЧИСТКИ (иначе окно не закрыть без действия).
+            GameObject cancelGo = new GameObject("ArMessageCancel", typeof(RectTransform));
+            cancelGo.transform.SetParent(root.transform, false);
+            messageCancelRoot = cancelGo;
+            RectTransform cancelRect = (RectTransform)cancelGo.transform;
+            cancelRect.anchorMin = new Vector2(0.5f, 0.5f);
+            cancelRect.anchorMax = new Vector2(0.5f, 0.5f);
+            cancelRect.pivot = new Vector2(0.5f, 0.5f);
+            cancelRect.anchoredPosition = new Vector2(0f, -450f);
+            cancelRect.sizeDelta = new Vector2(560f, 100f);
+            Image cancelBg = cancelGo.AddComponent<Image>();
+            cancelBg.color = new Color(0.18f, 0.20f, 0.24f, 0.95f);
+            Button cancelButton = cancelGo.AddComponent<Button>();
+            cancelButton.targetGraphic = cancelBg;
+            cancelButton.onClick.AddListener(OnMessageCancelClicked);
+            GameObject cancelLabelGo = new GameObject("Text", typeof(RectTransform));
+            cancelLabelGo.transform.SetParent(cancelGo.transform, false);
+            Text cancelLabel = cancelLabelGo.AddComponent<Text>();
+            cancelLabel.font = BuiltinFont;
+            cancelLabel.fontSize = 30;
+            cancelLabel.color = Color.white;
+            cancelLabel.alignment = TextAnchor.MiddleCenter;
+            cancelLabel.text = "ОТМЕНА";
+            RectTransform cancelLabelRect = (RectTransform)cancelLabelGo.transform;
+            cancelLabelRect.anchorMin = Vector2.zero;
+            cancelLabelRect.anchorMax = Vector2.one;
+            cancelLabelRect.offsetMin = Vector2.zero;
+            cancelLabelRect.offsetMax = Vector2.zero;
+            cancelGo.SetActive(false);
         }
 
         /// <summary>ДОБАВИТЬ КНОПКУ В ПРАВЫЙ РЯД (быстрые действия планшета).</summary>
@@ -799,7 +979,10 @@ namespace KazistovVvAr
             GameObject go = new GameObject("ArButton_" + label, typeof(RectTransform));
             go.transform.SetParent(row, false);
             RectTransform rect = (RectTransform)go.transform;
-            rect.sizeDelta = new Vector2(buttonWidth, buttonHeight);
+            // ВЫСОТА ПОД ПАЛЕЦ: поле `buttonHeight` в сцене может быть меньше — поднимаем до
+            // минимальной (≈10 мм), иначе по кнопке трудно попасть (замер по фото 06.11.2026).
+            rect.sizeDelta = new Vector2(Mathf.Max(180f, buttonWidth),
+                Mathf.Max(TouchRowHeightUi(), buttonHeight));
 
             Image bg = go.AddComponent<Image>();
             bg.color = new Color(0.10f, 0.16f, 0.28f, 0.9f);
@@ -811,7 +994,7 @@ namespace KazistovVvAr
             labelGo.transform.SetParent(go.transform, false);
             Text text = labelGo.AddComponent<Text>();
             text.font = BuiltinFont;
-            text.fontSize = 26;
+            text.fontSize = Mathf.RoundToInt(Mathf.Clamp(TouchRowHeightUi() * 0.28f, 22f, 34f));
             text.color = Color.white;
             text.alignment = TextAnchor.MiddleCenter;
             text.text = label;
@@ -857,10 +1040,50 @@ namespace KazistovVvAr
             messageRoot.SetActive(true);
             if (messageText != null) messageText.text = text ?? string.Empty;
             messageAction = action;
+            messageCancelAction = null;
+            if (messageCancelRoot != null) messageCancelRoot.SetActive(false);
             bool hasButton = !string.IsNullOrEmpty(buttonLabel) && action != null;
             if (messageButton != null) messageButton.gameObject.SetActive(hasButton);
             if (hasButton && messageButtonText != null) messageButtonText.text = buttonLabel;
             SetHint(string.Empty);
+        }
+
+        /// <summary>
+        /// ПОДТВЕРЖДЕНИЕ ОПАСНОГО ДЕЙСТВИЯ (очистка рабочего пространства): две кнопки —
+        /// «ОЧИСТИТЬ» и «ОТМЕНА». Одна кнопка без отмены — риск случайно стереть сцену.
+        /// </summary>
+        public void ShowConfirm(string text, string confirmLabel, Action onConfirm)
+        {
+            EnsureBuilt();
+            if (messageRoot == null) return;
+            messageRoot.SetActive(true);
+            if (messageText != null) messageText.text = text ?? string.Empty;
+            messageAction = onConfirm;
+            messageCancelAction = delegate { HideMessage(); };
+            if (messageButton != null) messageButton.gameObject.SetActive(true);
+            if (messageButtonText != null) messageButtonText.text = confirmLabel;
+            if (messageCancelRoot != null) messageCancelRoot.SetActive(true);
+            SetHint(string.Empty);
+            Debug.Log("[KvAr] ИНТЕРФЕЙС: подтверждение — " + (text ?? string.Empty).Replace("\n", " "));
+        }
+
+        /// <summary>ВЫПОЛНИТЬ ОЧИСТКУ РАБОЧЕГО ПРОСТРАНСТВА (после подтверждения).</summary>
+        public void RequestClearWorkspace()
+        {
+            KvArRuntime runtime = UnityEngine.Object.FindAnyObjectByType<KvArRuntime>();
+            if (runtime == null)
+            {
+                Debug.LogWarning("[KvAr] ОЧИСТКА: нет KvArRuntime — очистить некому");
+                HideMessage();
+                return;
+            }
+            runtime.ClearWorkspace();
+        }
+
+        /// <summary>СБРОС СЧЁТЧИКА СТОЛОВ (вызывается очисткой рабочего пространства).</summary>
+        public static void ResetCreatedTableCounter()
+        {
+            CreatedTableCount = 0;
         }
 
         public void HideMessage()
@@ -868,6 +1091,8 @@ namespace KazistovVvAr
             if (messageRoot == null) return;
             messageRoot.SetActive(false);
             messageAction = null;
+            messageCancelAction = null;
+            if (messageCancelRoot != null) messageCancelRoot.SetActive(false);
         }
 
         private void OnMessageButtonClicked()
@@ -875,7 +1100,14 @@ namespace KazistovVvAr
             Action action = messageAction;
             if (action != null && messageRoot != null) messageRoot.SetActive(false);
             messageAction = null;
+            messageCancelAction = null;
             if (action != null) action();
+        }
+
+        private void OnMessageCancelClicked()
+        {
+            HideMessage();
+            Debug.Log("[KvAr] ИНТЕРФЕЙС: действие отменено");
         }
 
         public void SetButtonsVisible(bool visible)
