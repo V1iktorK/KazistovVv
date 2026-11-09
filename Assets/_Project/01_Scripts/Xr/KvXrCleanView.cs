@@ -31,41 +31,52 @@ namespace KazistovVvXr
         /// </summary>
         public static int Apply(FeatureHub features, TrajectoryFlowController flow, KvStageHub hub)
         {
-            int hidden = 0;
+            bool hasFlow = flow != null;
+            bool hasHeatmap = features != null && features.Heatmap != null;
+            bool hasClearance = features != null && features.Clearance != null;
+            bool hasZones = features != null && features.Zones != null;
+            bool hasSingularities = hub != null && hub.Singularities != null;
 
-            if (flow != null)
+            if (hasFlow)
             {
                 flow.SetWorkspaceVisible(false);      // зона достижимости (цветные кольца)
                 flow.SetJointLimitsVisible(false);    // лимиты суставов
                 flow.SetMetricsPanelVisible(false);   // панель чисел потока
-                hidden += 3;
             }
 
-            if (features != null)
-            {
-                if (features.Heatmap != null)
-                {
-                    features.Heatmap.SetVisible(false);   // тот самый «шар» + жёлтые точки
-                    hidden++;
-                }
-                if (features.Clearance != null)
-                {
-                    features.Clearance.SetVisible(false); // теплокарта зазоров
-                    hidden++;
-                }
-                if (features.Zones != null)
-                {
-                    features.Zones.SetAllVisible(false);  // жёлтые/красные границы запретных зон
-                    hidden++;
-                }
-            }
+            if (hasHeatmap) features.Heatmap.SetVisible(false);     // тот самый «шар» + жёлтые точки
+            if (hasClearance) features.Clearance.SetVisible(false); // теплокарта зазоров
+            if (hasZones) features.Zones.SetAllVisible(false);      // жёлтые/красные границы запретных зон
+            if (hasSingularities) hub.Singularities.SetEnabled(false); // «пятна» сингулярностей у базы/локтя
 
-            if (hub != null && hub.Singularities != null)
-            {
-                hub.Singularities.SetEnabled(false);      // «пятна» сингулярностей у базы/локтя
-                hidden++;
-            }
+            // ЧИСЛО СКРЫТОГО СЧИТАЕТ ОДНА ФУНКЦИЯ (см. `PlannedHiddenCount`): тогда «сколько плюшек
+            // спрятано» и «что именно спрятано» не могут разъехаться, а правило проверяется тестом.
+            return PlannedHiddenCount(hasFlow, hasHeatmap, hasClearance, hasZones, hasSingularities);
+        }
 
+        /// <summary>
+        /// СКОЛЬКО ВИЗУАЛИЗАЦИЙ ПРЯЧЕТ ЧИСТЫЙ ВИД (чистая функция — проверяется тестом без сцены).
+        ///
+        /// ПОЧЕМУ ОТДЕЛЬНО. Владелец видел на живой сцене «шар тепловой карты и жёлтые/красные
+        /// элементы» — то есть плюшек БОЛЬШЕ ОДНОЙ, и каждая включалась своим путём. Число в журнале
+        /// («плюшек скрыто N») обязано соответствовать списку; когда оно считалось инкрементами по
+        /// ходу дела, выпавшая строка замечалась только глазами оператора.
+        ///
+        /// Поток этапов даёт ТРИ скрываемых визуализации (зона достижимости, лимиты суставов, панель
+        /// метрик), каждая служба функций — по одной. Всего при полном наборе — семь.
+        /// </summary>
+        public const int FlowVisualsCount = 3;
+
+        /// <summary>Сколько визуализаций спрячет вызов при таком наборе служб (см. `Apply`).</summary>
+        public static int PlannedHiddenCount(bool hasFlow, bool hasHeatmap, bool hasClearance,
+            bool hasZones, bool hasSingularities)
+        {
+            int hidden = 0;
+            if (hasFlow) hidden += FlowVisualsCount;
+            if (hasHeatmap) hidden++;
+            if (hasClearance) hidden++;
+            if (hasZones) hidden++;
+            if (hasSingularities) hidden++;
             return hidden;
         }
 

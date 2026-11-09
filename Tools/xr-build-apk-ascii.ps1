@@ -242,22 +242,33 @@ $publishDir = Join-Path $Source 'Builds'
 
 # Оба имени проверяются в обоих местах, куда Unity реально пишет (корень целевого каталога и
 # `Builds`), плюс прежнее общее имя — иначе сборка «не найдёт» свой же свежий файл.
+# ПРЕЖНИЙ APK БОЛЬШЕ НЕ УДАЛЯЕТСЯ (исправлено 12.11.2026).
+#
+# ЧТО БЫЛО. Старый APK переименовывался в общий `KazistovVv.previous.apk`, чтобы «успех нельзя
+# было спутать с ним». Но проверка результата ниже и так требует файл НОВЕЕ времени начала сборки,
+# то есть старый отсекается по времени. А переименование оказалось РАЗРУШИТЕЛЬНЫМ: 12.11.2026
+# две сборки подряд упали (нет пароля ключа), и оба готовых артефакта — VR 189,5 МБ и AR 116,9 МБ —
+# были затёрты одним общим `.previous.apk`. Сборка не удалась, а APK пропали.
+#
+# ЧТО СТАЛО. Ничего не двигаем: старые файлы остаются на месте и просто не считаются результатом
+# (сравнение по времени). Провал сборки больше не уничтожает предыдущие артефакты.
 $apkCandidatesAfter = @(
+    # СНАЧАЛА — ТО, ЧТО ПИШЕТ САМ СБОРЩИК: имя с вариантом графики в корне копии и его копия в
+    # `Builds` (исправлено 12.11.2026).
+    #
+    # ЧТО БЫЛО. Здесь стояли только общие имена `KazistovVv.apk`, а `KvXrTools.BuildAndroidApk`
+    # кладёт артефакт под именем с вариантом: `KazistovVv-VR-vulkan.apk` (шлем) и
+    # `KazistovVv-AR-gles3.apk` (планшет). Пока общее имя лежало рядом, ошибка была не видна; после
+    # чистки каталога скрипт напечатал «APK НЕ СОЗДАН — сборка не дошла до упаковки» и вышел с кодом
+    # 1, ХОТЯ Unity в том же прогоне сообщила «APK собран · ошибок 0», а файл лежал на месте.
+    # Ложный провал опаснее пропуска: он выглядит как поломка кода и провоцирует лишние круги.
     (Join-Path $Target $apkName),
-    (Join-Path $Target "Builds\$apkName"),
+    (Join-Path $Target ('Builds\' + $apkName)),
     (Join-Path $Target 'KazistovVv.apk'),
     (Join-Path $Target 'Builds\KazistovVv.apk')
 )
-$staleApk = Join-Path $Target 'KazistovVv.previous.apk'
-foreach ($c in $apkCandidatesAfter) {
-    if (-not (Test-Path -LiteralPath $c)) { continue }
-    try {
-        Move-Item -LiteralPath $c -Destination $staleApk -Force
-        Write-Host "  прежний APK убран: $c → $staleApk (иначе успех нельзя отличить от него)"
-    } catch {
-        Write-Host "  НЕ УДАЛОСЬ убрать прежний APK $c : $($_.Exception.Message)" -ForegroundColor Yellow
-    }
-}
+$staleApk = $null
+Write-Host "  прежние APK не трогаем: старые отсекаются по времени начала сборки"
 $buildStarted = Get-Date
 
 $argList = @(
@@ -272,6 +283,28 @@ if (-not $p.HasExited) {
     Write-Host "ТАЙМАУТ $TimeoutMinutes мин — процесс снимается"
     Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
     exit 1
+}
+
+# ЧИСТКА КЭША КАНАЛОВ СКРИПТОВОГО КОНВЕЙЕРА — ОБЯЗАТЕЛЬНА (найдено 12.11.2026, мой же дефект).
+#
+# ПОЧЕМУ. `Library` в этой копии — junction на `Library` ОРИГИНАЛА: у двух «лиц» одного проекта
+# (кириллический путь владельца и латинский `C:\KazistovVv_Build`) ОДИН кэш сборки. Unity пишет в
+# `Library\Bee\artifacts\rsp\*.rsp` имя своего канала связи (`unity-ilpp-<хеш>`), и хеш считается
+# ОТ ПУТИ ПРОЕКТА. После сборки в копии в кэше остаются rsp с ЧУЖИМ именем канала. Следующий
+# прогон тестов в ОРИГИНАЛЕ берёт их как «уже собранные», ищет свой канал и падает:
+#     ILPPTrigger: Can't find file \\.\pipe\unity-ilpp-…
+#     Scripts have compiler errors.      ← при этом НИ ОДНОЙ ошибки `error CS` в логе нет
+# Проверено: в кэше лежали ДВА разных имени канала, а после очистки прогон EditMode стал зелёным
+# (10/10). Симптом опасен тем, что выглядит как «сломался код», хотя код в порядке.
+# Поэтому кэш чистится сразу после сборки — до любых проверок результата и до любого `exit`.
+$rspDir = Join-Path $Target 'Library\Bee\artifacts\rsp'
+if (Test-Path -LiteralPath $rspDir) {
+    $rspRemoved = 0
+    foreach ($rspFile in @(Get-ChildItem -LiteralPath $rspDir -Filter *.rsp -File -ErrorAction SilentlyContinue)) {
+        Remove-Item -LiteralPath $rspFile.FullName -Force -ErrorAction SilentlyContinue
+        if (-not (Test-Path -LiteralPath $rspFile.FullName)) { $rspRemoved++ }
+    }
+    Write-Host ("  кэш каналов скриптов очищен: rsp удалено " + $rspRemoved + " (иначе прогон тестов в оригинале упадёт на ILPPTrigger)")
 }
 
 Write-Host ""
@@ -330,7 +363,19 @@ if ($fresh) {
         New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
     }
     $publishPath = Join-Path $publishDir $apkName
+    # ЕСЛИ СБОРЩИК УЖЕ ПОЛОЖИЛ СВЕЖИЙ ФАЙЛ В `Builds` — НИЧЕГО НЕ ДВИГАЕМ (исправлено 12.11.2026).
+    # `KvXrTools.BuildAndroidApk` сам копирует готовый APK в `Builds`, и прежний код переносил этот
+    # самый свежий файл в архив `KazistovVv.previous.apk`, а затем копировал результат из корня копии
+    # поверх. При совпадении путей (`$fresh` = `$publishPath`) файл исчезал и публикация падала.
+    $alreadyPublished = $false
     if (Test-Path -LiteralPath $publishPath) {
+        $existing = Get-Item -LiteralPath $publishPath
+        if ($existing.LastWriteTime -ge $buildStarted.AddSeconds(-5)) { $alreadyPublished = $true }
+    }
+    if ($alreadyPublished) {
+        Write-Host "  сборщик уже опубликовал свежий APK: $publishPath ($($existing.LastWriteTime)) — двигать нечего"
+    }
+    elseif (Test-Path -LiteralPath $publishPath) {
         $old = Get-Item -LiteralPath $publishPath
         $archive = Join-Path $publishDir 'KazistovVv.previous.apk'
         try {
@@ -341,7 +386,7 @@ if ($fresh) {
         }
     }
     try {
-        Copy-Item -LiteralPath $fresh.FullName -Destination $publishPath -Force
+        if (-not $alreadyPublished) { Copy-Item -LiteralPath $fresh.FullName -Destination $publishPath -Force }
         $published = Get-Item -LiteralPath $publishPath
         if ($published.LastWriteTime -lt $buildStarted.AddSeconds(-5)) {
             Write-Host "АРТЕФАКТ В Builds СТАРШЕ НАЧАЛА СБОРКИ — публикация не удалась: $publishPath" -ForegroundColor Red
@@ -357,5 +402,6 @@ if ($fresh) {
 }
 
 Write-Host "APK НЕ СОЗДАН — сборка не дошла до упаковки (свежего файла нет ни по одному пути)" -ForegroundColor Red
-if (Test-Path $staleApk) { Write-Host "  (прежний APK лежит в $staleApk)" }
+Write-Host ("  искали: " + ($apkCandidatesAfter -join ' · '))
+if ($staleApk -and (Test-Path -LiteralPath $staleApk)) { Write-Host "  (прежний APK лежит в $staleApk)" }
 exit 1

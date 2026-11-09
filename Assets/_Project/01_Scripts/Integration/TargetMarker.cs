@@ -66,7 +66,20 @@ public class TargetMarker : MonoBehaviour
 
     public void SetValid(bool valid)
     {
-        ApplyColor(valid ? validColor : invalidColor);
+        ApplyColor(ColorFor(valid, validColor, invalidColor));
+    }
+
+    /// <summary>
+    /// ЦВЕТ МАРКЕРА ПО СОСТОЯНИЮ ЦЕЛИ (чистая функция — проверяется тестом без рендерера).
+    ///
+    /// Зачем отдельно: состояние «валидна/невалидна» меняется по нескольку раз в секунду при
+    /// прицеливании, и единственное, что от него зависит, — именно цвет. Вынеся выбор цвета, можно
+    /// проверить оба состояния по результату, а не по наличию слова `SetValid` в исходнике.
+    /// Цвета — параметры, а не поля: так функция чистая и не требует ни объекта, ни материала.
+    /// </summary>
+    public static Color ColorFor(bool valid, Color validColor, Color invalidColor)
+    {
+        return valid ? validColor : invalidColor;
     }
 
     /// <summary>

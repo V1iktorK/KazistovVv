@@ -418,7 +418,7 @@ namespace KazistovVvXr
 
             // РУКА ТЕЛЕПОРТА — ТА ЖЕ, ЧТО У ЛУЧА (§37).
             bool haveAim = KvXrInputSource.TryRayAimPose(out Vector3 handPos, out Quaternion handRot);
-            if (!haveAim)
+            if (AimSourceFor(haveAim) == TeleportAimSource.None)
             {
                 SetMarker(false, Vector3.zero, rigYaw);
                 teleportStickWasDown = false;
@@ -555,24 +555,81 @@ namespace KazistovVvXr
 
             // РАЗГОН/ТОРМОЖЕНИЕ (05.11.2026): мгновенная скорость — второй источник дискомфорта
             // после поворота. `MoveTowards` даёт постоянное ускорение и мягкий останов.
-            float acceleration = cachedMoveAcceleration;
-            smoothVelocity = Vector3.MoveTowards(smoothVelocity, targetVelocity,
-                acceleration * Mathf.Min(Time.deltaTime, MaxTurnFrameSeconds));
-            if (smoothVelocity.sqrMagnitude < 1e-6f) return;
-
-            Vector3 step = smoothVelocity * Mathf.Min(Time.deltaTime, MaxTurnFrameSeconds);
-
-            // ГРАНИЦЫ И СТОЛКНОВЕНИЯ — только в VR (в MR зал скрыт, комната 1:1 — ходьба свободная).
+            //
+            // ШАГ ХОДА ЦЕЛИКОМ — В ЧИСТОЙ ФУНКЦИИ `SmoothStep`: внутри неё и разгон, и ограничение
+            // залом, и столкновения. Так правило «оператор не выходит за стены и не проходит сквозь
+            // столы» проверяется тестом по результату, а не поиском имён методов в этом файле (P4-3).
             Vector3 current = rigRoot.position;
-            Vector3 desired = current + step;
-            if (KvXrWalkRules.EnabledInCurrentMode)
-            {
-                desired = KvXrWalkRules.ClampToHangar(desired);
-                desired = KvXrWalkRules.ResolveObstacles(current, desired, 0.30f, 1.70f);
-            }
+            Vector3 desired = SmoothStep(current, smoothVelocity, targetVelocity,
+                cachedMoveAcceleration, Time.deltaTime, KvXrWalkRules.EnabledInCurrentMode,
+                out smoothVelocity);
+            if (smoothVelocity.sqrMagnitude < 1e-6f) return;
 
             rigRoot.position = desired;
             SmoothMovingSeconds += Mathf.Min(Time.deltaTime, MaxTurnFrameSeconds);
+        }
+
+        /// <summary>Радиус капсулы оператора при разрешении столкновений, м.</summary>
+        public const float PlayerRadiusMeters = 0.30f;
+
+        /// <summary>Высота капсулы оператора при разрешении столкновений, м.</summary>
+        public const float PlayerHeightMeters = 1.70f;
+
+        /// <summary>
+        /// ШАГ ПЛАВНОГО ХОДА (чистая функция — проверяется тестом без шлема и без сцены).
+        ///
+        /// ЧТО ДЕЛАЕТ ПО ПОРЯДКУ:
+        ///   1) разгон/торможение: скорость подтягивается к целевой с заданным ускорением
+        ///      (мгновенная смена скорости — второй источник укачивания после поворота);
+        ///   2) смещение за кадр с ОГРАНИЧЕНИЕМ длительности кадра (`MaxTurnFrameSeconds`): после
+        ///      выхода шлема из сна `deltaTime` бывает 0,2…0,5 с, и без ограничения оператор
+        ///      «прыгал» бы на метр за кадр;
+        ///   3) границы зала и столкновения — только когда <paramref name="applyWalkRules"/> истинно.
+        ///
+        /// ПОЧЕМУ РЕЖИМ — ПАРАМЕТР, А НЕ ЧТЕНИЕ НАСТРОЙКИ ВНУТРИ. В VR правила включены, в MR
+        /// выключены (зал скрыт, комната 1:1 — человек ходит по своей комнате). Если бы функция сама
+        /// спрашивала режим у платформы, проверить ОБА случая в тесте было бы нельзя: в редакторе
+        /// ответ пробы фиксирован. С параметром проверяются оба, и «в MR оператора не тянет в зал»
+        /// перестаёт быть утверждением на слово.
+        ///
+        /// ВОЗВРАЩАЕТ новую позицию; <paramref name="newVelocity"/> — скорость после разгона (её
+        /// хранит вызывающий: от неё зависит инерция следующего кадра и нарастание виньетки).
+        /// </summary>
+        public static Vector3 SmoothStep(Vector3 current, Vector3 velocity, Vector3 targetVelocity,
+            float acceleration, float deltaTime, bool applyWalkRules, out Vector3 newVelocity)
+        {
+            float dt = Mathf.Min(deltaTime, MaxTurnFrameSeconds);
+            newVelocity = Vector3.MoveTowards(velocity, targetVelocity, acceleration * dt);
+            Vector3 desired = current + newVelocity * dt;
+
+            if (applyWalkRules)
+            {
+                desired = KvXrWalkRules.ClampToHangar(desired);
+                desired = KvXrWalkRules.ResolveObstacles(current, desired, PlayerRadiusMeters, PlayerHeightMeters);
+            }
+            return desired;
+        }
+
+        /// <summary>
+        /// ЧЕМ ЦЕЛИТСЯ ТЕЛЕПОРТ: ТОЛЬКО ПОЗОЙ УКАЗАНИЯ (чистая функция).
+        ///
+        /// ПОЧЕМУ ЭТО ПРАВИЛО, А НЕ ДЕТАЛЬ. Раньше телепорт брал позу КИСТИ, и точка уезжала вбок от
+        /// того места, куда оператор целился: рука и луч — разные направления. Правило «нет позы
+        /// указания — нет телепорта» означает, что подмены на «хоть какую-нибудь другую позу» не
+        /// бывает: иначе оператор переносился бы в место, которое не выбирал.
+        /// </summary>
+        public enum TeleportAimSource
+        {
+            /// <summary>Позы указания нет — телепорт в этом кадре невозможен.</summary>
+            None = 0,
+            /// <summary>Есть поза указания (луч контроллера) — ею и целимся.</summary>
+            RayPose = 1
+        }
+
+        /// <summary>Есть ли чем целиться телепорту (см. <see cref="TeleportAimSource"/>).</summary>
+        public static TeleportAimSource AimSourceFor(bool rayPoseAvailable)
+        {
+            return rayPoseAvailable ? TeleportAimSource.RayPose : TeleportAimSource.None;
         }
 
         private static bool IsSmoothMode()

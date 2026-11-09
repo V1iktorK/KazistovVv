@@ -19,6 +19,7 @@
       EDITMODE      EditMode-тесты: упавших 0 И тестов не меньше 1264 (набор не уменьшился)
       REPO_GUARDS   Tools/repo-guards.ps1: провалов 0
       UI_STUBS      в реестре команд нет кнопок-заглушек (Stub = true) — требование владельца
+      P4_3_RATCHET  число тестов, читающих исходники, не растёт (храповик)
       SECRET        пароля ключа подписи нет ни в отслеживаемых, ни в новых файлах
       GIT_ASSETS    после прогона нет изменённых .mat/.unity/.prefab (P4-15)
       APK_NAMES     оба APK существуют под правильными именами
@@ -182,12 +183,27 @@ try {
     # СВЕЖЕСТЬ APK СРАВНИВАЕТСЯ С ИЗМЕНЕНИЕМ КОДА, А НЕ С ЛЮБЫМ КОММИТОМ (исправлено 12.11.2026).
     # Первая версия сравнивала со временем ПОСЛЕДНЕГО коммита — и краснела на коммите документации,
     # хотя код не менялся. Правильный эталон: самое позднее из (а) коммита, тронувшего Assets или
-    # ProjectSettings, (б) времени изменения любого .cs/.asmdef в Assets.
+    # ProjectSettings, (б) времени изменения КОДА, КОТОРЫЙ УЕЗЖАЕТ В APK.
+    #
+    # ЧТО ИСПРАВЛЕНО ВТОРОЙ РАЗ (12.11.2026, мой же дефект). Эталон считался по ЛЮБОМУ `.cs` в
+    # `Assets`, включая `08_Tests` и каталоги `Editor`. Тесты и редакторский код в APK НЕ ВХОДЯТ
+    # (это Editor-сборки), поэтому правка комментария в тесте объявляла собранный APK «старым» и
+    # требовала пересборки на 40 минут. Ложное красное хуже пропущенного: к нему привыкают и
+    # перестают читать. Теперь из эталона исключены `08_Tests` и каталоги `Editor` — смысл проверки
+    # сохранён («в APK лежит СВЕЖИЙ рантайм-код»), а шум убран.
+    #
+    # ЧТО ИСПРАВЛЕНО ТРЕТИЙ РАЗ (12.11.2026). Из эталона убрано ВРЕМЯ КОММИТА. Коммит не меняет
+    # содержимое исходников, поэтому не делает собранный APK старым; но время коммита всегда позже
+    # сборки, и любая фиксация работы объявляла артефакты «устаревшими» — то есть правильный порядок
+    # «собрал → закоммитил» наказывался, а обходить это приходилось пересборкой на 40 минут.
+    # Эталон теперь — ВРЕМЯ ИЗМЕНЕНИЯ КОДА, который уезжает в APK. Смысл прежний: если рантайм-код
+    # новее артефакта, артефакт собран из старого кода. Время коммита остаётся только страховкой на
+    # случай, когда список файлов получить не удалось.
     $codeCommitUnix = [int64](git log -1 --format=%ct -- Assets ProjectSettings 2>&1)
     $codeCommitTime = [DateTimeOffset]::FromUnixTimeSeconds($codeCommitUnix).LocalDateTime
-    $codeFiles = @(Get-ChildItem -LiteralPath (Join-Path $ProjectPath 'Assets') -Recurse -File -Include *.cs,*.asmdef -ErrorAction SilentlyContinue)
-    $newestCode = if ($codeFiles.Count -gt 0) { ($codeFiles | Measure-Object -Property LastWriteTime -Maximum).Maximum } else { $codeCommitTime }
-    $baseline = if ($newestCode -gt $codeCommitTime) { $newestCode } else { $codeCommitTime }
+    $allCode = @(Get-ChildItem -LiteralPath (Join-Path $ProjectPath 'Assets') -Recurse -File -Include *.cs,*.asmdef -ErrorAction SilentlyContinue)
+    $shippedCode = @($allCode | Where-Object { $_.FullName -notmatch '[\\/]08_Tests[\\/]' -and $_.FullName -notmatch '[\\/]Editor[\\/]' })
+    $baseline = if ($shippedCode.Count -gt 0) { ($shippedCode | Measure-Object -Property LastWriteTime -Maximum).Maximum } else { $codeCommitTime }
 
     $staleList = @()
     foreach ($pair in @(@('VR', $vr), @('AR', $ar))) {
@@ -217,6 +233,31 @@ if ($guardsCode -eq 0) {
     Add-Result 'REPO_GUARDS' $false ("код $guardsCode · $fails")
 }
 
+# ================================================================ 4в. P4_3_RATCHET
+#
+# ЗАЧЕМ. В наборе есть тесты, которые читают ТЕКСТ исходников и грепают его. Такой тест ломается от
+# переформулировки комментария и, что хуже, ПРОХОДИТ на сломанном коде (проверяет «строка есть», а не
+# «поведение верное»). Полностью переписать все за один заход нельзя, поэтому вводится ХРАПОВИК:
+# число таких файлов не должно РАСТИ. Сегодня — 59; каждая волна правок обязана его уменьшать.
+#
+# ПОЧЕМУ ХРАПОВИК В ГЕЙТЕ, А НЕ ПОЖЕЛАНИЕ В ДОКУМЕНТЕ: без машинной проверки «не растёт» через
+# месяц снова будет 90, и никто не заметит.
+Write-Host ""
+Write-Host "--- тесты, читающие исходники (P4-3) ---"
+$MaxGrepTestFiles = 56
+$testRoot = Join-Path $ProjectPath 'Assets\_Project\08_Tests'
+$grepFiles = @()
+if (Test-Path -LiteralPath $testRoot) {
+    foreach ($f in @(Get-ChildItem -LiteralPath $testRoot -Recurse -Filter *.cs -File -ErrorAction SilentlyContinue)) {
+        $txt = [System.IO.File]::ReadAllText($f.FullName, [System.Text.Encoding]::UTF8)
+        if ($txt -match 'File\.ReadAllText|ReadScript\(') { $grepFiles += $f.Name }
+    }
+}
+if ($grepFiles.Count -le $MaxGrepTestFiles) {
+    Add-Result 'P4_3_RATCHET' $true ("грепающих тестов " + $grepFiles.Count + " — не больше порога $MaxGrepTestFiles")
+} else {
+    Add-Result 'P4_3_RATCHET' $false ("грепающих тестов СТАЛО БОЛЬШЕ: " + $grepFiles.Count + " > $MaxGrepTestFiles — набор деградирует")
+}
 # ================================================================ 4б. UI_STUBS (требование владельца)
 #
 # ВЛАДЕЛЕЦ 12.11.2026: «главное — чтобы все кнопочки были заполнены функционалом».
@@ -290,6 +331,30 @@ if ($deadButtons.Count -eq 0) {
 # ================================================================ 5. EDITMODE
 Write-Host ""
 Write-Host "--- EditMode-тесты ---"
+
+# ЧУЖОЙ КЭШ КАНАЛОВ СКРИПТОВ — ДОЛОЙ (найдено 12.11.2026).
+#
+# ЧТО БЫЛО. `Tools\xr-build-apk-ascii.ps1` собирает APK в латинской копии проекта, у которой
+# `Library` связан с оригиналом junction'ом. Unity кладёт в `Library\Bee\artifacts\rsp\*.rsp`
+# имя своего канала связи `unity-ilpp-<хеш>`, и хеш считается ОТ ПУТИ ПРОЕКТА. После сборки в
+# копии в общем кэше остаются rsp с ЧУЖИМ именем; прогон тестов в оригинале берёт их как
+# «уже собранные» и падает:
+#     ILPPTrigger: Can't find file \\.\pipe\unity-ilpp-…
+#     Scripts have compiler errors.      ← и ни одной ошибки `error CS` в логе
+# Это выглядело как «сломался код», хотя код был цел. Проверено: в кэше лежали ДВА разных имени
+# канала; после очистки прогон стал зелёным. Гейт чистит кэш сам, чтобы вердикт не зависел от
+# того, собирали ли APK перед прогоном.
+if (-not $SkipUnity) {
+    $staleRspDir = Join-Path $ProjectPath 'Library\Bee\artifacts\rsp'
+    $staleRsp = 0
+    if (Test-Path -LiteralPath $staleRspDir) {
+        foreach ($rspFile in @(Get-ChildItem -LiteralPath $staleRspDir -Filter *.rsp -File -ErrorAction SilentlyContinue)) {
+            Remove-Item -LiteralPath $rspFile.FullName -Force -ErrorAction SilentlyContinue
+            if (-not (Test-Path -LiteralPath $rspFile.FullName)) { $staleRsp++ }
+        }
+        Write-Host ("  кэш каналов скриптов очищен заранее: rsp удалено " + $staleRsp)
+    }
+}
 if ($SkipUnity) {
     Add-Result 'EDITMODE' $false 'НЕ ПРОВЕРЕНО (-SkipUnity) — это не «зелено», а «не смотрели»'
 } else {
@@ -354,16 +419,36 @@ if ($SkipUnity) {
            From = 'return bestCost < lockedCost * (1.0 - h);';
            To   = 'return bestCost > lockedCost * (1.0 - h);';
            Filter = 'KvP1FixTests'; Name = 'P1-9 гистерезис IK' },
+        # ВАЖНО: мутация меняет СМЫСЛ, а не имя. Первая версия переименовывала метод — и это ломало
+        # компиляцию («Scripts have compiler errors»), из-за чего тесты не запускались и проверка
+        # краснела ПО ВИНЕ САМОЙ ПРОВЕРКИ, а не кода. Правильная мутация сохраняет сигнатуру.
         @{ File = 'Assets\_Project\01_Scripts\Xr\KvXrSettings.cs';
-           From = 'public static int ModeFromIndex(int index)';
-           To   = 'public static int ModeFromIndex_NOUSE(int index)';
-           Filter = 'KvVrMrSwitchTests'; Name = 'VR|MR ModeFromIndex' }
+           From = 'return index == ModeMr ? ModeMr : ModeVr;';
+           To   = 'return ModeVr;';
+           Filter = 'KvVrMrSwitchTests'; Name = 'VR|MR ModeFromIndex' },
+        # ДЕФЕКТ A (12.11.2026): пауза превращалась в аварийный останов «watchdog». Мутация
+        # ВОЗВРАЩАЕТ дефект — проверка стоящей позы снова идёт через `ApproveStep` с замороженным
+        # временем. Если `KvPauseSafetyTests` на сломанном коде останутся зелёными, значит тесты
+        # паузы ничего не проверяют, и краснеть на них незачем.
+        @{ File = 'Assets\_Project\01_Scripts\Trajectory\TrajectoryExecutor.cs';
+           From = 'return !gate.ApproveStandingPose(q, clearance, validator, out reason);';
+           To   = 'return !gate.ApproveStep(q, clearance, 0.0, validator, out reason);';
+           Filter = 'KvPauseSafetyTests'; Name = 'пауза: стоящая поза без правила времени' },
+        # ДЕФЕКТ B (12.11.2026): шапка `SafetyGate` заявляла «порог один», а код пропускал позу с
+        # зазором ВДВОЕ меньше объявленного минимума. Мутация возвращает половину порога.
+        @{ File = 'Assets\_Project\01_Scripts\Trajectory\SafetyGate.cs';
+           From = 'if (clearance < minClearance) { reason = SafetyReason.Clearance;';
+           To   = 'if (clearance < minClearance * 0.5f) { reason = SafetyReason.Clearance;';
+           Filter = 'KvPauseSafetyTests'; Name = 'зазор: единый порог (без половины)' }
     )
     $mutProblems = @()
     foreach ($mu in $mutations) {
         $path = Join-Path $ProjectPath $mu.File
         if (-not (Test-Path -LiteralPath $path)) { $mutProblems += "$($mu.Name): файл не найден"; continue }
-        $backup = "$path.gatebak"
+        # РЕЗЕРВНАЯ КОПИЯ — ВНЕ Assets. Иначе Unity импортирует файл рядом с исходником и создаёт
+        # на него .meta, а после восстановления в проекте остаётся ОСИРОТЕВШИЙ .meta: дерево
+        # грязнится на каждом прогоне гейта (найдено 12.11.2026 — мой же дефект).
+        $backup = Join-Path $LogsDir (([System.IO.Path]::GetFileName($path)) + ".gatebak")
         Copy-Item -LiteralPath $path -Destination $backup -Force
         try {
             $text = [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8)
@@ -434,31 +519,80 @@ if (-not $tablet) {
     $beforeLen = 0
     try { & $Adb -s $tablet.Id exec-out screencap -p > $shotBefore 2>$null; $beforeLen = (Get-Item $shotBefore).Length } catch { }
 
-    # открыть настройки через меню «Вид» → пункт внизу списка
-    & $Adb -s $tablet.Id shell input tap 660 48 2>&1 | Out-Null
-    Start-Sleep -Seconds 2
-    & $Adb -s $tablet.Id shell input tap 430 1435 2>&1 | Out-Null
-    Start-Sleep -Seconds 4
+    # ОТКРЫТЬ НАСТРОЙКИ — ДВУМЯ МАРШРУТАМИ (исправлено 12.11.2026).
+    #
+    # ЧТО БЫЛО. Один маршрут: меню «Вид» и пункт внизу списка. Вручную он работал, а в автопрогоне
+    # после холодного запуска команда не срабатывала вовсе: состояние приложения другое (сохранённая
+    # раскладка, стартовый экран), и те же координаты попадают в другое место.
+    #
+    # ЧТО СТАЛО. Два независимых маршрута, признак успеха — строка команды в журнале. В отчёт
+    # попадает и список всех команд, которые реально нажались: при провале видно, КУДА попали тапы.
+    $openedBy = $null
+    $firedCommands = @()
+
+    for ($attempt = 0; $attempt -lt 2 -and -not $openedBy; $attempt++) {
+        & $Adb -s $tablet.Id shell input tap 660 48 2>&1 | Out-Null
+        Start-Sleep -Seconds 2
+        & $Adb -s $tablet.Id shell input tap 430 (1435 - $attempt * 40) 2>&1 | Out-Null
+        Start-Sleep -Seconds 3
+        $probe = (& $Adb -s $tablet.Id logcat -d 2>&1) -join "`n"
+        if ($probe -match 'view\.panel\.settings|ui\.settings') { $openedBy = 'меню «Вид»' }
+    }
+
+    if (-not $openedBy) {
+        foreach ($x in 1450,1500,1520,1560,1600) {
+            & $Adb -s $tablet.Id shell input tap $x 139 2>&1 | Out-Null
+            Start-Sleep -Seconds 2
+            $probe2 = (& $Adb -s $tablet.Id logcat -d 2>&1) -join "`n"
+            if ($probe2 -match 'ui\.settings') { $openedBy = ('кнопка тулбара x=' + $x); break }
+        }
+    }
+
+    Start-Sleep -Seconds 3
     $afterLen = 0
     try { & $Adb -s $tablet.Id exec-out screencap -p > $shotAfter 2>$null; $afterLen = (Get-Item $shotAfter).Length } catch { }
 
     $lc2 = (& $Adb -s $tablet.Id logcat -d 2>&1) -join "`n"
-    $cmdFired = $lc2 -match 'view\.panel\.settings|ui\.settings'
+    $cmdFired = ($null -ne $openedBy)
+    $firedCommands = @([regex]::Matches($lc2, 'выбрана «([^»]+)»') | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique)
 
-    # ПРИЗНАК «ПАНЕЛЬ НА ЭКРАНЕ»: экран ИЗМЕНИЛСЯ заметно. Одного флага-в-журнале мало:
-    # именно на нём нас уже обманули (команда логировалась, панели не было).
+
+    # СЛОВАРИ ЯЗЫКОВ НА УСТРОЙСТВЕ (найдено 12.11.2026). В редакторе журнал содержит
+    # «[KvLoc] словарь de прочитан: 535 строк», а в журнале ПЛАНШЕТА таких строк НЕТ вообще:
+    # json-словари из StreamingAssets на Android не читаются, и переключение языка на устройстве
+    # не работает (в списке пять языков показывали «· 0»). Требуется: не меньше двух словарей,
+    # суммарно не меньше 100 строк.
+    $dictRead = @([regex]::Matches($lc2, 'словарь\s+\S+\s+прочитан:\s+(\d+)\s+строк'))
+    $dictTotal = 0
+    foreach ($d in $dictRead) { $dictTotal += [int]$d.Groups[1].Value }
+    $localeOk = ($dictRead.Count -ge 2 -and $dictTotal -ge 100)
+    # КРИТЕРИЙ ВЕРДИКТА — ГЕОМЕТРИЯ ИЗ ЖУРНАЛА, А НЕ РАЗМЕР PNG (исправлено 12.11.2026).
+    # Размер снимка — плохой признак: экран занят ЖИВОЙ камерой, кадр меняется сам, и панель
+    # теряется в этом шуме (измерено: 0,3 % при РЕАЛЬНО показанной панели). Приложение печатает
+    # сторону, толщину, размер и состояние канваса — по этим числам и выносится решение.
+    # Пиксельная разница остаётся в отчёте как дополнительное число.
     $changed = $false
+    $geomText = 'строки о показе панели нет'
     if ($beforeLen -gt 0 -and $afterLen -gt 0) {
         $delta = [math]::Abs($afterLen - $beforeLen) / [double]$beforeLen
-        $changed = ($delta -gt 0.02)
-        if (-not $cmdFired) { $problems += 'команда открытия настроек не сработала (в журнале нет ui.settings/view.panel.settings)' }
-        if (-not $changed) { $problems += ("экран НЕ изменился после команды (было $beforeLen Б, стало $afterLen Б) — панель не появилась") }
+        $geom = [regex]::Match($lc2, 'ПАНЕЛИ: панель «settings» показана[^\r\n]*')
+        if ($geom.Success) {
+        if (-not $localeOk) { $problems += ('словари языков на устройстве НЕ прочитаны: строк "словарь … прочитан" = ' + $dictRead.Count + ', суммарно строк ' + $dictTotal) }
+            $geomText = $geom.Value
+            $mSize = [regex]::Match($geom.Value, 'размер\s+(\d+)×(\d+)')
+            $sizeOk = $mSize.Success -and ([int]$mSize.Groups[1].Value -gt 200) -and ([int]$mSize.Groups[2].Value -gt 100)
+            $canvasOk = $geom.Value -match 'канвас[^·]*включён'
+            $shownOk = $geom.Value -match 'включена да'
+            $changed = $sizeOk -and $canvasOk -and $shownOk
+        }
+        if (-not $cmdFired) { $problems += ('команда открытия настроек не сработала; нажались: ' + (($firedCommands -join ', '))) }
+        if (-not $changed) { $problems += ('панель не показана: ' + $geomText + ' · изменение снимка ' + [math]::Round($delta*100,2) + '%') }
     } else {
         $problems += 'не удалось снять экран планшета'
     }
 
     if ($problems.Count -eq 0) {
-        Add-Result 'E2E_AR' $true ("панель открылась на планшете (экран изменился на " + [math]::Round($delta*100,1) + "%)")
+        Add-Result 'E2E_AR' $true ("панель показана через " + $openedBy + " · словарей " + $dictRead.Count + " (" + $dictTotal + " строк) · " + $geomText)
     } else {
         Add-Result 'E2E_AR' $false ($problems -join ' | ')
     }
@@ -485,21 +619,23 @@ if (-not $headset) {
     if ($hlc -match 'FATAL EXCEPTION') { $problems += 'падение приложения (FATAL EXCEPTION)' }
     if ($hlc -notmatch '\[KvEnv\]') { $problems += 'нет строки [KvEnv] — приложение не стартовало' }
 
-    # ЗАСТРЕВАНИЕ НА РАЗРЕШЕНИИ КАМЕРЫ — ОТДЕЛЬНАЯ ПРОВЕРКА.
-    # Обнаружено 12.11.2026 на PICO A9210: приложение уходит в `[KvAr] КАМЕРА: ждём разрешение`
-    # и висит там вечно. AR-гейт камеры срабатывает в VR-режиме, а диалог разрешения в шлеме нажать
-    # нечем. Это блокирует ВЕСЬ VR, поэтому проверяется своим пунктом, а не тонет в общем.
+    # ЗАСТРЕВАНИЕ НА РАЗРЕШЕНИИ КАМЕРЫ — ОТДЕЛЬНЫЙ ПУНКТ.
+    # Обнаружено 12.11.2026 на PICO A9210: приложение уходило в «[KvAr] КАМЕРА: ждём разрешение»
+    # и висело вечно — AR-гейт срабатывал в VR-режиме, а диалог в шлеме нажать нечем.
+    # Исправлено и ПРОВЕРЕНО 12.11.2026: сообщений «ждём разрешение» ноль, сцена XrMain грузится.
     $permWaits = ([regex]::Matches($hlc, 'ждём разрешение')).Count
     if ($permWaits -ge 2) {
-        $problems += ("ВИСИТ на разрешении камеры (" + $permWaits + " сообщений «ждём разрешение») — " +
-                      'AR-гейт камеры сработал в VR-режиме и заблокировал запуск')
+        $problems += ("ВИСИТ на разрешении камеры (" + $permWaits + " сообщений «ждём разрешение») — AR-гейт сработал в VR-режиме")
     }
 
-    $vrReady = ($hlc -match 'ВИРТУАЛЬНАЯ РЕАЛЬНОСТЬ|СМЕШАННАЯ РЕАЛЬНОСТЬ') -or ($hlc -match 'XrMain')
-    if (-not $vrReady) { $problems += 'нет признаков VR-режима (ни строки о режиме, ни загрузки XrMain)' }
+    # ПРИЗНАКИ РАБОТАЮЩЕГО VR: названный режим И загруженная VR-сцена.
+    $vrMode = $hlc -match 'ВИРТУАЛЬНАЯ РЕАЛЬНОСТЬ|СМЕШАННАЯ РЕАЛЬНОСТЬ'
+    $vrScene = $hlc -match 'ЗАГРУЗКА: сцена «XrMain»|сцена «XrMain»'
+    if (-not $vrMode) { $problems += 'режим (VR/MR) в журнале не назван — фактический режим неизвестен' }
+    if (-not $vrScene) { $problems += 'VR-сцена XrMain не загрузилась — приложение не дошло до работы' }
 
     if ($problems.Count -eq 0) {
-        Add-Result 'HEADSET' $true 'шлем: запуск без падений, [KvEnv] есть, режим и переключатель VR|MR видны в журнале'
+    Add-Result 'HEADSET' $true ('шлем: запуск без падений, [KvEnv] есть, режим назван, VR-сцена XrMain загружена, зависания на разрешении камеры нет · ВНУТРИ шлема панель и переключатель VR|MR этой проверкой НЕ подтверждаются — нужен человек в шлеме')
     } else {
         Add-Result 'HEADSET' $false ($problems -join ' | ')
     }
@@ -533,7 +669,7 @@ if (-not $NoState) {
         $state | Add-Member -NotePropertyName Counts -NotePropertyValue ([pscustomobject]@{}) -Force
     }
     $newCounts = [ordered]@{}
-    foreach ($code in 'EDITMODE','REPO_GUARDS','SECRET','GIT_ASSETS','APK_NAMES','APK_FRESH','UI_STUBS','E2E_PC','E2E_AR','MUTATION','HEADSET') {
+    foreach ($code in 'EDITMODE','REPO_GUARDS','SECRET','GIT_ASSETS','APK_NAMES','APK_FRESH','UI_STUBS','P4_3_RATCHET','E2E_PC','E2E_AR','MUTATION','HEADSET') {
         $prev = 0
         $prop = $state.Counts.PSObject.Properties[$code]
         if ($prop) { $prev = [int]$prop.Value }

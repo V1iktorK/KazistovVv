@@ -197,11 +197,51 @@ namespace KazistovVvUI
 
         private void NextScope()
         {
-            scope = (NavScope)(((int)scope + 1) % 3);
+            scope = NextScopeOf(scope);
             ResetScopeMarks();
             if (scope == NavScope.Toolbar && focusables.Count > 0) Move(1);
             Debug.Log("[KvNav] Область навигации: " + ScopeLabel +
                       " (F6 — следующая, стрелки — внутри области, Esc — уровень выше)");
+        }
+
+        /// <summary>
+        /// СЛЕДУЮЩАЯ ОБЛАСТЬ НАВИГАЦИИ ПО КРУГУ (чистая функция — проверяется тестом).
+        ///
+        /// Зачем отдельно: областей ровно три, и «по кругу» — единственное правило переключения по F6.
+        /// Если оно записано по месту, проверить его можно только нажатием клавиши в шлеме; ошибка
+        /// (например, потерянная область «Дерево») видна оператору как «F6 ходит по двум областям».
+        /// </summary>
+        public static NavScope NextScopeOf(NavScope current)
+        {
+            return (NavScope)(((int)current + 1) % 3);
+        }
+
+        /// <summary>
+        /// ИНДЕКС ПОСЛЕ ШАГА ПО КРУГУ (чистая функция): из конца списка шаг вперёд попадает в начало
+        /// и наоборот. Так ходят стрелки по кнопкам тулбара; отрицательный результат невозможен,
+        /// иначе `focusButtons[index]` дал бы исключение прямо в кадре.
+        /// </summary>
+        public static int WrapIndex(int index, int delta, int count)
+        {
+            if (count <= 0) return -1;
+            int next = (index + delta) % count;
+            if (next < 0) next += count;
+            return next;
+        }
+
+        /// <summary>
+        /// ИНДЕКС ПОСЛЕ ШАГА ПО СПИСКУ С ПРИЖАТИЕМ К ГРАНИЦАМ (чистая функция): так ходят ↑/↓ по
+        /// пунктам меню и узлам дерева. В отличие от тулбара здесь НЕТ перехода через край: на
+        /// последнем пункте шаг вниз остаётся на последнем, иначе выделение «прыгало» бы в начало.
+        /// </summary>
+        public static int StepInList(int index, int delta, int count)
+        {
+            if (count <= 0) return -1;
+            if (index < 0) return 0;
+            int next = index + delta;
+            if (next < 0) return 0;
+            if (next >= count) return count - 1;
+            return next;
         }
 
         private void ResetScopeMarks()
@@ -277,8 +317,7 @@ namespace KazistovVvUI
                     rowIndex = -1;
                     return;
                 }
-                rowIndex++;
-                if (rowIndex >= bar.NavigableRowCount) rowIndex = bar.NavigableRowCount - 1;
+                rowIndex = StepInList(rowIndex, 1, bar.NavigableRowCount);
                 bar.HighlightRow(rowIndex);
                 return;
             }
@@ -293,8 +332,7 @@ namespace KazistovVvUI
                     bar.HighlightRow(rowIndex);
                     return;
                 }
-                rowIndex--;
-                if (rowIndex < 0) rowIndex = 0;
+                rowIndex = StepInList(rowIndex, -1, bar.NavigableRowCount);
                 bar.HighlightRow(rowIndex);
                 return;
             }
@@ -351,13 +389,15 @@ namespace KazistovVvUI
 
             if (KeyDown(KeyCode.DownArrow))
             {
-                int next = current < 0 ? 0 : Mathf.Min(current + 1, nodes.Count - 1);
+                int next = StepInList(current, 1, nodes.Count);
+                if (next < 0) return;
                 tree.Select(nodes[next]);
                 return;
             }
             if (KeyDown(KeyCode.UpArrow))
             {
-                int prev = current < 0 ? 0 : Mathf.Max(current - 1, 0);
+                int prev = StepInList(current, -1, nodes.Count);
+                if (prev < 0) return;
                 tree.Select(nodes[prev]);
                 return;
             }
@@ -475,8 +515,8 @@ namespace KazistovVvUI
         private void Move(int delta)
         {
             if (focusables.Count == 0) return;
-            index = (index + delta) % focusables.Count;
-            if (index < 0) index += focusables.Count;
+            index = WrapIndex(index, delta, focusables.Count);
+            if (index < 0) return;
             Paint();
         }
 

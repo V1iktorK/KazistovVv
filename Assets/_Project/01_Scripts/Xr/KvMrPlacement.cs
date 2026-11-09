@@ -99,6 +99,19 @@ namespace KazistovVvXr
         /// </summary>
         public bool showAimByDefault = false;
 
+        /// <summary>
+        /// ПОКАЗЫВАТЬ ЛИ ЛУЧ И МЕТКУ ПРИЦЕЛА (чистая функция — проверяется тестом без сцены).
+        ///
+        /// Решение владельца 04.11.2026 («убери все плюшки из режима по умолчанию») сводится РОВНО к
+        /// этому правилу: пока владелец не включил флаг, ни луч, ни метка не рисуются — постановка
+        /// идёт автопутём и кнопкой A. Без явного правила «выключено» держалось только на том, что
+        /// `UpdateVisuals` вызывался после `applyFlag = false`, и любой рефакторинг мог вернуть плюшку.
+        /// </summary>
+        public static bool ShouldShowAim(bool enabledByOwner, bool hasAimDirection)
+        {
+            return enabledByOwner && hasAimDirection;
+        }
+
         private bool hasHit;
         private Vector3 hitPoint;
         private Vector3 hitNormal;
@@ -279,20 +292,17 @@ namespace KazistovVvXr
         private void UpdateVisuals()
         {
             if (beam == null || reticle == null) return;
-            if (!showAimByDefault)
+
+            // ПРИЦЕЛ СТРОИТСЯ ТОЛЬКО ПРИ ВКЛЮЧЁННОМ ФЛАГЕ: при выключенном `TryAimDirection` не
+            // вызывается вовсе (это покадровый код), а решение «показывать / нет» принимает одно
+            // правило — `ShouldShowAim`, проверяемое тестом.
+            Vector3 origin = Vector3.zero;
+            Vector3 direction = Vector3.forward;
+            bool hasAim = showAimByDefault && TryAimDirection(out origin, out direction);
+            if (!ShouldShowAim(showAimByDefault, hasAim))
             {
                 // ЧИСТЫЙ ВИД (решение владельца 04.11.2026): луч и метка скрыты по умолчанию,
                 // постановка работает без них. Если флаг включат — идём обычным путём ниже.
-                beam.enabled = false;
-                reticle.SetActive(false);
-                return;
-            }
-
-            Vector3 origin;
-            Vector3 direction;
-            bool hasAim = TryAimDirection(out origin, out direction);
-            if (!hasAim)
-            {
                 beam.enabled = false;
                 reticle.SetActive(false);
                 return;

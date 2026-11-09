@@ -136,12 +136,15 @@ namespace KazistovVvXr
             // 05.11.2026). Открываем ПО ОТПУСКАНИЮ и только если нажатие было коротким: долгое
             // удержание — это «вернуться на рабочую позицию» (KvXrActions), и два действия на
             // одно нажатие не должны срабатывать вместе.
-            bool leftDown = KvXrInputSource.LeftStickClick;
+            // МЕНЮ ОТКРЫВАЕТ ТОЛЬКО ЛЕВЫЙ СТИК — правило в чистой функции `OpensOnStick`: правый
+            // занят режимом перемещения точки, и два действия не должны сойтись на одной кнопке.
+            bool leftDown = OpensOnStick(KvXrInputSource.LeftStickClick,
+                KvXrInputSource.RightStickClick) == MenuStick.Left;
             if (leftDown && !stickClickWasDown) stickPressTime = Time.unscaledTime;
             if (!leftDown && stickClickWasDown)
             {
                 float held = Time.unscaledTime - stickPressTime;
-                if (held >= 0f && held < 0.5f)
+                if (ShouldOpenFromStick(held))
                 {
                     Debug.Log("[KvXr] МЕНЮ: открыто коротким нажатием левого стика (" +
                               held.ToString("0.00") + " с)");
@@ -154,6 +157,46 @@ namespace KazistovVvXr
                 }
             }
             stickClickWasDown = leftDown;
+        }
+
+        /// <summary>
+        /// ДОЛЬШЕ ЭТОГО — УЖЕ НЕ «КОРОТКОЕ НАЖАТИЕ», секунды (чистая функция, см.
+        /// <see cref="ShouldOpenFromStick"/>).
+        ///
+        /// ПОЧЕМУ ПОРОГ ОБЯЗАН БЫТЬ НАЗВАН. Долгое удержание левого стика — это «вернуться на рабочую
+        /// позицию» (`KvXrActions`). Если бы меню открывалось и на удержании, одно нажатие давало бы
+        /// ДВА действия сразу: оператор возвращался бы к столу и одновременно получал стартовое меню
+        /// перед глазами, закрывающее работу.
+        /// </summary>
+        public const float ShortPressMaxSeconds = 0.5f;
+
+        /// <summary>
+        /// ОТКРЫВАТЬ ЛИ МЕНЮ ПО ОТПУСКАНИЮ СТИКА (чистая функция — проверяется тестом).
+        /// Короткое нажатие (0 … <see cref="ShortPressMaxSeconds"/>) открывает меню; удержание — нет:
+        /// оно принадлежит команде «вернуться к столу».
+        /// </summary>
+        public static bool ShouldOpenFromStick(float heldSeconds)
+        {
+            return heldSeconds >= 0f && heldSeconds < ShortPressMaxSeconds;
+        }
+
+        /// <summary>Какой стик открывает меню (второй — «не открывает ничего»).</summary>
+        public enum MenuStick
+        {
+            /// <summary>Ввод меню не открывает.</summary>
+            None = 0,
+            /// <summary>Левый клик стика — вход в меню.</summary>
+            Left = 1
+        }
+
+        /// <summary>
+        /// КАКОЙ СТИК ОТКРЫВАЕТ МЕНЮ (чистая функция). Только ЛЕВЫЙ: правый занят режимом точки
+        /// (аудит 05.11.2026), и если он снова начнёт открывать меню, два действия снова сойдутся на
+        /// одной кнопке. Проверяется по результату: «правый клик меню не открывает».
+        /// </summary>
+        public static MenuStick OpensOnStick(bool leftStickClick, bool rightStickClick)
+        {
+            return leftStickClick ? MenuStick.Left : MenuStick.None;
         }
 
         /// <summary>ПЕРЕСТАВИТЬ МЕНЮ ПЕРЕД ОПЕРАТОРОМ — только по явному вызову, не само.</summary>

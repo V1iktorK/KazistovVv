@@ -158,7 +158,7 @@ namespace KazistovVvXr
             {
                 KazistovVvFeatures.FeatureHub features = KazistovVvFeatures.FeatureHub.Current;
                 KazistovVvFeatures.KvStageHub hub = Object.FindAnyObjectByType<KazistovVvFeatures.KvStageHub>();
-                if (flow != null && features != null && hub != null) break;
+                if (CleanViewServicesReady(flow != null, features != null, hub != null)) break;
                 yield return null;
             }
 
@@ -225,10 +225,11 @@ namespace KazistovVvXr
             if (viz == null) return;
 
             bool wantWorkspace = KvXrSettings.GetWorkspaceVisible();
-            if (viz.WorkspaceVisible != wantWorkspace)
+            bool workspaceWasShown = viz.WorkspaceVisible;
+            if (workspaceWasShown != wantWorkspace)
             {
                 flow.SetWorkspaceVisible(wantWorkspace);
-                if (!wantWorkspace && !guardWorkspaceLogged)
+                if (ShouldForceHidden(wantWorkspace, workspaceWasShown) && !guardWorkspaceLogged)
                 {
                     guardWorkspaceLogged = true;
                     Debug.Log("[KvXr] ЗОНА ДОСТИЖИМОСТИ: включилась сама — выключил (по умолчанию выключено; " +
@@ -237,16 +238,59 @@ namespace KazistovVvXr
             }
 
             bool wantLimits = KvXrSettings.GetJointLimitsVisible();
-            if (viz.JointLimitsVisible != wantLimits)
+            bool limitsWereShown = viz.JointLimitsVisible;
+            if (limitsWereShown != wantLimits)
             {
                 flow.SetJointLimitsVisible(wantLimits);
-                if (!wantLimits && !guardLimitsLogged)
+                if (ShouldForceHidden(wantLimits, limitsWereShown) && !guardLimitsLogged)
                 {
                     guardLimitsLogged = true;
                     Debug.Log("[KvXr] ЛИМИТЫ СУСТАВОВ: включились сами — выключил (по умолчанию выключено; " +
                               "включить: Настройки → Лимиты суставов)");
                 }
             }
+        }
+
+        /// <summary>
+        /// МОЖНО ЛИ ВЕСТИ ТОЧКУ ГРИПОМ (чистая функция — проверяется тестом без шлема).
+        ///
+        /// ТРИ УСЛОВИЯ, И ВСЕ ОБЯЗАТЕЛЬНЫ:
+        ///   • грип зажат (иначе это не «взять и поставить», а обычный прицел);
+        ///   • луч ПОПАЛ в мир (тащить точку «в пустоту» некуда);
+        ///   • луч НЕ над интерфейсом: иначе маркер уезжал бы за панелью, то есть точка ставилась бы
+        ///     туда, куда оператор не смотрит и чего не видит.
+        /// </summary>
+        public static bool ShouldDragPointByGrip(bool gripPressed, bool aimHit, bool overInterface)
+        {
+            return gripPressed && aimHit && !overInterface;
+        }
+
+        /// <summary>
+        /// ПОРА ЛИ ПРИМЕНЯТЬ ЧИСТЫЙ ВИД (чистая функция — проверяется тестом без сцены).
+        ///
+        /// ЧТО ЛОВИТСЯ (дефект «плюшки остались включёнными»). Чистый вид вызывался РАНО — в `Awake`,
+        /// по пустым ссылкам: `KvXrCleanView.Apply(null, null, null)` молча возвращает 0 и ничего не
+        /// гасит, поэтому «флаги по умолчанию выключены» было правдой о настройках и неправдой о
+        /// сцене. Правило «пока службы этапов не подняты — ждём» теперь названо и проверяемо: без
+        /// ЛЮБОЙ из трёх служб (`поток`, `функции`, `хаб этапов`) применять нечего.
+        /// </summary>
+        public static bool CleanViewServicesReady(bool flowBound, bool featuresBound, bool hubBound)
+        {
+            return flowBound && featuresBound && hubBound;
+        }
+
+        /// <summary>
+        /// НАДО ЛИ ПОГАСИТЬ ВИЗУАЛИЗАЦИЮ, КОТОРАЯ ВКЛЮЧИЛАСЬ САМА (чистая функция).
+        ///
+        /// ПОЧЕМУ ЭТО ПРАВИЛО, А НЕ УСЛОВИЕ ПО МЕСТУ (жалоба владельца 05.11.2026: «появились зоны
+        /// достижимости сами по себе»). Визуализации поднимают сценарии, команды и восстановление
+        /// сохранённых зон — то есть включиться «не по воле оператора» могут в любой момент.
+        /// Сторож обязан гасить ИМЕННО этот случай и НЕ трогать то, что оператор включил сам:
+        /// если владелец хочет видеть зону, сторож её не отбирает.
+        /// </summary>
+        public static bool ShouldForceHidden(bool ownerWants, bool currentlyShown)
+        {
+            return !ownerWants && currentlyShown;
         }
 
         void Update()
@@ -380,8 +424,8 @@ namespace KazistovVvXr
                 // ПЕРЕТАЩИТЬ ТОЧКУ ГРИПОМ (шаг 4): грип в режиме точки ведёт маркер по поверхности.
                 // Приоритет у грипа: если он зажат, стик точку не двигает — иначе два источника
                 // движения «спорили» бы за одно и то же место.
-                bool gripDrag = KvXrInputSource.RayGrip >= 0.7f;
-                if (gripDrag && aimHit && !overInterface && flow.DragPointTo(aimPoint))
+                bool gripDrag = KvXrInputSource.IsDragGrip(KvXrInputSource.RayGrip);
+                if (ShouldDragPointByGrip(gripDrag, aimHit, overInterface) && flow.DragPointTo(aimPoint))
                 {
                     moveAxis = Vector3.zero;
                     if (!gripDragLogged)

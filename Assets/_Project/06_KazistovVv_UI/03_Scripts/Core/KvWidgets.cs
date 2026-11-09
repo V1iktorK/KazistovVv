@@ -650,14 +650,30 @@ namespace KazistovVvUI
         {
             buttons = btns;
             images = imgs;
-            Index = initial;
+            Index = ClampIndex(initial, imgs != null ? imgs.Count : 0);
             Paint();
         }
 
         public void Set(int index)
         {
-            Index = index;
+            Index = ClampIndex(index, images != null ? images.Count : 0);
             Paint();
+        }
+
+        /// <summary>
+        /// ИНДЕКС СЕГМЕНТА, ПРИЖАТЫЙ К ГРАНИЦАМ (−1 — сегментов нет).
+        ///
+        /// ЗАЧЕМ (P4-3). Индекс приходит из сохранённой настройки и из кода панелей: после смены
+        /// числа вариантов (или из старого `PlayerPrefs`) он может оказаться за пределами списка.
+        /// Тогда `Paint` не подсвечивает ни один сегмент, и переключатель выглядит «сломанным»:
+        /// значение записано, а выбранного пункта не видно. Прижатие делает состояние однозначным.
+        /// </summary>
+        public static int ClampIndex(int index, int count)
+        {
+            if (count <= 0) return -1;
+            if (index < 0) return 0;
+            if (index >= count) return count - 1;
+            return index;
         }
 
         private void Paint()

@@ -103,6 +103,94 @@ public class TrajectoryExecutor : MonoBehaviour
         return t.Times != null && t.Times.Length == t.Path.Length;
     }
 
+    // ============================================================================================
+    // ПАУЗА: ПРАВИЛА В ЧИСТЫХ ФУНКЦИЯХ (P4-3, 12.11.2026).
+    //
+    // ПОЧЕМУ ВЫНЕСЕНО. Всё поведение паузы жило внутри `Update`/`CheckStandingPose` — то есть
+    // проверялось только чтением исходника (`KvPauseSafetyTests` брал подстроку 1500 символов от
+    // `private void CheckStandingPose` и искал в ней слова). Такой тест ломается от переформулировки
+    // комментария и, что хуже, ПРОХОДИТ на сломанном коде: строка «ApproveStep» может остаться,
+    // а вызываться не будет. Правила ниже вызываются из тех же мест, но проверяются по результату.
+    // ============================================================================================
+
+    /// <summary>ЧТО ДЕЛАТЬ В КАДРЕ, КОГДА ДВИЖЕНИЕ СТОИТ (чистая функция — проверяется тестом).</summary>
+    public enum PausedFrameAction
+    {
+        /// <summary>Ничего: проверять нечего (движение не запущено или траектории нет).</summary>
+        Nothing = 0,
+        /// <summary>Проверить стоящую позу: робот стоит, а обстановка вокруг могла измениться.</summary>
+        VerifyStandingPose = 1
+    }
+
+    /// <summary>
+    /// ПРОВЕРКА БЕЗОПАСНОСТИ НА ПАУЗЕ — НЕ «ОТДЫХ ОТ ПРОВЕРОК» (S44; чистая функция).
+    ///
+    /// До исправления 30.10.2026 `Update` на паузе выходил СРАЗУ после `NotifyState()`: робот стоял,
+    /// но никто не следил, что он стоит в безопасном месте. После аварийного останова (он сам ставит
+    /// паузу) контроль зазора и лимитов оказывался выключен, и первое, что происходило после снятия
+    /// паузы, — движение в ставшую опасной зону.
+    ///
+    /// Возвращает <see cref="PausedFrameAction.VerifyStandingPose"/> ровно в одном случае: пауза при
+    /// ЖИВОМ движении и непустой траектории. Во всех прочих проверять нечего.
+    /// </summary>
+    public static PausedFrameAction PausedFrameActionFor(bool paused, bool running, bool hasActivePath)
+    {
+        if (!running || !hasActivePath) return PausedFrameAction.Nothing;
+        return paused ? PausedFrameAction.VerifyStandingPose : PausedFrameAction.Nothing;
+    }
+
+    /// <summary>
+    /// ИНДЕКС СЭМПЛА ДЛЯ ПРОВЕРКИ СТОЯЩЕЙ ПОЗЫ (−1 — проверять нечего).
+    /// Индекс прижимается к пути: `index` ведёт движение и может оказаться за последним сэмплом
+    /// (или отрицательным на первом кадре), а обращение `active.Path[index]` за границей — это
+    /// `IndexOutOfRangeException` посреди исполнения, то есть остановка БЕЗ причины в журнале.
+    /// </summary>
+    public static int StandingSampleIndex(int index, int pathLength)
+    {
+        if (pathLength <= 0) return -1;
+        if (index < 0) return 0;
+        if (index >= pathLength) return pathLength - 1;
+        return index;
+    }
+
+    /// <summary>
+    /// ВРЕМЯ ПРОИГРЫВАНИЯ ПОСЛЕ КАДРА (чистая функция). На паузе время НЕ идёт: пауза — это
+    /// «стоять», а не «ехать медленно», и остаток пути после неё начинается с того же места.
+    /// Нижняя граница `timeScale` та же, что была в `Update`.
+    ///
+    /// РАНЬШЕ ЗДЕСЬ БЫЛО НАПИСАНО: «иначе проверка «время не идёт вперёд» (`SafetyGate.ApproveStep`)
+    /// сама остановила бы паузу». Это объяснение выдавало дефект за задумку: правило времени
+    /// действительно срабатывало — и превращало паузу в аварийный останов «watchdog» (дефект A,
+    /// 12.11.2026). Теперь проверка стоящей позы правила времени не знает вовсе (см.
+    /// `SafetyGate.ApproveStandingPose`), и остановки на паузе нет.
+    /// </summary>
+    public static double PlayheadAfterFrame(double playhead, float deltaTime, float timeScale, bool paused)
+    {
+        if (paused) return playhead;
+        return playhead + deltaTime * Mathf.Max(0.05f, timeScale);
+    }
+
+    /// <summary>
+    /// НАДО ЛИ ОСТАНОВИТЬСЯ ПО ИТОГУ ПРОВЕРКИ СТОЯЩЕЙ ПОЗЫ (чистая функция).
+    ///
+    /// Смысл проверки не в том, чтобы «посчитать зазор», а в том, чтобы ОТКАЗ ПРЕДОХРАНИТЕЛЯ вёл к
+    /// останову: без этого проверка обнаружит опасность и промолчит. Поэтому результат —
+    /// «предохранитель отказал», а не «зазор такой-то».
+    ///
+    /// ВРЕМЯ ПРОИГРЫВАНИЯ ЗДЕСЬ БОЛЬШЕ НЕ ПЕРЕДАЁТСЯ (12.11.2026, дефект A). Пока проверка шла
+    /// через `ApproveStep`, она обязана была передать `playhead`, а на паузе он заморожен — и
+    /// правило «время вперёд» превращало паузу в аварийный останов «watchdog». Теперь проверка
+    /// стоящей позы идёт своим путём (`SafetyGate.ApproveStandingPose`), где правила времени нет,
+    /// а живость данных, лимиты и зазор проверяются как прежде.
+    /// </summary>
+    public static bool StandingPoseNeedsStop(SafetyGate gate, double[] q, float clearance,
+        PoseValidator validator, out SafetyReason reason)
+    {
+        reason = SafetyReason.NotChecked;
+        if (gate == null) return false;
+        return !gate.ApproveStandingPose(q, clearance, validator, out reason);
+    }
+
     public bool Play(PlannedTrajectory t)
     {
         if (validator == null || !validator.Ready || t == null) return false;
@@ -177,15 +265,25 @@ public class TrajectoryExecutor : MonoBehaviour
     /// </summary>
     private void CheckStandingPose()
     {
+        // ПРАВИЛО «КОГДА ПРОВЕРЯТЬ» — В ЧИСТОЙ ФУНКЦИИ (см. `PausedFrameActionFor`): проверка нужна
+        // только на паузе при живом движении. Здесь это условие ничего не меняет (метод зовут ровно
+        // из ветки паузы), но теперь правило проверяемо тестом, а не чтением этого файла.
+        if (PausedFrameActionFor(Paused, running, active != null) != PausedFrameAction.VerifyStandingPose)
+            return;
         if (gate == null || validator == null || !validator.Ready || active == null) return;
 
-        int last = active.Path != null ? active.Path.Length - 1 : -1;
-        if (last < 0) return;
-        double[] q = active.Path[Mathf.Clamp(index, 0, last)];
+        int pathLength = active.Path != null ? active.Path.Length : 0;
+        int sample = StandingSampleIndex(index, pathLength);
+        if (sample < 0) return;
+        double[] q = active.Path[sample];
 
         float clearance = validator.ClearanceAt(q, world, out _, out _);
         SafetyReason reason;
-        if (!gate.ApproveStep(q, clearance, playhead, validator, out reason))
+        // `playhead` НЕ ПЕРЕДАЁТСЯ (12.11.2026, дефект A): на паузе он заморожен осознанно, и
+        // правило «время вперёд» в `ApproveStep` превращало нажатие «Пауза» в аварийный останов с
+        // ложной причиной «watchdog: нет данных». Живость данных, лимиты и зазор проверяются
+        // по-прежнему — исчезла только проверка, которая к стоящей позе не относится.
+        if (StandingPoseNeedsStop(gate, q, clearance, validator, out reason))
         {
             Stop(reason);
         }
@@ -220,7 +318,9 @@ public class TrajectoryExecutor : MonoBehaviour
 
         gate?.NotifyState(); // живые данные для watchdog
 
-        playhead += Time.deltaTime * Mathf.Max(0.05f, timeScale);
+        // ВРЕМЯ КАДРА — ЧЕРЕЗ ЧИСТУЮ ФУНКЦИЮ (`PlayheadAfterFrame`): на паузе оно не идёт, и это
+        // правило теперь проверяется тестом, а не поиском «playhead» в исходнике.
+        playhead = PlayheadAfterFrame(playhead, Time.deltaTime, timeScale, Paused);
 
         // Находим текущий сэмпл.
         float[] times = active.Times;

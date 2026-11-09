@@ -84,6 +84,32 @@ namespace KazistovVvFeatures
 
         // ------------------------------------------------------------------ запись
 
+        /// <summary>
+        /// ИМЯ ЗАПИСИ, ЕСЛИ ОПЕРАТОР НЕ ВВЁЛ СВОЁ (чистая функция — проверяется тестом).
+        ///
+        /// Безымянная запись обязана получить УНИКАЛЬНОЕ имя с меткой времени: два прогона подряд с
+        /// пустым полем имени иначе дали бы одинаковое «Запись», а файл — один на двоих (вторая
+        /// запись затирает первую, и оператор теряет только что сделанный дубль). Метка времени —
+        /// параметр, поэтому правило проверяется без диска и без часов.
+        /// </summary>
+        public static string BuildName(string name, string timeStamp)
+        {
+            return string.IsNullOrEmpty(name) ? "Запись " + timeStamp : name;
+        }
+
+        /// <summary>
+        /// ХВАТИТ ЛИ СЭМПЛОВ, ЧТОБЫ ЗАПИСЬ ЧТО-ТО ЗНАЧИЛА (чистая функция).
+        ///
+        /// Один сэмпл — это не движение, а точка: воспроизводить нечего, длина пути ноль. Такая
+        /// запись не сохраняется и не играется, и вместо неё в журнале должна быть причина, а не
+        /// «файл есть, но пустой». Порог назван в ОДНОМ месте: им пользуются сохранение,
+        /// воспроизведение и загрузка с диска.
+        /// </summary>
+        public static bool HasEnoughSamples(int sampleCount)
+        {
+            return sampleCount >= 2;
+        }
+
         /// <summary>Начать запись. Источник: live (робот) / phantom / manual.</summary>
         public bool StartRecording(string name, string source = "live")
         {
@@ -97,7 +123,7 @@ namespace KazistovVvFeatures
             recording = new KvTrajectoryRecord
             {
                 id = Guid.NewGuid().ToString("N"),
-                name = string.IsNullOrEmpty(name) ? "Запись " + FeatureStorage.TimeStamp() : name,
+                name = BuildName(name, FeatureStorage.TimeStamp()),
                 robot = flow.Validator.RobotName,
                 created = FeatureStorage.IsoNow(),
                 source = source,
@@ -124,7 +150,7 @@ namespace KazistovVvFeatures
             done.duration = done.SampleCount > 0 ? done.samples[done.SampleCount - 1].t : 0f;
             done.length = done.ComputeLength();
 
-            if (done.SampleCount < 2)
+            if (!HasEnoughSamples(done.SampleCount))
             {
                 Fail("запись слишком короткая (сэмплов " + done.SampleCount + ") — не сохранена");
                 if (RecordingFinished != null) RecordingFinished(null);
@@ -208,7 +234,7 @@ namespace KazistovVvFeatures
                 Fail("воспроизведение невозможно: робот потока не готов");
                 return false;
             }
-            if (rec == null || rec.SampleCount < 2)
+            if (rec == null || !HasEnoughSamples(rec.SampleCount))
             {
                 Fail("в записи меньше двух сэмплов — воспроизводить нечего");
                 return false;

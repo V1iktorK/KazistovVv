@@ -76,6 +76,25 @@ public const float DefaultBeltHeightMeters = 1.45f;
 /// <inheritdoc cref="DefaultBeltHeightMeters"/>
 public float beltHeightMeters = DefaultBeltHeightMeters;
 
+/// <summary>НИЖНЯЯ ГРАНИЦА ВЫСОТЫ ПАНЕЛИ, метры (уровень «не ниже груди оператора»).</summary>
+public const float MinBeltHeightMeters = 1.10f;
+
+/// <summary>ВЕРХНЯЯ ГРАНИЦА ВЫСОТЫ ПАНЕЛИ, метры (выше — панель липнет к глазам).</summary>
+public const float MaxBeltHeightMeters = 1.60f;
+
+/// <summary>
+/// ВЫСОТА ПАНЕЛИ ПРИВОДИТСЯ В ДОПУСТИМЫЙ ДИАПАЗОН (чистая функция — проверяется тестом).
+///
+/// ЗАЧЕМ ОТДЕЛЬНО (задача «панель на уровне экрана настроек», 04.11.2026). Высота приходит из
+/// `PlayerPrefs` и из инспектора, то есть её можно вернуть к старому значению 1,05 м (у пояса) —
+/// именно этим и объяснялась жалоба владельца. Нижняя граница держит панель выше пояса, верхняя не
+/// даёт ей встать вплотную к глазам; значение ВНУТРИ диапазона не меняется.
+/// </summary>
+public static float ClampBeltHeight(float meters)
+{
+    return Mathf.Clamp(meters, MinBeltHeightMeters, MaxBeltHeightMeters);
+}
+
 /// <summary>Размер канваса панели в пикселях (квадрат).</summary>
 public float canvasSize = 420f;
 
@@ -1144,14 +1163,33 @@ CreateIcon("Set_Mode", "settings",
 // настройках шлема, и выбор запоминается: по умолчанию обе выключены, сторож
 // (`KvXrFlowBridge.GuardVisuals`) не даёт им включиться самим.
 CreateIcon("Set_Workspace", "check",
-    "Зона достижимости: " + (KvXrSettings.GetWorkspaceVisible() ? "ВКЛ" : "выкл"),
+    WorkspaceRowText(KvXrSettings.GetWorkspaceVisible()),
     new Vector2(-0.18f, -0.23f), delegate { ToggleWorkspaceFromSettings(); }, false,
     KvXrSettings.GetWorkspaceVisible() ? "зона ВКЛ" : "зона выкл", 0.12f, 0.05f);
 
 CreateIcon("Set_JointLimits", "check",
-    "Лимиты суставов: " + (KvXrSettings.GetJointLimitsVisible() ? "ВКЛ" : "выкл"),
+    JointLimitsRowText(KvXrSettings.GetJointLimitsVisible()),
     new Vector2(0.18f, -0.23f), delegate { ToggleJointLimitsFromSettings(); }, false,
     KvXrSettings.GetJointLimitsVisible() ? "лимиты ВКЛ" : "лимиты выкл", 0.12f, 0.05f);
+}
+
+/// <summary>
+/// ПОДПИСЬ ПЕРЕКЛЮЧАТЕЛЯ «ЗОНА ДОСТИЖИМОСТИ» В НАСТРОЙКАХ ШЛЕМА (чистая функция — проверяется тестом).
+///
+/// ПОЧЕМУ ВЫНЕСЕНА. Жалоба владельца 05.11.2026 звучала дословно «появились зоны достижимости сами по
+/// себе, в меню не нашёл настройку». Переключатель в панели шлема существовал, но проверить это можно
+/// было только надетым шлемом; теперь подпись можно проверить по результату — и вместе с ней
+/// убедиться, что она ЧЕСТНО показывает текущее состояние (ВКЛ/выкл), а не всегда одно и то же.
+/// </summary>
+public static string WorkspaceRowText(bool on)
+{
+    return "Зона достижимости: " + (on ? "ВКЛ" : "выкл");
+}
+
+/// <summary>Подпись переключателя «Лимиты суставов» в настройках шлема (см. `WorkspaceRowText`).</summary>
+public static string JointLimitsRowText(bool on)
+{
+    return "Лимиты суставов: " + (on ? "ВКЛ" : "выкл");
 }
 
 /// <summary>
@@ -3177,7 +3215,7 @@ if (!fromHmd)
 
 // ПАНЕЛЬ СТАВИТСЯ ОТ ПОЛА, А НЕ ОТ ВЫСОТЫ ГОЛОВЫ: тогда увести её под пол нечем,
 // даже если высота головы придёт неверной.
-float height = Mathf.Clamp(beltHeightMeters, 1.10f, 1.60f);
+float height = ClampBeltHeight(beltHeightMeters);
 Vector3 flatForward = KvXrGroupPanelLayout.Flatten(headRotation * Vector3.forward);
 Vector3 position = new Vector3(head.x, height, head.z)                             + flatForward * KvXrGroupPanelLayout.BeltForwardMeters;
             transform.position = position;

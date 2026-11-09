@@ -22,13 +22,27 @@ public class CollisionGuard : MonoBehaviour
         float distance = direction.magnitude;
 
         // Цель совпала с TCP: пути нет, проверять нечего — кастовать луч нулевой длины нельзя.
-        if (distance < 1e-4f) return true;
+        if (!ShouldCastRay(distance)) return true;
 
         if (Physics.Raycast(robot.tcp.position, direction / distance, distance, obstacleLayers))
         {
             Debug.LogWarning("⚠ Обнаружено препятствие! Движение отменено.");
             return false;
         }
+        return true;
+    }
+
+    /// <summary>
+    /// НУЖЕН ЛИ ЛУЧ ВООБЩЕ (P3-11; чистая функция — проверяется тестом без сцены).
+    ///
+    /// Вырожденный случай назван явно: если цель совпала с TCP, луч нулевой длины не только
+    /// бессмысленен, но и вреден — `Physics.Raycast` с нулевым направлением пишет ошибку в консоль
+    /// и возвращает `false`, а предохранитель МОЛЧА отвечал «можно» именно там, где ничего не
+    /// проверял. Ноль пути — законный ответ «двигаться некуда, препятствий на пути нет».
+    /// </summary>
+    public static bool ShouldCastRay(float distance)
+    {
+        if (distance < 1e-4f) return false;   // цель совпала с TCP — пути нет
         return true;
     }
 }

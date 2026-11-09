@@ -175,6 +175,28 @@ public class CalibrationTool : MonoBehaviour
         position = real[0] - rotation * model[0];
     }
 
+    /// <summary>
+    /// ПОЗА БАЗЫ ПОСЛЕ КАЛИБРОВКИ — АБСОЛЮТНАЯ, А НЕ «НАЛОЖЕННАЯ НА ТЕКУЩУЮ» (чистая функция).
+    ///
+    /// ЧТО ЛОВИТ (дефект P1-6). Раньше поворот накладывался на текущий:
+    /// `rotation = rotOffset * rotation`, а позиция прибавлялась к текущей. Поэтому ВТОРАЯ
+    /// калибровка подряд складывала перекос: наладчик калибровал «ещё раз, чтобы точнее» — и
+    /// получал вдвое больший сдвиг, а причина была невидима (ни ошибки, ни предупреждения).
+    ///
+    /// ПРАВИЛО: результат зависит ТОЛЬКО от измеренного смещения. Текущая поза базы — параметр
+    /// ради явности вызова; она НЕ участвует в результате, поэтому повторное применение даёт ту же
+    /// позу (идемпотентность), а не сумму калибровок.
+    /// </summary>
+    public static void CalibratedBasePose(Vector3 currentPosition, Quaternion currentRotation,
+        Vector3 offsetPosition, Quaternion offsetRotation,
+        out Vector3 position, out Quaternion rotation)
+    {
+        // НЕ `currentPosition + offsetPosition` и НЕ `offsetRotation * currentRotation`:
+        // именно эти две строки и накапливали сдвиг при повторной калибровке (P1-6).
+        position = offsetPosition;
+        rotation = offsetRotation;
+    }
+
     void ApplyCalibration()
     {
         if (virtualRobotBase == null)
@@ -190,7 +212,11 @@ public class CalibrationTool : MonoBehaviour
         ComputeOffsets(realPoints, modelPoints, out posOffset, out rotOffset);
 
         // АБСОЛЮТНАЯ поза, а не «наложить на текущую»: вторая калибровка не должна складывать перекос.
-        virtualRobotBase.SetPositionAndRotation(posOffset, rotOffset);
+        Vector3 basePosition;
+        Quaternion baseRotation;
+        CalibratedBasePose(virtualRobotBase.position, virtualRobotBase.rotation,
+            posOffset, rotOffset, out basePosition, out baseRotation);
+        virtualRobotBase.SetPositionAndRotation(basePosition, baseRotation);
 
         PlayerPrefs.SetFloat(KeyX, posOffset.x);
         PlayerPrefs.SetFloat(KeyY, posOffset.y);

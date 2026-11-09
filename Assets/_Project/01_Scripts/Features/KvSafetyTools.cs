@@ -623,10 +623,45 @@ namespace KazistovVvFeatures
             return true;
         }
 
+        /// <summary>
+        /// ЧТО ИМЕННО ДЕЛАЕТ АВАРИЙНЫЙ ОСТАНОВ (чистая функция).
+        ///
+        /// ПОЧЕМУ ВЫНЕСЕНО (P4-3, 12.11.2026). Связь «аварийный останов СТАВИТ ПАУЗУ» — причина целого
+        /// дефекта S44: на паузе `TrajectoryExecutor` не проверял ни зазор, ни лимиты, то есть после
+        /// аварии робот оказывался в состоянии, где контроль безопасности выключен. Проверялась эта
+        /// связь поиском строки `SetPaused(true)` в исходнике — тест проходил, даже если вызов стоял
+        /// в недостижимой ветке, и падал от переформулировки комментария.
+        ///
+        /// Теперь намерение останова названо явно, и `StopMotion` исполняет именно его.
+        /// </summary>
+        public struct KvEmergencyStopPlan
+        {
+            /// <summary>Остановить движение на уровне функций (авария).</summary>
+            public bool CallEmergencyStop;
+            /// <summary>Поставить ПАУЗУ исполнителю — на паузе продолжаются проверки безопасности.</summary>
+            public bool PauseMotion;
+        }
+
+        /// <summary>
+        /// ПЛАН АВАРИЙНОГО ОСТАНОВА: гасим движение И ставим паузу.
+        ///
+        /// ВТОРАЯ ЧАСТЬ НЕ УКРАШЕНИЕ. Именно пауза удерживает исполнитель в состоянии, где каждый
+        /// кадр пересчитывается зазор и вызывается предохранитель (`TrajectoryExecutor.CheckStandingPose`).
+        /// Если паузу убрать, после аварии проверки просто прекратятся — тот самый дефект S44.
+        /// </summary>
+        public static KvEmergencyStopPlan PlanEmergencyStop()
+        {
+            KvEmergencyStopPlan plan;
+            plan.CallEmergencyStop = true;
+            plan.PauseMotion = true;
+            return plan;
+        }
+
         private void StopMotion(string why)
         {
-            if (features != null) features.EmergencyStop();
-            if (flow != null && flow.Motion != null) flow.Motion.SetPaused(true);
+            KvEmergencyStopPlan plan = PlanEmergencyStop();
+            if (plan.CallEmergencyStop && features != null) features.EmergencyStop();
+            if (plan.PauseMotion && flow != null && flow.Motion != null) flow.Motion.SetPaused(true);
             Log(KvLogKind.Stop, "останов по причине: " + why);
         }
 

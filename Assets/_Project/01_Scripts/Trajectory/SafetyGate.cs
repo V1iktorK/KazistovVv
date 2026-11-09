@@ -25,6 +25,19 @@ namespace TrajectoryCore
         /// понять, какое число настоящее.
         ///
         /// Теперь порог один; запас планировщика выражен ЯВНЫМ коэффициентом, а не вторым числом.
+        ///
+        /// ДОПОЛНЕНО 12.11.2026 (дефект B). Шапка это уже ЗАЯВЛЯЛА, а `ApproveStep` продолжал
+        /// исполнять `minClearance * 0.5f`: слово и дело расходились, и предохранитель пропускал
+        /// позу с зазором ВДВОЕ меньше объявленного минимума — то есть был мягче собственного
+        /// описания. Теперь половины нет нигде: и движение (`ApproveStep`), и стоящая поза на
+        /// паузе (`ApproveStandingPose`) сравниваются с ОДНИМ числом — `minClearance`.
+        ///
+        /// ПОЧЕМУ ЭТО НЕ ОТКЛОНИТ ГОДНЫЕ ПЛАНЫ. `Planner.clearance` берётся из
+        /// `DefaultPlanningClearance` = `DefaultMinClearance * PlanningClearanceFactor` (0,02 м):
+        /// планировщик строит путь с запасом 4/3 выше предохранителя, и `PlannedTrajectory.MinClearance`
+        /// считается как минимум по тем же сэмплам. План с зазором ≥ `minClearance` проходит единый
+        /// порог с запасом в треть; ужесточение отсекает только «движение на грани» — то, что и
+        /// должно было отсекаться.
         /// </summary>
         public const float DefaultMinClearance = 0.015f;
 
@@ -45,17 +58,27 @@ namespace TrajectoryCore
         /// <summary>Действующий порог зазора, метры (настраивается; по умолчанию `DefaultMinClearance`).</summary>
         public float minClearance = DefaultMinClearance;
 
-        /// <summary>
-        /// ДОЛЯ ПОРОГА ДЛЯ ПРОВЕРКИ СТОЯЩЕЙ ПОЗЫ (P1-16). Стоящий робот не движется, поэтому
-        /// требуем половину обычного зазора — но это ЯВНОЕ число с именем, а не «* 0.5f» в теле.
-        /// </summary>
-        public float standingClearanceFactor = 0.5f;
-
         public float minLimitMarginDeg = 3f;
         public int watchdogTimeoutMs = 300;
 
-        /// <summary>ПОРОГ ЗАЗОРА ДЛЯ СТОЯЩЕЙ ПОЗЫ, метры (см. `standingClearanceFactor`).</summary>
-        public float StandingClearance { get { return minClearance * standingClearanceFactor; } }
+        /// <summary>
+        /// ПОРОГ ЗАЗОРА ДЛЯ СТОЯЩЕЙ ПОЗЫ, метры — ТО ЖЕ ЧИСЛО, ЧТО ДЛЯ ДВИЖЕНИЯ (12.11.2026).
+        ///
+        /// ЧТО БЫЛО. Здесь стоял множитель `standingClearanceFactor = 0.5f` с объяснением «стоящий
+        /// робот не движется, поэтому хватит половины». Объяснение неверно по существу: зазор —
+        /// это расстояние до стола, деталей и людей, и оно не зависит от того, едет робот или стоит.
+        /// Ровно наоборот — на паузе робот стоит рядом с тем, что оператор в этот момент может
+        /// пододвинуть, и именно тогда занижать порог опаснее всего.
+        ///
+        /// ЧЕМ ЭТО ГРОЗИЛО. Шапка файла обещала «порог один», а чисел было два: наладчик, читая
+        /// «минимум 15 мм», получал разрешение на 7,5 мм и не мог понять, какое число настоящее.
+        ///
+        /// ЧТО СТАЛО. Множителя нет (поле `standingClearanceFactor` удалено вместе с ним: поле,
+        /// которое ничего не меняет, — обещание настройки, которой нет). Свойство оставлено, потому
+        /// что называет ПОНЯТИЕ («порог для стоящей позы») и им пользуются снаружи, но возвращает
+        /// тот же `minClearance`: один порог на движение и на стоянку.
+        /// </summary>
+        public float StandingClearance { get { return minClearance; } }
 
         /// <summary>
         /// ПРЕДЕЛ СКОРОСТИ СУСТАВА ДЛЯ ПРОВЕРКИ ПЕРЕД ПУСКОМ, °/с (добавлено 30.10.2026, S44).
@@ -236,6 +259,11 @@ namespace TrajectoryCore
         ///     на движение НАЗАД. Если время просто СТОЯЛО НА МЕСТЕ (застрявший плеер — ровно то,
         ///     от чего этот предохранитель и нужен), проверка молчала, и робот «висел» без причины
         ///     в журнале.
+        ///
+        /// ЭТОТ МЕТОД — ТОЛЬКО ДЛЯ ДВИЖЕНИЯ (12.11.2026). Правило «время вперёд» нужно едущему
+        /// роботу и НЕ нужно стоящему: на паузе время заморожено осознанно. Проверка стоящей позы
+        /// поэтому идёт своим путём — `ApproveStandingPose` (см. пояснение там: пока она шла через
+        /// этот метод, пауза превращалась в аварийный останов «watchdog»).
         /// </summary>
         public bool ApproveStep(double[] q, float clearance, double playheadTime, PoseValidator validator,
             out SafetyReason reason)
@@ -259,9 +287,63 @@ namespace TrajectoryCore
                 reason = SafetyReason.JointLimit; LastReason = reason; return false;
             }
 
-            if (clearance < minClearance * 0.5f) { reason = SafetyReason.Clearance; LastReason = reason; return false; }
+            // ПОРОГ ЗАЗОРА — ОДИН (исправлено 12.11.2026, дефект B). Здесь стояло
+            // `minClearance * 0.5f`: предохранитель пропускал позу с зазором ВДВОЕ меньше
+            // объявленного минимума, хотя шапка файла уже утверждала «порог один». Слово и дело
+            // расходились, и предохранитель был мягче собственного описания. Теперь сравнение с
+            // самим `minClearance`; планировщик держит запас 4/3 (`PlanningClearanceFactor`),
+            // поэтому корректно построенные планы проходят с запасом в треть.
+            if (clearance < minClearance) { reason = SafetyReason.Clearance; LastReason = reason; return false; }
 
             lastPlayheadTime = playheadTime;
+            LastReason = reason;
+            return true;
+        }
+
+        /// <summary>
+        /// ПРОВЕРКА СТОЯЩЕЙ ПОЗЫ НА ПАУЗЕ (добавлено 12.11.2026, дефект A).
+        ///
+        /// ЧТО БЫЛО. `TrajectoryExecutor.CheckStandingPose` звал `ApproveStep` и передавал туда
+        /// ТЕКУЩИЙ `playhead`. На паузе он намеренно не растёт (см. `TrajectoryExecutor.PlayheadAfterFrame`),
+        /// поэтому первое же правило `ApproveStep` — «время должно идти вперёд» — отказывало с
+        /// причиной `Watchdog`, и `Stop(reason)` превращал ПАУЗУ В АВАРИЙНЫЙ ОСТАНОВ. Оператор
+        /// терял движение, которое всего лишь хотел приостановить, и видел ложную причину: watchdog
+        /// жив, данные есть.
+        ///
+        /// ПОЧЕМУ ОТДЕЛЬНЫЙ МЕТОД, А НЕ ФЛАЖОК. Правило времени нужно ДВИЖЕНИЮ (застрявший плеер —
+        /// самая частая причина «робот встал и молчит») и не нужно стоянке: время на паузе
+        /// заморожено осознанно, смысл проверки здесь — «робот стоит, а обстановка могла
+        /// измениться». Флажок «не проверять время» оставил бы один метод с двумя смыслами и
+        /// вернул бы ровно ту путаницу, из которой дефект и вырос.
+        ///
+        /// ЧТО ПРОВЕРЯЕТСЯ: живость данных (watchdog), лимиты суставов, зазор — тот же единый порог
+        /// `minClearance`, что и в движении. Чего НЕТ: правила «время вперёд», проверки скорости
+        /// (стоящий робот её не имеет) и записи `lastPlayheadTime` — проверка на паузе не должна
+        /// портить учёт времени, иначе первое же движение после снятия паузы получит ложный
+        /// `Watchdog`.
+        ///
+        /// НАСТОЯЩАЯ ОПАСНОСТЬ ПО-ПРЕЖНЕМУ ОСТАНАВЛИВАЕТ: малый зазор (`Clearance`), выход за
+        /// лимиты (`JointLimit`), мёртвый watchdog (`Watchdog`) — с ВЕРНОЙ причиной в журнале.
+        /// </summary>
+        public bool ApproveStandingPose(double[] q, float clearance, PoseValidator validator,
+            out SafetyReason reason)
+        {
+            reason = SafetyReason.None;
+            if (!Enabled) return true;
+
+            if (!WatchdogAlive()) { reason = SafetyReason.Watchdog; LastReason = reason; return false; }
+
+            // ЛИМИТЫ — ТОЛЬКО ПРИ НАЛИЧИИ ВАЛИДАТОРА (пределы живут в нём, выдумывать их нельзя).
+            if (validator != null && !validator.WithinLimits(q))
+            {
+                reason = SafetyReason.JointLimit; LastReason = reason; return false;
+            }
+
+            // ТОТ ЖЕ ПОРОГ, ЧТО НА ШАГЕ ДВИЖЕНИЯ (см. `StandingClearance`).
+            if (clearance < StandingClearance) { reason = SafetyReason.Clearance; LastReason = reason; return false; }
+
+            // `lastPlayheadTime` НЕ ЗАПИСЫВАЕТСЯ: время на паузе не идёт, и запись сюда «съела» бы
+            // следующий кадр движения.
             LastReason = reason;
             return true;
         }

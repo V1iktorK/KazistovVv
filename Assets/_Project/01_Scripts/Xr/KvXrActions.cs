@@ -30,10 +30,90 @@ namespace KazistovVvXr
     /// </summary>
     public static class KvXrActions
     {
-        private const float MoveModeHoldSeconds = 0.50f;       // X удержан — смена способа хода
-        private const float EStopHoldSeconds = 1.00f;          // B удержан — аварийный стоп
-        private const float MenuRepositionHoldSeconds = 0.80f; // Menu удержан — переставить меню
-        private const float StickHoldSeconds = 0.80f;          // стик удержан — возврат к столу
+        /// <summary>Порог удержания X — смена способа хода, секунды.</summary>
+        public const float MoveModeHoldSeconds = 0.50f;
+        /// <summary>Порог удержания B — аварийный стоп, секунды.</summary>
+        public const float EStopHoldSeconds = 1.00f;
+        /// <summary>Порог удержания Menu — переставить меню, секунды.</summary>
+        public const float MenuRepositionHoldSeconds = 0.80f;
+        /// <summary>Порог удержания клика левого стика — возврат к столу, секунды.</summary>
+        public const float StickHoldSeconds = 0.80f;
+
+        /// <summary>
+        /// ЧТО ПРОИСХОДИТ С КНОПКОЙ В ЭТОМ КАДРЕ (чистая функция — проверяется тестом без шлема).
+        ///
+        /// ПОЧЕМУ ВЫНЕСЕНО (P4-3). Правило «одно нажатие — одно действие» повторялось в `Tick`
+        /// ЧЕТЫРЕ раза (B, X, Menu, стик) одними и теми же руками — и проверялось только чтением
+        /// исходника на наличие имён `TriggerEStop`/`OpenCommandSearch` и т.п. Такой тест зеленел,
+        /// даже если удержание срабатывало на случайном касании. Здесь правило одно на все кнопки:
+        ///   • <see cref="ButtonAction.Hold"/> — кнопка держится дольше своего порога и удержание ещё
+        ///     не срабатывало;
+        ///   • <see cref="ButtonAction.Press"/> — кнопку ОТПУСТИЛИ раньше порога (короткое нажатие);
+        ///   • <see cref="ButtonAction.None"/> — ни то, ни другое.
+        /// ПОСЛЕ СРАБОТАВШЕГО УДЕРЖАНИЯ отпускание НЕ даёт второго действия: иначе одно долгое
+        /// нажатие сработало бы дважды (E-STOP и «назад» одновременно).
+        /// </summary>
+        public enum ButtonAction
+        {
+            /// <summary>Ничего не произошло.</summary>
+            None = 0,
+            /// <summary>Короткое нажатие: действие выполняется по отпусканию.</summary>
+            Press = 1,
+            /// <summary>Удержание перешло порог: второе действие без новой кнопки.</summary>
+            Hold = 2
+        }
+
+        /// <summary>Разобрать состояние кнопки (см. <see cref="ButtonAction"/>).</summary>
+        public static ButtonAction ResolveButton(bool heldNow, bool wasHeld, bool holdFired,
+            float heldSeconds, float holdSeconds)
+        {
+            if (heldNow && !holdFired && heldSeconds >= holdSeconds) return ButtonAction.Hold;
+            if (!heldNow && wasHeld && !holdFired) return ButtonAction.Press;
+            return ButtonAction.None;
+        }
+
+        /// <summary>Кнопки, у которых есть ВТОРОЕ действие по удержанию (таблица одна на весь файл).</summary>
+        public enum HoldButton
+        {
+            /// <summary>B — аварийный стоп (E-STOP).</summary>
+            B = 0,
+            /// <summary>X — смена способа перемещения.</summary>
+            X = 1,
+            /// <summary>Menu — переставить меню перед оператором.</summary>
+            Menu = 2,
+            /// <summary>Клик левого стика — вернуться на рабочую позицию.</summary>
+            LeftStickClick = 3
+        }
+
+        /// <summary>Сколько держать кнопку, чтобы сработало удержание, секунды (0 — удержания нет).</summary>
+        public static float HoldSecondsOf(HoldButton button)
+        {
+            switch (button)
+            {
+                case HoldButton.B: return EStopHoldSeconds;
+                case HoldButton.X: return MoveModeHoldSeconds;
+                case HoldButton.Menu: return MenuRepositionHoldSeconds;
+                case HoldButton.LeftStickClick: return StickHoldSeconds;
+                default: return 0f;
+            }
+        }
+
+        /// <summary>
+        /// ИДЕНТИФИКАТОР ДЕЙСТВИЯ УДЕРЖАНИЯ — тот же, что попадает в `LastAction`, поэтому по журналу
+        /// видно, что именно сработало. Пустая строка означала бы «удержание есть, а действия нет» —
+        /// то есть мёртвую кнопку, которую владелец просил заполнить.
+        /// </summary>
+        public static string HoldActionId(HoldButton button)
+        {
+            switch (button)
+            {
+                case HoldButton.B: return "estop";
+                case HoldButton.X: return "move-mode";
+                case HoldButton.Menu: return "menu-reposition";
+                case HoldButton.LeftStickClick: return "return-home";
+                default: return "";
+            }
+        }
 
         private static bool aWasDown, bWasDown, xWasDown, yWasDown, menuWasDown, stickWasDown;
 
@@ -69,12 +149,14 @@ namespace KazistovVvXr
                 bDownAt = now;
                 bHoldFired = false;
             }
-            if (b && bDownAt >= 0f && !bHoldFired && now - bDownAt >= EStopHoldSeconds)
+            ButtonAction bAction = ResolveButton(b, bWasDown, bHoldFired,
+                bDownAt >= 0f ? now - bDownAt : 0f, HoldSecondsOf(HoldButton.B));
+            if (bAction == ButtonAction.Hold)
             {
                 bHoldFired = true;
                 TriggerEStop();
             }
-            if (!b && bWasDown && bDownAt >= 0f && !bHoldFired)
+            else if (bAction == ButtonAction.Press)
             {
                 Back();
             }
@@ -86,12 +168,14 @@ namespace KazistovVvXr
                 xDownAt = now;
                 xHoldFired = false;
             }
-            if (x && xDownAt >= 0f && !xHoldFired && now - xDownAt >= MoveModeHoldSeconds)
+            ButtonAction xAction = ResolveButton(x, xWasDown, xHoldFired,
+                xDownAt >= 0f ? now - xDownAt : 0f, HoldSecondsOf(HoldButton.X));
+            if (xAction == ButtonAction.Hold)
             {
                 xHoldFired = true;
                 ToggleMoveMode();
             }
-            if (!x && xWasDown && xDownAt >= 0f && !xHoldFired)
+            else if (xAction == ButtonAction.Press)
             {
                 ToggleMenu();
             }
@@ -110,24 +194,30 @@ namespace KazistovVvXr
                 menuDownAt = now;
                 menuHoldFired = false;
             }
-            if (menu && menuDownAt >= 0f && !menuHoldFired && now - menuDownAt >= MenuRepositionHoldSeconds)
+            ButtonAction menuAction = ResolveButton(menu, menuWasDown, menuHoldFired,
+                menuDownAt >= 0f ? now - menuDownAt : 0f, HoldSecondsOf(HoldButton.Menu));
+            if (menuAction == ButtonAction.Hold)
             {
                 menuHoldFired = true;
                 RepositionMenu();
             }
-            if (!menu && menuWasDown && menuDownAt >= 0f && !menuHoldFired)
+            else if (menuAction == ButtonAction.Press)
             {
                 OpenCommandSearch();
             }
             menuWasDown = menu;
 
             // ---------------------------------------------------------------- Левый стик (клик)
+            // У стика НЕТ короткого действия: отпускание без удержания ничего не делает (вход в
+            // меню по короткому нажатию обрабатывает `KvXrStartMenu`).
             if (stick && !stickWasDown)
             {
                 stickDownAt = now;
                 stickHoldFired = false;
             }
-            if (stick && stickDownAt >= 0f && !stickHoldFired && now - stickDownAt >= StickHoldSeconds)
+            ButtonAction stickAction = ResolveButton(stick, stickWasDown, stickHoldFired,
+                stickDownAt >= 0f ? now - stickDownAt : 0f, HoldSecondsOf(HoldButton.LeftStickClick));
+            if (stickAction == ButtonAction.Hold)
             {
                 stickHoldFired = true;
                 ReturnToWorkPosition();

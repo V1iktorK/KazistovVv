@@ -243,6 +243,43 @@ namespace KazistovVvUI
         // ------------------------------------------------------------------ применение
 
         /// <summary>
+        /// КАКОЙ ЗАХВАТ ТРЕБУЕТ РЕЖИМ (чистая функция — проверяется тестом без окна и без ввода).
+        ///
+        /// ПРАВИЛО ОДНО НА ОБА РЕЖИМА: режим камеры держит мышь захваченной, режим интерфейса
+        /// отпускает её. Вынесено, потому что "повторное применение режима" — именно то место, где
+        /// состояние терялось: если требуемое состояние считается в двух местах по-разному,
+        /// самовосстановление (`Tick`) начинает «дёргать» курсор каждый кадр.
+        /// </summary>
+        public static CursorLockMode WantedLockState(bool captured)
+        {
+            return captured ? CursorLockMode.Locked : CursorLockMode.None;
+        }
+
+        /// <summary>
+        /// ПОКАЗЫВАТЬ ЛИ СИСТЕМНЫЙ КУРСОР (чистая функция). В режиме камеры он скрыт полностью
+        /// (§26), в режиме интерфейса показывается именно системный курсор Unity — не своя иконка.
+        /// </summary>
+        public static bool WantedVisible(bool captured)
+        {
+            return !captured;
+        }
+
+        /// <summary>
+        /// РАЗОШЛОСЬ ЛИ ФАКТИЧЕСКОЕ СОСТОЯНИЕ КУРСОРА С РЕЖИМОМ (чистая функция).
+        ///
+        /// ЗАЧЕМ. Редактор Unity сам снимает захват по Esc и при потере фокуса окна, а сторонний код
+        /// может менять `Cursor.*` напрямую — отсюда историческое «после работы с роботом мышь не
+        /// восстанавливается». `Tick` каждый кадр сравнивает факт с режимом и возвращает курсор
+        /// обратно. Если признак «разошлось» считать неправильно в любую сторону, получаются два
+        /// одинаково плохих исхода: либо курсор не восстанавливается, либо переприменение считается
+        /// на каждом кадре и счётчик `ReapplyCount` превращается в шум.
+        /// </summary>
+        public static bool CursorStateDrifted(CursorLockMode actualLock, bool actualVisible, bool captured)
+        {
+            return actualLock != WantedLockState(captured) || actualVisible != WantedVisible(captured);
+        }
+
+        /// <summary>
         /// Привести системный курсор и собственную иконку в соответствие с режимом.
         /// <paramref name="force"/>=false — тихая проверка дрейфа: если всё уже так, ничего
         /// не трогаем; если что-то разъехалось — исправляем и считаем <see cref="ReapplyCount"/>.
@@ -286,11 +323,11 @@ namespace KazistovVvUI
             }
 
             bool captured = Captured;
-            CursorLockMode wantLock = captured ? CursorLockMode.Locked : CursorLockMode.None;
+            CursorLockMode wantLock = WantedLockState(captured);
             // ФИКС 4 (§23): в режиме интерфейса показывается ИМЕННО СИСТЕМНЫЙ курсор Unity.
-            bool wantVisible = !captured;
+            bool wantVisible = WantedVisible(captured);
 
-            bool drift = Cursor.lockState != wantLock || Cursor.visible != wantVisible;
+            bool drift = CursorStateDrifted(Cursor.lockState, Cursor.visible, captured);
             if (force || drift)
             {
                 // P3-3 (11.11.2026). ЧТО БЫЛО. Главная запись состояния курсора была обёрнута в

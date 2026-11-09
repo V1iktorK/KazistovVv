@@ -78,7 +78,27 @@ public class RobotSelector : MonoBehaviour
             return null;
         }
 
-        RobotController robot = robots[activeIndex];
+        int resolved = ResolveActiveIndex(activeIndex, robots.Length);
+        if (resolved < 0) return null;
+        RobotController robot = robots[resolved];
         return robot != null ? robot : null;
+    }
+
+    /// <summary>
+    /// КАКОЙ ИНДЕКС СЧИТАЕТСЯ АКТИВНЫМ (−1 — активного нет). Чистая функция: вынесена из
+    /// `GetActiveRobot`, чтобы правило «индекс живёт внутри массива роботов» проверялось тестом без
+    /// сцены и без монобеха.
+    ///
+    /// ЧТО ЛОВИТСЯ. `robots[activeIndex]` без прижатия к границам — это `IndexOutOfRangeException`
+    /// ровно в тот момент, когда робота пересоздали или список сократили: оператор получает
+    /// исключение вместо «активного робота нет». Повторный выбор того же индекса обязан давать того
+    /// же робота (правило идемпотентно): второй вызов не сдвигает выбор.
+    /// </summary>
+    public static int ResolveActiveIndex(int requested, int count)
+    {
+        if (count <= 0) return -1;
+        if (requested < 0) return 0;
+        if (requested >= count) return count - 1;
+        return requested;
     }
 }

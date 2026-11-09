@@ -35,21 +35,46 @@ public class PoseSelector : MonoBehaviour
         
         if (Physics.Raycast(origin, dir, out RaycastHit hit, maxDistance, selectableLayers))
         {
-            if (laserPointer != null) laserPointer.SetPosition(1, hit.point);
+            if (laserPointer != null) laserPointer.SetPosition(1, LaserEndPoint(origin, dir, maxDistance, true, hit.point));
             if (targetMarker != null)
             {
                 targetMarker.transform.position = hit.point;
                 targetMarker.gameObject.SetActive(true);
             }
             
-            if (input.SelectDown)
+            if (ShouldSelect(true, input.SelectDown))
                 RobotSelector.Instance?.GetActiveRobot()?.SetTarget(hit.point);
         }
         else
         {
-            if (laserPointer != null) laserPointer.SetPosition(1, origin + dir * maxDistance);
+            if (laserPointer != null) laserPointer.SetPosition(1, LaserEndPoint(origin, dir, maxDistance, false, Vector3.zero));
             if (targetMarker != null) targetMarker.gameObject.SetActive(false);
         }
+    }
+
+    /// <summary>
+    /// КУДА РИСУЕТСЯ КОНЕЦ ЛУЧА (чистая функция — проверяется тестом без шлема и без сцены).
+    ///
+    /// ПОПАДАНИЕ — конец луча в точке попадания; промах — на полной длине луча. Это не мелочь
+    /// оформления: если при промахе конец луча остаётся в точке ПРОШЛОГО попадания, луч «залипает»
+    /// на старом месте и оператор целится по неверной картинке.
+    /// </summary>
+    public static Vector3 LaserEndPoint(Vector3 origin, Vector3 direction, float maxDistance,
+        bool hasHit, Vector3 hitPoint)
+    {
+        return hasHit ? hitPoint : origin + direction * maxDistance;
+    }
+
+    /// <summary>
+    /// НАЖАТИЕ ВЫБОРА СРАБАТЫВАЕТ ТОЛЬКО ПО ЦЕЛИ (чистая функция).
+    ///
+    /// ЗАЧЕМ. `SelectDown` приходит каждый раз, когда нажат курок/тап, — в том числе когда луч
+    /// ушёл в пустоту. Без этой проверки робот получал бы цель «в никуда» (нулевую точку), и он
+    /// уезжал бы в начало координат — а оператор видел бы «робот сам поехал».
+    /// </summary>
+    public static bool ShouldSelect(bool hasHit, bool selectDown)
+    {
+        return hasHit && selectDown;
     }
     
     void HandleARInput(ARInputProvider arInput)
