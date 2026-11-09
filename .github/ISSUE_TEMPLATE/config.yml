@@ -1,0 +1,25 @@
+# Шаблоны обращений / Issue templates configuration
+# Проект проприетарный: внешние pull request не принимаются, поэтому свободные
+# обращения отключены, а вместо них предложены прямые контакты.
+blank_issues_enabled: false
+
+contact_links:
+  - name: "Коммерческая лицензия / Commercial license"
+    url: "mailto:milovanovv30@gmail.com?subject=KazistovVv%20commercial%20license"
+    about: "Запрос платной лицензии, условий, стоимости и договора / Request a paid license, terms and pricing"
+
+  - name: "Сообщить об уязвимости / Report a vulnerability"
+    url: "mailto:milovanovv30@gmail.com?subject=KazistovVv%20security"
+    about: "Только приватно, не через публичные обращения / Private only, never through public issues — see SECURITY.md"
+
+  - name: "Сообщить о дефекте / Report a defect"
+    url: "mailto:milovanovv30@gmail.com?subject=KazistovVv%20defect"
+    about: "Версия, платформа, шаги воспроизведения, лог без секретов / Version, platform, steps, log without secrets"
+
+  - name: "Нарушение прав / IP notice"
+    url: "mailto:milovanovv30@gmail.com?subject=KazistovVv%20IP%20notice"
+    about: "Претензии по авторским правам — см. THIRD_PARTY_NOTICES.md / Copyright claims — see THIRD_PARTY_NOTICES.md"
+
+  - name: "Документация / Documentation"
+    url: "https://github.com/V1iktorK/KazistovVv/blob/main/Docs/DEVELOPER_README.md"
+    about: "Руководство разработчика: сборка, запуск, отладка / Developer handbook: build, run, troubleshoot"

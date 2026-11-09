@@ -1,0 +1,45 @@
+cff-version: 1.2.0
+message: >-
+  If you reference KazistovVv in a publication, please cite it as below.
+  Note: this is proprietary software — citation does not grant any right to use,
+  modify or redistribute it. See LICENSE.md.
+title: "KazistovVv: industrial robot control platform in Unity"
+abstract: >-
+  KazistovVv is an engineering environment for industrial manipulators built as a Unity
+  application. It covers the full operator loop — aim, plan, preview, validate and execute —
+  with a safety gate in front of every motion. The platform implements RRT / bidirectional
+  RRT motion planning, time-optimal reparameterisation, forward and inverse kinematics,
+  capsule-chain collision checking, joint limit and singularity validation, motion
+  execution on the desktop, in VR, MR and AR, export to KRL / KAREL / RAPID and import
+  from URDF / STEP. Two robot models are supported per scene: a six-axis arm and a SCARA.
+  No AI model participates in motion: the pipeline is deterministic and reproducible from
+  the action log. The software is proprietary; the source is published for reading and
+  evaluation only.
+type: software
+authors:
+  - family-names: "K."
+    given-names: "Viktor"
+    alias: "V1iktorK"
+    email: "milovanovv30@gmail.com"
+  - name: "Ametist298"
+version: "0.1.0"
+date-released: "2026-11-09"
+license-url: "https://github.com/V1iktorK/KazistovVv/blob/main/LICENSE.md"
+repository-code: "https://github.com/V1iktorK/KazistovVv"
+url: "https://github.com/V1iktorK/KazistovVv"
+keywords:
+  - industrial robotics
+  - robot control
+  - motion planning
+  - trajectory planning
+  - inverse kinematics
+  - collision detection
+  - six-axis robot
+  - SCARA
+  - digital twin
+  - Unity
+  - XR
+  - virtual reality
+  - mixed reality
+  - OpenXR
+  - proprietary software
