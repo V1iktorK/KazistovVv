@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using KazistovVv.Core;
+using KazistovVvFeatures;
 
 namespace KazistovVvUI
 {
@@ -191,6 +192,11 @@ namespace KazistovVvUI
         /// (или отказывала уже после удаления). Итог для оператора: выбрал KUKA — и потерял
         /// рабочего робота, не получив ничего. ЧТО СТАЛО: недоступная модель отклоняется с
         /// названной причиной, и текущий робот остаётся на месте.
+        ///
+        /// ЗАПИСЬ В ЖУРНАЛ (12.11.2026). ЧТО БЫЛО: выбор модели оставлял след только в консоли
+        /// Unity, а в файле записи его не было. ЧЕМ ПЛОХО: разбор записи не мог ответить, какого
+        /// робота оператор выбрал и почему выбор не сработал. ЧТО СТАЛО: и успех, и отказ дают
+        /// строку с идентификатором модели и ПРИЧИНОЙ отказа.
         /// </summary>
         public static void ApplyModel(KvRobotModel model)
         {
@@ -201,6 +207,8 @@ namespace KazistovVvUI
             {
                 Debug.LogWarning("[KvRobot] модель «" + model.Title + "» не выбрана: " + reason +
                                  ". Текущий робот оставлен на месте");
+                KvActionLog.Instance.Placement("модель «" + model.Title + "» (" + model.Id + ")",
+                    false, reason);
                 return;
             }
 
@@ -221,12 +229,22 @@ namespace KazistovVvUI
             {
                 Debug.LogWarning("[KvRobot] модель «" + model.Title + "» НЕ создана — смотрите " +
                                  "причину в предыдущей строке журнала");
+                KvActionLog.Instance.Placement("модель «" + model.Title + "» (" + model.Id + ")",
+                    false, "модель не создана (причина в предыдущей строке журнала)");
                 return;
             }
 
             Debug.Log("[KvRobot] активная модель: «" + model.Title + "» (" + model.Kind +
                       ", " + model.Axes + " осей) · в точке " +
                       spot.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture));
+
+            // СТРОКА УСПЕХА — С МЕСТОМ И ЧИСЛАМИ: по ней видно, куда именно встал робот, и можно
+            // сверить это с позой оператора в тех же строках записи.
+            var c = System.Globalization.CultureInfo.InvariantCulture;
+            KvActionLog.Instance.Placement("модель «" + model.Title + "» (" + model.Id + ")", true,
+                "осей " + model.Axes + " · точка (" + spot.x.ToString("0.00", c) + "; " +
+                spot.y.ToString("0.00", c) + "; " + spot.z.ToString("0.00", c) + ") · поворот " +
+                yaw.ToString("0", c) + "°");
         }
 
         /// <summary>

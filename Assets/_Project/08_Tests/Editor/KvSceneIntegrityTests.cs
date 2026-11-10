@@ -86,6 +86,16 @@ namespace KazistovVvTests
         /// В СЦЕНАХ НЕТ ПОТЕРЯННЫХ СКРИПТОВ. Каждый `m_Script` обязан указывать на существующий файл
         /// (проекта или пакета). Иначе — «Missing (Mono Script)» в редакторе и молча неработающий
         /// компонент в работе.
+        ///
+        /// ЧТО БЫЛО. Рядом стояла ОТДЕЛЬНАЯ проверка `BothMainScenesExistAndAreNotEmpty`: «обе
+        /// основные сцены на месте и не подозрительно малы».
+        ///
+        /// ЧЕМ ПЛОХО. Она проверяла ПРЕДУСЛОВИЕ этой же проверки: если сцены нет, здесь уже стоит
+        /// явное «сцены нет» в списке проблем. Два падения об одном и том же удлиняют разбор, а
+        /// новых дефектов второй тест не ловил.
+        ///
+        /// ЧТО СТАЛО. Размер сцены проверяется здесь же, до разбора: «подозрительно мала (N байт)» —
+        /// тот же сигнал, но в одном месте и с одним названием падения.
         /// </summary>
         [Test]
         public void OwnScenes_HaveNoMissingScripts()
@@ -99,6 +109,16 @@ namespace KazistovVvTests
             {
                 string path = Path.Combine(AssetsRoot, sceneName.Replace('\\', Path.DirectorySeparatorChar));
                 if (!File.Exists(path)) { missing.Add(sceneName + " (сцены нет)"); continue; }
+
+                // ПРОПАВШАЯ СЦЕНА — ЭТО НЕ «МЕЛОЧЬ»: именно по этим файлам собирается приложение,
+                // и их потеря обнаруживается только при сборке. Подозрительно малый файл —
+                // тот же сигнал, что и отсутствие.
+                long length = new FileInfo(path).Length;
+                if (length < 20_000)
+                {
+                    missing.Add(Path.GetFileName(sceneName) + " — подозрительно мала (" + length + " байт)");
+                    continue;
+                }
 
                 string text = File.ReadAllText(path);
                 foreach (Match m in Regex.Matches(text,
@@ -145,27 +165,6 @@ namespace KazistovVvTests
             Assert.Greater(total, 20,
                 "в основных сценах найдено всего " + total + " ссылок на скрипты — разбор сломан, " +
                 "проверка выше ничего не проверяет");
-        }
-
-        /// <summary>
-        /// ОБЕ ОСНОВНЫЕ СЦЕНЫ НА МЕСТЕ. Пропавшая сцена — это не «мелочь»: именно по этим файлам
-        /// собирается приложение, и их потеря обнаруживается только при сборке.
-        /// </summary>
-        [Test]
-        public void BothMainScenesExistAndAreNotEmpty()
-        {
-            var problems = new List<string>();
-            foreach (string sceneName in OwnScenes)
-            {
-                string path = Path.Combine(AssetsRoot, sceneName.Replace('\\', Path.DirectorySeparatorChar));
-                if (!File.Exists(path)) { problems.Add(sceneName + " — файла нет"); continue; }
-                long length = new FileInfo(path).Length;
-                if (length < 20_000)
-                    problems.Add(sceneName + " — подозрительно мала (" + length + " байт)");
-            }
-
-            Assert.AreEqual(0, problems.Count,
-                "проблемы с основными сценами: " + string.Join("; ", problems.ToArray()));
         }
     }
 }

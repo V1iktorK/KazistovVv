@@ -28,7 +28,14 @@ namespace KazistovVvXr
             return rows;
         }
 
-        /// <summary>Строки раздела «Робот».</summary>
+        /// <summary>
+        /// Строки раздела «Робот».
+        ///
+        /// ЧТО ДОБАВЛЕНО 12.11.2026 (пункты 2–4 владельца). В конце раздела появилась строка
+        /// «Переместить робота (по зафиксированному месту)». Владелец назвал эту кнопку по имени, и
+        /// раньше её в шлеме НЕ БЫЛО ВООБЩЕ: место выбирала автопостановка, а «переместить» нечем
+        /// было нажать. Теперь кнопка есть, и она честная — без фиксации отказывается и объясняет.
+        /// </summary>
         public static List<string> Robots(int existingRobots)
         {
             var rows = new List<string>();
@@ -38,8 +45,16 @@ namespace KazistovVvXr
             rows.Add("Добавить 6-осевой робот");
             rows.Add("Добавить SCARA");
             rows.Add("Сменить робота");
+            rows.Add(MoveRobotRowLabel);
             return rows;
         }
+
+        /// <summary>
+        /// ПОДПИСЬ СТРОКИ «ПЕРЕМЕСТИТЬ РОБОТА». В подписи названа КЛАВИША ФИКСАЦИИ — это и есть
+        /// «подсказка интерфейса», которой требует пункт 3 владельца.
+        /// </summary>
+        public const string MoveRobotRowLabel =
+            "Переместить робота (сначала зафиксируйте место клавишей " + KvMrRobotPick.ConfirmKeyName + ")";
 
         /// <summary>Действие строки `row` раздела `section`.</summary>
         public static KvXrStartRowAction ActionFor(KvXrStartSection section, int row,
@@ -64,6 +79,7 @@ namespace KazistovVvXr
                 if (row == existing) return KvXrStartRowAction.CreateSixAxisRobot;
                 if (row == existing + 1) return KvXrStartRowAction.CreateScaraRobot;
                 if (row == existing + 2) return KvXrStartRowAction.SwitchRobot;
+                if (row == existing + 3) return KvXrStartRowAction.MoveRobotToFixedSpot;
                 return KvXrStartRowAction.None;
             }
 

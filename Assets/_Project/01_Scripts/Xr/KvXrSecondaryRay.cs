@@ -33,6 +33,21 @@ namespace KazistovVvXr
         /// <summary>ВТОРОЙ ЛУЧ ПОПАЛ В ГЕОМЕТРИЮ СЦЕНЫ (§42, Д16): стол, робот, пол.</summary>
         public bool AimingAtWorld { get { return aimingAtWorld; } }
 
+        /// <summary>
+        /// ПОСЛЕДНЕЕ ПОПАДАНИЕ ВТОРОГО ЛУЧА (пункт 4 владельца): точка, нормаль, источник и имя.
+        ///
+        /// ЗАЧЕМ НАРУЖУ. Левый луч — КРАСНЫЙ и ВЫБИРАЕТ ТОЧКУ. Точка, которую он выбрал, — это
+        /// именно это попадание; обращаться к нему должен режим выбора места (`KvMrRobotPick`),
+        /// а не пересчитывать попадание заново (иначе «выбранная точка» и нарисованный кончик
+        /// луча разойдутся, и оператор увидит одно, а подтвердит другое).
+        /// </summary>
+        public KvXrRayHit LastRayHit { get { return lastRayHit; } }
+
+        private KvXrRayHit lastRayHit = new KvXrRayHit();
+
+        /// <summary>Ключ последней цели второго луча — по нему решается «печатать или нет».</summary>
+        private string lastRayKey = string.Empty;
+
         private bool aimingAtWorld;
         private LineRenderer line;
         private Transform marker;
@@ -255,19 +270,36 @@ namespace KazistovVvXr
             // или в панель и не летит дальше.
             // ВТОРОЙ ЛУЧ ТОЖЕ УПИРАЕТСЯ В МИР (§42, Д16). Найдено 25.10.2026 после жалобы владельца
             // «лазеры не упирались в текстуры»: правый луч исправлен, а левый по-прежнему знал только
-            // про панели и пролетал сквозь стол, робота и пол на всю длину. Теперь ближайшее попадание
-            // в геометрию сцены так же обрывает луч, как и попадание в панель.
+            // про панели и пролетал сквозь стол, робота и пол на всю длину.
+            //
+            // ЧТО БЫЛО ЗДЕСЬ ДО 12.11.2026 (пункт 4 владельца — «добавь, чтобы он мог как и правый
+            // упираться в текстуры»). Стоял обычный `Physics.Raycast` с маской `IgnoreRaycast`.
+            // ЧЕМ ПЛОХО: реальные поверхности комнаты (`KvMrSurfaces`) — это НЕ коллайдеры сцены в
+            // смысле физики проекта, они живут в своём списке, и обычный `Physics.Raycast` их хотя и
+            // видит физически, но правый луч в MR шёл ДРУГИМ путём — через `KvMrSurfaces.TryRaycast`
+            // с фильтром «только наши коллайдеры». То есть у двух лучей были РАЗНЫЕ ПРАВИЛА, и на
+            // одной и той же геометрии они заканчивались в разных местах. Отчёт тестировщика: «пути
+            // разные (один через TryRaycast по реальным, другой — обычный Physics.Raycast)».
+            //
+            // ЧТО СТАЛО: та же ОДНА функция, что у правого луча — `KvXrRayHitProbe.Nearest`. Она
+            // возвращает БЛИЖАЙШЕЕ из (реальная поверхность комнаты, виртуальный объект сцены)
+            // вместе с признаком источника, поэтому правила для лучей больше не существует.
             if (index < 0)
             {
-                int mask = ~(1 << KvXrControllerVisuals.IgnoreRaycastLayer);
-                RaycastHit worldHit;
-                if (Physics.Raycast(origin, direction, out worldHit, Mathf.Max(0.05f, length), mask,
-                        QueryTriggerInteraction.Ignore))
+                KvXrRayHit hit = KvXrRayHitProbe.Nearest(origin, direction, Mathf.Max(0.05f, length));
+                lastRayHit = hit;
+                if (hit.Any)
                 {
-                    length = Mathf.Max(0.05f, Vector3.Distance(origin, worldHit.point));
-                    worldHitPoint = worldHit.point;
+                    length = Mathf.Max(0.05f, hit.Distance);
+                    worldHitPoint = hit.Point;
                     aimingAtWorld = true;
                 }
+            }
+            else
+            {
+                // Над интерфейсом попадания в мир нет — цель кнопка, и держать прошлую точку нельзя:
+                // иначе «последняя валидная позиция» робота оказалась бы под меню.
+                lastRayHit = new KvXrRayHit();
             }
 
             if (index < 0)
@@ -300,6 +332,11 @@ namespace KazistovVvXr
                 ? windowDrag.CurrentPoint
                 : (index >= 0 ? panel.IconWorldPosition(index) : origin + direction.normalized * length);
             CurrentLength = Vector3.Distance(origin, end);
+
+            // СТРОКА-ДОКАЗАТЕЛЬСТВО ЛЕВОГО ЛУЧА (пункт 4 владельца). Печатается ТОЛЬКО при смене
+            // цели: на 90 кадрах в секунду безусловный `Debug.Log` засорил бы журнал. Без попадания
+            // строка тоже печатается — «нет попадания» это ответ, а молчание ответом не является.
+            LogRayTarget(index, length);
 
             if (line != null)
             {
@@ -367,16 +404,51 @@ namespace KazistovVvXr
                 // лазер правого и левого контроллеров как в комп версии»). Это рука, ПРОТИВОПОЛОЖНАЯ
                 // лучу нажатия: если нажимает правая (зелёный), второй луч — левый (красный).
                 //
+                // ПУНКТ 4 ВЛАДЕЛЬЦА 12.11.2026: «Левый (который надо перекрасить в красный) выбирает
+                // точку». Поэтому КРАСНЫЙ — это не «цвет второй руки», а ЦВЕТ РОЛИ: красный всегда
+                // ВЫБИРАЕТ ТОЧКУ, зелёный — ТРАЕКТОРИЮ (пункт 5: «сделай правый луч зелёным, как
+                // сделаешь левый красным»). Цвета заданы ИМЕНОВАННЫМИ КОНСТАНТАМИ
+                // (`KvXrRayHitRules.PointLaserColor` / `TrajectoryLaserColor`) с объяснением, что
+                // они значат, — чтобы их не перекрасили обратно «на глаз».
+                //
                 // НАВЕДЕНИЕ И НАЖАТЫЙ КУРОК ДЕЛАЮТ ТОТ ЖЕ ЦВЕТ ПЛОТНЕЕ, но не подменяют его: цвет
                 // руки — это и есть «красный/зелёный лазер», как на компьютере (Z — красный,
                 // X — зелёный). Курок второй руки зажигает именно её луч — владелец видит, каким
                 // лазером работает.
                 KvXrQuickHand hand = KvXrLaserColors.Opposite(KvXrInputSource.RayHand);
                 bool onTarget = overIcon || aimingAtWorld || KvXrFlowBridge.HandLaserHeld(hand);
-                Color color = KvXrLaserColors.Ray(hand, onTarget);
+                // Оттенок берётся из ОДНИХ констант, а плотность — из общего правила яркости.
+                Color baseColor = KvXrRayHitRules.LaserColorOf(hand);
+                Color color = KvXrLaserColors.WithAlpha(baseColor, KvXrLaserColors.Ray(hand, onTarget).a);
                 line.startColor = color;
                 line.endColor = color;
             }
+        }
+
+        /// <summary>
+        /// СТРОКА О ПОПАДАНИИ ВТОРОГО (ЛЕВОГО) ЛУЧА — ТОЛЬКО ПРИ СМЕНЕ ЦЕЛИ.
+        ///
+        /// ФОРМА: `[KvXr] ЛУЧ ЛЕВЫЙ: попадание в реальная «стол (разметка комнаты) · …» на 1.42 м`
+        ///        `[KvXr] ЛУЧ ЛЕВЫЙ: нет попадания — ни реальной поверхности, ни объекта сцены; …`
+        /// Та же чистая функция, что у правого луча (`KvXrRayHitRules.Describe`): две формы одной
+        /// новости — это то, из-за чего журнал нельзя ни искать, ни сравнивать.
+        /// </summary>
+        private void LogRayTarget(int iconIndex, float lengthMeters)
+        {
+            if (iconIndex >= 0)
+            {
+                // Над интерфейсом цель — кнопка; о мире в этот момент не сообщаем.
+                lastRayKey = "interface";
+                return;
+            }
+
+            KvXrRayHit hit = lastRayHit;
+            string key = KvXrRayHitRules.TargetKey(hit.Source, hit.Name, hit.Distance);
+            if (key == lastRayKey) return;
+            lastRayKey = key;
+
+            Debug.Log(KvXrRayHitRules.Describe(
+                KvXrRayHitRules.HandLabel(SourceHand), hit.Source, hit.Name, hit.Distance, lengthMeters));
         }
 
         private void EnsureLine()

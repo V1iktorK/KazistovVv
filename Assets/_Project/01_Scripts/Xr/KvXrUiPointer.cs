@@ -427,8 +427,16 @@ namespace KazistovVvXr
             Vector3 worldPoint = Vector3.zero;
             string worldName = null;
             bool worldHit = false;
-            if (!stoppedOnInterface)
+            // ПРИ ПОПАДАНИИ В ИНТЕРФЕЙС СБРАСЫВАЕМ ПОСЛЕДНЕЕ ПОПАДАНИЕ В МИР: иначе к концу луча
+            // остался бы прикреплён робот с прошлой точки, и он «стоял бы» там, где луч уже не смотрит.
+            if (stoppedOnInterface)
+            {
+                lastRayHit = new KvXrRayHit();
+            }
+            else
+            {
                 worldHit = HitWorld(origin, direction, limit, out worldPoint, out worldName);
+            }
             aimingAtWorld = worldHit;
 
             // ПЕРЕНОС ОКНА (указание владельца 24.10.2026): «перемещение окна должно осуществляться
@@ -499,7 +507,7 @@ namespace KazistovVvXr
             // СТРОКА-ДОКАЗАТЕЛЬСТВО «УПЁРСЯ В МИР» — только при смене цели, чтобы не засорять журнал
             // на 90 кадров в секунду. Без неё проверка «луч упирается в робота/стол/пол» снова была
             // бы только на глаз — а правило проекта: пункт без строки журнала считается непроверенным.
-            LogLaserTarget(worldHit, worldName, cursorDistance, stoppedOnInterface);
+            LogLaserTarget(lastRayHit, limit, stoppedOnInterface);
 
             // НАВЕДЕНИЕ: меняем цель только при смене иконки — иначе журнал утонул бы. Во время
             // переноса окна подсветка не перескакивает (см. заморозку метки выше).
@@ -744,6 +752,7 @@ namespace KazistovVvXr
             else
             {
                 aimingAtWorld = false;
+                lastRayHit = new KvXrRayHit();
             }
 
             // Точка конца — наружу: второй луч сводит к ней свой луч (как на ПК).
@@ -766,39 +775,24 @@ namespace KazistovVvXr
         }
 
         /// <summary>
-        /// СТРОКА-ДОКАЗАТЕЛЬСТВО ПОПАДАНИЯ ЛУЧА В МИР (§42, Д16). Печатается только при СМЕНЕ цели:
-        /// «во что попал» и на каком расстоянии. Без неё проверить «луч упирается» можно только глазами,
-        /// а правило проекта — пункт без строки журнала считается непроверенным.
+        /// СТРОКА-ДОКАЗАТЕЛЬСТВО ПОПАДАНИЯ ЛУЧА В МИР (§42, Д16).
+        ///
+        /// ЧТО БЫЛО. Здесь печаталась СВОЯ форма строки — «[KvXr] ЛУЧ: попадание в «…» на N м
+        /// (геометрия сцены)», — а в основном пути (`AimAlongPanel`) другая («ЛАЗЕР: упёрся в …»).
+        /// Две формы одной и той же новости: по журналу нельзя было ни искать, ни сравнивать.
+        /// ЧТО СТАЛО. Одна форма на оба пути — та же чистая функция, что у левого луча
+        /// (`KvXrRayHitRules.Describe`): «[KvXr] ЛУЧ ПРАВЫЙ: попадание в <источник> «<имя>» на N м».
         /// </summary>
         private void LogWorldHit(Vector3 point)
         {
-            string what = null;
-            if (aimingAtUi) what = hoveringTitle();
-            else if (aimingAtWorld) what = lastWorldName;
-
-            if (what == lastLoggedHit) return;      // без спама: пишем только смену цели
-            lastLoggedHit = what;
-
-            if (string.IsNullOrEmpty(what))
+            if (aimingAtUi)
             {
-                Debug.Log("[KvXr] ЛУЧ: ушёл с объектов — попадания нет, луч идёт на полную длину");
+                // НАД ИНТЕРФЕЙСОМ строка о мире не печатается: цель — кнопка, её называет строка
+                // наведения. Иначе «попадание в виртуальная «Blocker»» перебивало бы наведение.
                 return;
             }
 
-            float distance = Vector3.Distance(lastRayOrigin, point);
-            Debug.Log(string.Format(System.Globalization.CultureInfo.InvariantCulture,
-                "[KvXr] ЛУЧ: попадание в «{0}» на {1:0.00} м ({2})", what, distance,
-                aimingAtUi ? "интерфейс" : "геометрия сцены"));
-        }
-
-        private string lastLoggedHit;
-        private string lastWorldName;
-        private Vector3 lastRayOrigin;
-
-        /// <summary>Название иконки под лучом (для строки журнала).</summary>
-        private string hoveringTitle()
-        {
-            return HoverName;
+            LogLaserTarget(lastRayHit, rayLength, false);
         }
 
         /// <summary>Луч попал в геометрию сцены (стол, робот, пол, стена).</summary>
@@ -818,10 +812,20 @@ namespace KazistovVvXr
         public bool RayVisible { get { return line != null && line.enabled; } }
 
         private bool aimingAtWorld;
-        private string worldName;
 
-        /// <summary>Имя последней цели, в которую упёрся ОСНОВНОЙ луч (журнал, без спама каждый кадр).</summary>
-        private string lastLaserTargetName;
+        /// <summary>
+        /// ПОСЛЕДНЕЕ ПОПАДАНИЕ ПРАВОГО ЛУЧА (пункт 4 владельца): точка, нормаль, источник и имя.
+        ///
+        /// ЗАЧЕМ НАРУЖУ. К концу ПРАВОГО луча прикреплён робот (пункт 3): режим выбора места
+        /// (`KvMrRobotPick`) ведёт робота ровно в точку попадания этого луча. Второго расчёта
+        /// попадания быть не должно — иначе робот стоял бы не там, где кончается нарисованный луч.
+        /// </summary>
+        public KvXrRayHit LastRayHit { get { return lastRayHit; } }
+
+        private KvXrRayHit lastRayHit = new KvXrRayHit();
+
+        /// <summary>Ключ последней цели правого луча — по нему решается «печатать или нет».</summary>
+        private string lastRightRayKey = string.Empty;
 
         /// <summary>БЛИЖАЙШАЯ ГЕОМЕТРИЯ ПОД ЛУЧОМ: точка попадания и имя объекта.</summary>
         private bool HitWorld(Vector3 origin, Vector3 direction, float maxDistance, out Vector3 point)
@@ -834,45 +838,56 @@ namespace KazistovVvXr
         /// БЛИЖАЙШАЯ ГЕОМЕТРИЯ ПОД ЛУЧОМ: точка попадания и имя объекта (для строки журнала).
         /// Имя берётся с коллайдера — по нему владелец видит в журнале, во что именно упёрся луч:
         /// «Стенд_1», «Стол», «XrFloor», а не абстрактное «попадание есть».
+        ///
+        /// ЧТО БЫЛО (пункт 4 владельца, отчёт тестировщика 12.11.2026). Здесь стоял обычный
+        /// `Physics.Raycast`, то есть правый луч видел ТОЛЬКО виртуальные коллайдеры сцены. Настоящий
+        /// стол оператора в MR коллайдера сцены не имеет — он приходит из меша комнаты
+        /// (`KvMrSurfaces`), — и правый луч «не упирался в текстуры», хотя левый (через
+        /// `KvMrSurfaces.TryRaycast`) упирался. Один и тот же мир, разные правила у двух лучей.
+        ///
+        /// ЧТО СТАЛО. Оба луча спрашивают ОДНУ функцию `KvXrRayHitProbe.Nearest`: она возвращает
+        /// БЛИЖАЙШЕЕ из (реальная поверхность, виртуальный объект) вместе с признаком источника.
+        /// Разойтись лучам больше нечем — правила для лучей больше нет.
         /// </summary>
         private bool HitWorld(Vector3 origin, Vector3 direction, float maxDistance, out Vector3 point,
                               out string name)
         {
-            point = origin;
-            name = null;
+            KvXrRayHit hit = KvXrRayHitProbe.Nearest(origin, direction, maxDistance);
+            point = hit.Point;
+            name = hit.Name;
 
-            int mask = ~(1 << KvXrControllerVisuals.IgnoreRaycastLayer);
-            RaycastHit hit;
-            if (!Physics.Raycast(origin, direction, out hit, Mathf.Max(0.05f, maxDistance), mask,
-                    QueryTriggerInteraction.Ignore))
-                return false;
-
-            point = hit.point;
-            name = hit.collider != null ? hit.collider.name : "без имени";
-            return true;
+            // ПОПАДАНИЕ В РЕАЛЬНУЮ ПОВЕРХНОСТЬ — ЭТО ТОЖЕ «УПЁРСЯ В МИР»: иначе луч шёл бы на
+            // полную длину сквозь настоящий стол, а это ровно жалоба «не упирается в текстуры».
+            lastRayHit = hit;
+            return hit.Any;
         }
 
         /// <summary>
-        /// СТРОКА «ЛАЗЕР УПЁРСЯ» (пункт 2 владельца 02.11.2026). Пишется ТОЛЬКО при смене цели:
-        /// на 90 кадрах в секунду безусловный `Debug.Log` засорил бы журнал и стоил бы кадрового
-        /// бюджета (правило §44 — строки в кадровом коде только под условием).
+        /// СТРОКА «КУДА УПЁРСЯ ЛУЧ» (пункт 2 владельца 02.11.2026, уточнено 12.11.2026).
+        ///
+        /// ФОРМА — ИЗ ТРЕБОВАНИЯ ВЛАДЕЛЬЦА ДОСЛОВНО:
+        ///     [KvXr] ЛУЧ ПРАВЫЙ: попадание в виртуальная «Стенд_1_Стол» на 2.05 м
+        ///     [KvXr] ЛУЧ ПРАВЫЙ: нет попадания — ни реальной поверхности, ни объекта сцены; …
+        /// ЧТО БЫЛО. Строка называла только попадание в сцену и молчала, когда попадания нет:
+        /// «нет попадания» и «код сломался» читались одинаково. ЧТО СТАЛО: строка печатается в обоих
+        /// случаях, а «нет попадания» сказано словами — это и есть требование «не молчать».
+        ///
+        /// ПЕЧАТЬ ТОЛЬКО ПРИ СМЕНЕ ЦЕЛИ: на 90 кадрах в секунду безусловный `Debug.Log` засорил бы
+        /// журнал и стоил бы кадрового бюджета (правило §44 — строки в кадровом коде только под условием).
         /// </summary>
-        private void LogLaserTarget(bool hit, string name, float distance, bool overInterface)
+        private void LogLaserTarget(KvXrRayHit hit, float fullLengthMeters, bool overInterface)
         {
-            string current = hit ? name : null;
-            if (current == lastLaserTargetName) return;
-            lastLaserTargetName = current;
+            string key = KvXrRayHitRules.TargetKey(hit.Source, hit.Name, hit.Distance);
+            if (key == lastRightRayKey) return;
+            lastRightRayKey = key;
 
-            if (hit)
-            {
-                Debug.Log("[KvXr] ЛАЗЕР: упёрся в «" + name + "» на " +
-                          distance.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) +
-                          " м · " + KvXrLaserColors.Label(KvXrInputSource.RayHand) + " луч");
-            }
-            else if (!overInterface)
-            {
-                Debug.Log("[KvXr] ЛАЗЕР: перед лучом препятствий нет — идёт на полную длину");
-            }
+            // Над интерфейсом луч заканчивается на кнопке — о мире в этот момент не сообщаем:
+            // иначе «нет попадания» перебивало бы наведение на меню, и строка врала бы о причине.
+            if (overInterface && !hit.Any) return;
+
+            Debug.Log(KvXrRayHitRules.Describe(
+                KvXrRayHitRules.HandLabel(KvXrQuickHand.Right), hit.Source, hit.Name,
+                hit.Distance, fullLengthMeters));
         }
 
         /// <summary>

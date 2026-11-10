@@ -33,6 +33,15 @@ namespace KazistovVvXr
     [DisallowMultipleComponent]
     public class KvXrMrRoom : MonoBehaviour
     {
+        /// <summary>
+        /// ТЕКУЩАЯ MR-КОМНАТА (одна на приложение).
+        ///
+        /// ЗАЧЕМ НАРУЖУ. Режим выбора места робота включается из `KvXrStartMenu.Hide()` — а меню не
+        /// обязано знать, где лежит комната. Искать её каждый раз (`FindAnyObjectByType`) в кадре —
+        /// та же ошибка, что была с `Camera.main`; поэтому ссылку держит сам компонент.
+        /// </summary>
+        public static KvXrMrRoom Instance { get; private set; }
+
         /// <summary>Камера оператора — нужна, чтобы понимать, где он находится.</summary>
         public Camera headCamera;
 
@@ -138,12 +147,18 @@ namespace KazistovVvXr
 
         void OnEnable()
         {
+            Instance = this;
             KvXrSettingsChanged.SettingsChanged += ApplyLayers;
         }
 
         void OnDisable()
         {
             KvXrSettingsChanged.SettingsChanged -= ApplyLayers;
+        }
+
+        void OnDestroy()
+        {
+            if (Instance == this) Instance = null;
         }
 
         /// <summary>
@@ -223,7 +238,22 @@ namespace KazistovVvXr
             KvMrSurfaces surfaces = KvMrSurfaces.Ensure(null);
             surfaces.StartTracking();
 
+            // ПОКРЫТИЕ РЕАЛЬНЫХ ПОВЕРХНОСТЕЙ — СРАЗУ ПРИ ЗАПУСКЕ MR (пункт 1 владельца 12.11.2026,
+            // дословно: «При запуске MR версии надо чтобы сначала поверхности отображались каким-то
+            // покрытием будь то сетка или поверхность»).
+            //
+            // ЧТО БЫЛО. Поверхности существовали ТОЛЬКО как невидимые коллайдеры: луч в них попадал,
+            // а оператор не видел ничего. ЧЕМ ПЛОХО: «нашёл ли шлем мой стол» проверить было нечем —
+            // невидимую поверхность не отличить от отсутствующей.
+            // ЧТО СТАЛО. Сразу строится покрытие: контур, сетка и полупрозрачная заливка по данным
+            // `KvMrSurfaces`. Число нарисованных поверхностей уходит в журнал строкой с числами.
+            KvMrSurfacePainter.Ensure(null);
+
             KvMrPlacement.Ensure(transform, headCamera, this);
+
+            // ВЫБОР МЕСТА РОБОТА (пункты 2–3 владельца): компонент создаётся здесь, а режим он
+            // включает САМ после выхода из меню (`KvXrStartMenu.Hide` → `KvMrRobotPick.EnterAfterMenu`).
+            KvMrRobotPick.Ensure(transform, headCamera, this);
 
             Debug.Log("[KvMr] " + Status);
             Debug.Log("[KvMr] " + KvMrRuntime.Status);

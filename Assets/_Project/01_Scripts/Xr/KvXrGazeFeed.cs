@@ -46,6 +46,13 @@ namespace KazistovVvXr
         [Tooltip("Писать в журнал, что источник взгляда — голова, а не зрачок")]
         public bool logOnStart = true;
 
+        /// <summary>
+        /// ПИСАТЬ ЛИ ПОЗУ И ВЗГЛЯД В ЖУРНАЛ ДЕЙСТВИЙ. Частота и порог — правила `KvActionLog.PoseDue`
+        /// (не чаще 10 Гц, только при заметном изменении), поэтому «включено» не означает «спам».
+        /// </summary>
+        [Tooltip("Писать позу головы и направление взгляда в журнал действий (не чаще 10 Гц)")]
+        public bool logPose = true;
+
         private bool logged;
 
         /// <summary>Найти или создать компонент (идемпотентно, сцену не меняем).</summary>
@@ -96,20 +103,58 @@ namespace KazistovVvXr
 
         void Update()
         {
-            if (Sink == null) return;
+            // ПОЗА ПИШЕТСЯ ДАЖЕ БЕЗ СЕРВИСА ГЛАЗ. Раньше стоял `if (Sink == null) return;` — и тогда
+            // запись позы не работала бы ровно в том случае, когда сервиса нет (а его в сборке может
+            // не быть вовсе). Запись в журнал — самостоятельная задача этого компонента, а не
+            // побочный эффект подачи взгляда.
+            bool havePose = KvXrInputSource.TryHeadPose(out Vector3 headPosition, out Quaternion headRotation);
 
-            Vector3 headPosition;
-            Quaternion headRotation;
-            if (!KvXrInputSource.TryHeadPose(out headPosition, out headRotation)) return;
+            if (!havePose)
+            {
+                // Позы нет (шлема нет / потерян трекинг) — подавать нечего и писать нечего.
+                return;
+            }
 
             // 1. Настоящий взгляд, если платформа его даёт.
-            if (GazeSource != null && GazeSource(headPosition, headRotation)) return;
+            bool realGaze = GazeSource != null && GazeSource(headPosition, headRotation);
 
             // 2. Иначе — направление головы (см. пояснение в шапке класса).
-            Vector3 origin, direction;
-            if (!TryHeadGaze(headPosition, headRotation, out origin, out direction)) return;
+            Vector3 origin = Vector3.zero;
+            Vector3 direction = headRotation * Vector3.forward;
+            bool headGaze = !realGaze && TryHeadGaze(headPosition, headRotation, out origin, out direction);
 
-            Sink.PushGaze(origin, direction);
+            if (Sink != null)
+            {
+                if (!realGaze && headGaze) Sink.PushGaze(origin, direction);
+            }
+
+            // 3. ЗАПИСЬ ПОЗЫ И ВЗГЛЯДА В ЖУРНАЛ ДЕЙСТВИЙ (12.11.2026).
+            //
+            // ЧТО БЫЛО. Позы в записи не было вовсе. Разбор записи с устройства не мог ответить
+            // на вопрос «куда смотрел оператор, когда робот поехал не туда» — а без этого строка
+            // «робот начал движение» ничего не доказывает.
+            //
+            // ЧЕМ ПЛОХО БЫЛО БЫ ПИСАТЬ ЗДЕСЬ КАЖДЫЙ КАДР. Этот `Update` идёт на 72 Гц: наивная
+            // запись дала бы 72 строки в секунду, то есть ровно тот поток, из-за которого за
+            // сессию накопилось 1,1 ГБ. Поэтому частота и порог изменения — правила, а не
+            // «на глаз»: не чаще 10 Гц И только когда голова сдвинулась больше 5 см или взгляд
+            // повернулся больше 5°. Два одинаковых кадра дают ОДНУ строку.
+            //
+            // ЧАСЫ — `Time.realtimeSinceStartup`: они те же, что у остальных строк журнала, поэтому
+            // `t=12.4 с` в строке позы сравнимо с временем любого другого события.
+            if (logPose)
+            {
+                // Направление взгляда: настоящее, если платформа его дала, иначе — по голове.
+                // Если не удалось ни то, ни другое, пишем направление головы «как есть»: строка
+                // с позой всё равно полезнее пустоты, а `TryHeadGaze` уже отверг мусор.
+                Vector3 gaze = headGaze ? direction : headRotation * Vector3.forward;
+
+                KvActionLog.Instance.Pose(
+                    Time.realtimeSinceStartup,
+                    headPosition,
+                    gaze,
+                    1f / Mathf.Max(1e-4f, Time.unscaledDeltaTime));
+            }
 
             if (logOnStart && !logged)
             {

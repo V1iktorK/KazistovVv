@@ -1,4 +1,5 @@
 using UnityEngine;
+using KazistovVvFeatures;
 
 namespace KazistovVvXr
 {
@@ -137,6 +138,9 @@ namespace KazistovVvXr
         public static KvXrPlatformMode Apply(bool passthroughAvailable, bool spatialAnchorsAvailable,
             bool cameraAvailable, float worldScale = DefaultWorldScale)
         {
+            KvXrPlatformMode previous = Current;
+            bool hadPrevious = Applied;
+
             Current = Choose(passthroughAvailable, spatialAnchorsAvailable, cameraAvailable);
             Applied = true;
             // Масштаб не может быть нулевым или отрицательным — это не «настройка», а ошибка,
@@ -144,7 +148,47 @@ namespace KazistovVvXr
             WorldScale = worldScale > 0.0001f ? worldScale : DefaultWorldScale;
             Reason = Describe(Current, passthroughAvailable, spatialAnchorsAvailable, cameraAvailable);
             Debug.Log("[KvXr] РЕЖИМ: " + Reason);
+
+            // СМЕНА РЕЖИМА VR/MR/AR — СОБЫТИЕ В ЗАПИСИ (12.11.2026).
+            //
+            // ЧТО БЫЛО. Режим печатался ТОЛЬКО в консоль Unity (`Debug.Log`). В файле записи
+            // (`Logs/actions_<дата>.log`) смены режима не было вовсе, хотя это первое, что нужно
+            // знать при разборе: «в VR робот на полу» и «в MR робот на реальном столе» — разные
+            // картины одного и того же жеста.
+            //
+            // ЧЕМ ПЛОХО. Разбор записи с устройства (14 строк за сеанс) не мог ответить, в каком
+            // режиме работал оператор, — а без этого половина строк читается неверно.
+            //
+            // ЧТО СТАЛО. Каждая смена (и первый выбор при старте) даёт строку С ЧИСЛАМИ: было →
+            // стало, что доступно из возможностей и какой масштаб мира применён. Масштаб здесь —
+            // условие работы MR, а не оформление: по нему сверяют замер 1:1.
+            if (!hadPrevious || previous != Current)
+            {
+                try
+                {
+                    KvActionLog.Instance.ModeChanged(
+                        hadPrevious ? ModeShort(previous) : "запуск",
+                        ModeShort(Current),
+                        passthroughAvailable, spatialAnchorsAvailable, cameraAvailable, WorldScale);
+                }
+                catch (System.Exception e)
+                {
+                    // Запись не имеет права менять режим: не смогли записать — режим всё равно выбран.
+                    Debug.LogWarning("[KvXr] смена режима не записана в журнал: " + e.Message);
+                }
+            }
             return Current;
+        }
+
+        /// <summary>Короткое имя режима для строки записи (VR / MR / AR).</summary>
+        public static string ModeShort(KvXrPlatformMode mode)
+        {
+            switch (mode)
+            {
+                case KvXrPlatformMode.Mr: return "MR";
+                case KvXrPlatformMode.Ar: return "AR";
+                default: return "VR";
+            }
         }
 
         /// <summary>

@@ -201,6 +201,32 @@ namespace KazistovVvXr
         public static KvMrSurfaces Instance { get; private set; }
 
         /// <summary>
+        /// КОЛЛАЙДЕРЫ РЕАЛЬНОГО МИРА ДЛЯ ОТРИСОВКИ — ТОЛЬКО ЧТЕНИЕ (пункт 1 владельца 12.11.2026).
+        ///
+        /// ЗАЧЕМ ЭТОТ СВОЙСТВО-СПИСОК, А НЕ ПУБЛИЧНОЕ ПОЛЕ. ЧТО БЫЛО: `realWorldColliders` —
+        /// приватный набор, и нарисовать поверхности было нечем: `KvMrSurfacePainter` не мог бы
+        /// обойти комнату, не заведя ВТОРУЮ копию списка (а копия всегда расходится с оригиналом).
+        /// ЧТО СТАЛО: наружу отдан тот же набор, но только на чтение — снаружи его нельзя ни
+        /// очистить, ни дополнить, то есть источник правды остался один.
+        /// </summary>
+        public IEnumerable<Collider> RealWorldColliders { get { return realWorldColliders; } }
+
+        /// <summary>
+        /// ГАБАРИТЫ И НОРМАЛЬ ПОВЕРХНОСТИ — то, по чему рисуется контур/сетка/заливка.
+        ///
+        /// ВОЗВРАЩАЕТСЯ ЛИ КАНДИДАТ. Только для поверхностей, которые классификатор уже разобрал:
+        /// у коллайдера меша это ограничивающий параллелепипед куска, у стола из разметки —
+        /// верхняя грань. Для чужих коллайдеров (не наших) ответ `false`: рисовать «поверхность
+        /// реального мира» по случайному коллайдеру сцены нельзя.
+        /// </summary>
+        public bool TryGetSurfaceShape(Collider collider, out RealSurfaceCandidate candidate)
+        {
+            candidate = default(RealSurfaceCandidate);
+            if (collider == null) return false;
+            return candidatesByCollider.TryGetValue(collider, out candidate);
+        }
+
+        /// <summary>
         /// СОЗДАТЬ КОМПОНЕНТ В РАНТАЙМЕ (сцена не правится — её SHA256 закреплён тестом).
         /// </summary>
         public static KvMrSurfaces Ensure(Transform parent)
