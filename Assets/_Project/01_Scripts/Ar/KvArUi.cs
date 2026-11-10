@@ -96,6 +96,16 @@ namespace KazistovVvAr
         /// <summary>Сообщение об отказе показано (для проверок).</summary>
         public bool MessageVisible { get { return messageRoot != null && messageRoot.activeSelf; } }
 
+        /// <summary>
+        /// ТЕКСТ СООБЩЕНИЯ — как он написан оператору (для проверок и самопрогона).
+        ///
+        /// ЗАЧЕМ ГЕТТЕР. Самопрогон интерфейса обязан отличать «кнопка молчит» от «кнопка честно
+        /// сказала оператору, что делать нечего». Без чтения текста сообщения честный ответ
+        /// «плоскостей нет — ставить некуда» выглядел бы как отсутствие эффекта, то есть рабочая
+        /// кнопка попадала бы в дефекты. Геттер только ЧИТАЕТ то, что уже нарисовано.
+        /// </summary>
+        public string MessageText { get { return messageText != null ? messageText.text : string.Empty; } }
+
         /// <summary>Сколько кнопок создано (для проверок).</summary>
         public int ButtonCount { get { return buttons.Count; } }
 
@@ -572,7 +582,14 @@ namespace KazistovVvAr
             }
             if (!command.Enabled)
             {
-                Debug.Log("[KvAr] ИНТЕРФЕЙС: команда «" + commandId + "» сейчас недоступна");
+                // ПРИЧИНА, А НЕ ТОЛЬКО ФАКТ (12.11.2026). Раньше строка говорила «сейчас недоступна»
+                // и всё: для модели без геометрии оператор не понимал, почему пункт серый.
+                // Теперь причина названа описанием команды («модель недоступна: в проекте нет её
+                // геометрии…»), а сама модель в списке помечена недоступной заранее.
+                Debug.Log("[KvAr] ИНТЕРФЕЙС: команда «" + commandId + "» сейчас недоступна" +
+                          (string.IsNullOrEmpty(command.LocalizedDescription)
+                              ? ""
+                              : ": " + command.LocalizedDescription));
                 return;
             }
 

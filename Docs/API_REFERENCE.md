@@ -6320,7 +6320,7 @@ _Публичных членов нет (или тип объявлен без �
 | метод | `Dump` | `public static string Dump()` | Текстовый дамп (диагностика). |
 | метод | `Filter` | `public static List<KvBindEntry> Filter(string query)` | Бинды, подходящие под строку поиска (по действию, клавише, пояснению). |
 | метод | `Groups` | `public static List<string> Groups()` | Разделы в порядке появления (для группировки в окне). |
-| метод | `Invalidate` | `public static void Invalidate()` | Сбросить кэш (например, после переназначения бинда — задел). |
+| метод | `Invalidate` | `public static void Invalidate()` | Сбросить кэш реестра (перечитать список биндов; переназначения клавиш в проекте нет). |
 | метод | `IsConflict` | `public static bool IsConflict(KvBindEntry entry, HashSet<string> conflicts)` | Конфликтует ли конкретный бинд (по ключу «устройство\|клавиша»). |
 | метод | `Split` | `public static List<string> Split(string keys)` | Клавиши строки («Q/E, W/S, A/D» → q/e, w/s, a/d). |
 

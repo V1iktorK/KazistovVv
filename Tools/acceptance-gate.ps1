@@ -28,8 +28,12 @@
       E2E_AR        Е2Е в раскладке AR на планшете: панель «Настройки» реально на экране
       MUTATION      негативный контроль: откат правки обязан покрасить соответствующий тест
       HEADSET       шлем Pico: VR/MR, панель настроек, переключатель VR|MR
+      UI_SWEEP      самопрогон интерфейса НА УСТРОЙСТВАХ: AR (планшет), VR и MR (шлем) — каждая
+                    кнопка нажата в живом интерфейсе; «без эффекта» вне списка исключений — провал
+      REAL_TABLE    распознавание РЕАЛЬНОГО стола: правила доказаны тестами, а устройства напечатали
+                    вердикт С ЧИСЛАМИ (AR-плоскости / разметка комнаты PICO)
 
-    ЧЕСТНО О ГРАНИЦАХ: проверки E2E_AR и HEADSET требуют физических устройств. Если устройство
+    ЧЕСТНО О ГРАНИЦАХ: проверки E2E_AR, HEADSET, UI_SWEEP и REAL_TABLE требуют физических устройств. Если устройство
     не подключено — пункт красный с причиной «устройство не найдено», и это НЕ обходится флагом:
     иначе гейт врал бы так же, как отчёты.
 
@@ -641,6 +645,161 @@ if (-not $headset) {
     }
 }
 
+# ================================================================ 10. UI_SWEEP (самопрогон интерфейса)
+#
+# ВЛАДЕЛЕЦ: «главное — чтобы все кнопочки были заполнены функционалом». Проверка `UI_STUBS` выше
+# ловит ЗАГЛУШКИ в реестре команд, но ничего не говорит о том, что кнопка реально работает в ЖИВОМ
+# интерфейсе: элемент может быть нарисован, зарегистрирован и всё равно не делать ничего.
+#
+# Поэтому приложение само обходит свои элементы (кнопка, переключатель, ползунок, список, поле),
+# нажимает их настоящим путём uGUI и печатает в журнал строку на каждый: сработал или нет. Здесь
+# прогон запускается на ТРЁХ раскладках — планшет (AR), шлем (VR) и шлем (MR) — и судится по журналу.
+#
+# ЧЕСТНО О ГРАНИЦАХ: самопрогон подтверждает, что элемент ДЕЛАЕТ РАБОТУ. Он не подтверждает, что
+# нарисовано красиво и что в шлеме текст читается, — это остаётся человеку.
+Write-Host ""
+Write-Host "--- самопрогон интерфейса на устройствах ---"
+$sweepRunner = Join-Path $ProjectPath 'Tools\ui-sweep-device.ps1'
+$sweepProblems = @()
+$sweepReport = @()
+$sweepLayouts = @()
+if (-not $tablet) { $sweepProblems += 'планшет не найден — раскладку AR проверить нечем' }
+if (-not $headset) { $sweepProblems += 'шлем не найден — VR и MR проверить нечем' }
+if (-not (Test-Path -LiteralPath $sweepRunner)) { $sweepProblems += 'нет Tools\ui-sweep-device.ps1' }
+
+if ($sweepProblems.Count -eq 0) {
+    $plans = @()
+    $plans += @{ Id = $tablet.Id; Mode = 'auto'; Name = 'AR (планшет)' }
+    $plans += @{ Id = $headset.Id; Mode = 'vr'; Name = 'VR (шлем)' }
+    $plans += @{ Id = $headset.Id; Mode = 'mr'; Name = 'MR (шлем)' }
+    foreach ($plan in $plans) {
+        Write-Host ("  прогон: " + $plan.Name + " · устройство " + $plan.Id)
+        $logFile = Join-Path $LogsDir ('device-' + $plan.Id + '-' + $plan.Mode + '.logcat.txt')
+        if (Test-Path $logFile) { Remove-Item $logFile -Force }
+        # ЧИСТОЕ СОСТОЯНИЕ ОБЯЗАТЕЛЬНО: раскладка панелей хранится в PlayerPrefs, и без сброса вердикт
+# зависел бы от предыдущего прогона (наблюдалось: то «исчезло 0», то «исчезло 41 из 140»).
+        # ПОВТОР ПРИ СИСТЕМНОМ УБИЙСТВЕ (добавлено тестировщиком 12.11.2026).
+        #
+        # ЧТО БЫЛО. На планшете Android дважды убивал приложение посреди обхода (нехватка памяти),
+        # и прогон объявлялся не пройденным, хотя код был не при чём. Классический ложный вердикт.
+        # ЧТО СТАЛО. Если процесса нет и итоговой строки нет — это состояние СТЕНДА, а не приложения:
+        # прогон повторяется один раз. Второе убийство подряд уже считается результатом и честно
+        # попадает в красное: два раза подряд память не хватает — это факт о приложении и устройстве.
+        $out = & pwsh -NoProfile -File $sweepRunner -DeviceId $plan.Id -Mode $plan.Mode -LogOut $logFile -CleanState -TimeoutSeconds 600 2>&1
+        $code = $LASTEXITCODE
+        $killedBySystem = ($out | Where-Object { $_ -match "процесс завершился|экран перехватило" })
+        $hasTotal = ($out | Where-Object { $_ -match "ИТОГ:" })
+        if ($code -ne 0 -and $killedBySystem -and -not $hasTotal) {
+            Write-Host "    повтор: приложение убила система (память устройства), не код — прогоняю ещё раз"
+            $out = & pwsh -NoProfile -File $sweepRunner -DeviceId $plan.Id -Mode $plan.Mode -LogOut $logFile -CleanState -TimeoutSeconds 600 2>&1
+            $code = $LASTEXITCODE
+            $hasTotal = ($out | Where-Object { $_ -match "ИТОГ:" })
+        }
+        $code = $LASTEXITCODE
+        $out | Where-Object { $_ -match 'элементов|ИТОГ|ВЕРДИКТ|САМОПРОГОН|  - ' } | Select-Object -First 8 | ForEach-Object { Write-Host ("    " + $_) }
+        $layoutLine = @($out | Where-Object { $_ -match 'ИТОГ:' } | Select-Object -Last 1)
+        if ($layoutLine.Count -gt 0) { $sweepReport += ($plan.Name + ': ' + $layoutLine[0].Trim()) }
+        else { $sweepReport += ($plan.Name + ': итога нет') }
+        if ($code -ne 0) { $sweepProblems += ($plan.Name + ': прогон не пройден (код ' + $code + ')') }
+    }
+}
+
+if ($sweepProblems.Count -eq 0) {
+    Add-Result 'UI_SWEEP' $true (($sweepReport -join ' · ') + ' · каждая кнопка проверена НАЖАТИЕМ в живом интерфейсе')
+} else {
+    Add-Result 'UI_SWEEP' $false (($sweepProblems + $sweepReport) -join ' | ')
+}
+
+# ================================================================ 11. REAL_TABLE (реальный стол)
+#
+# ЗАДАЧА ВЛАДЕЛЬЦА: автоматически распознавать РЕАЛЬНЫЙ (не виртуальный) стол в AR и MR.
+#
+# ПРОВЕРКА СОСТОИТ ИЗ ДВУХ ЧАСТЕЙ, и обе обязательны:
+#   1) ПРАВИЛА доказаны тестами без устройств (`KvRealTableTests`): пол не считается столом, семантика
+#      сильнее геометрии, наклон/площадь/уровень глаз — отказы с числами. Это проверяется по XML
+#      прогона EditMode, то есть по факту, а не по обещанию.
+#   2) КОНВЕЙЕР отработал на устройствах и напечатал ВЕРДИКТ С ЧИСЛАМИ (планшет — AR-плоскости,
+#      шлем — разметка комнаты PICO). Журналы берутся из прогонов UI_SWEEP, отдельно устройства не
+#      дёргаются.
+#
+# ЧЕСТНО О ГРАНИЦАХ: гейт не может потребовать, чтобы перед камерой лежал настоящий стол. Поэтому он
+# требует не «стол найден», а ЧЕСТНЫЙ вердикт с числами: «стол найден · площадь … · высота над полом …»
+# либо «пол (не стол) · площадь …» либо объяснение, что комната не размечена. Врать про стол нельзя —
+# именно это и было дефектом.
+Write-Host ""
+Write-Host "--- распознавание реального стола ---"
+$realProblems = @()
+$realReport = @()
+
+$rtTests = 0
+$emXml = Join-Path $LogsDir 'gate-editmode.xml'
+if (Test-Path -LiteralPath $emXml) {
+    try {
+        $emDoc = [xml](Get-Content $emXml -Raw)
+        $rtTests = @($emDoc.SelectNodes('//test-case') | Where-Object { $_.fullname -match 'KvRealTableTests' }).Count
+    } catch { $realProblems += 'XML прогона EditMode не читается' }
+}
+if ($rtTests -lt 15) { $realProblems += ("правил распознавания стола в наборе мало: тестов " + $rtTests + " (нужно не меньше 15)") }
+else { $realReport += ("правила доказаны тестами: " + $rtTests) }
+
+$tabletLog = if ($tablet) { Join-Path $LogsDir ('device-' + $tablet.Id + '-auto.logcat.txt') } else { $null }
+$headsetLog = if ($headset) { Join-Path $LogsDir ('device-' + $headset.Id + '-mr.logcat.txt') } else { $null }
+
+# ПЛАНШЕТ (AR) И ШЛЕМ (MR): ДОКАЗАТЕЛЬСТВО С УСТРОЙСТВ.
+#
+# ЧТО БЫЛО. Проверка читала журналы, оставшиеся от прогонов интерфейса. Это было ненадёжно, и вот
+# почему: (1) прогон интерфейса переключает режим НА ЛЕТУ, а конвейер реальных поверхностей шлема
+# поднимается только при СТАРТЕ в MR — в таких журналах строк о столе нет вовсе; (2) на планшете
+# прогон короткий, и диагноз «плоскостей нет» мог не успеть напечататься. В итоге проверка краснела
+# не из-за приложения, а из-за способа измерения.
+# ЧТО СТАЛО. Отдельный замер `Tools\real-table-device.ps1`: он сам делает чистый старт (для шлема —
+# сначала сохраняет режим MR, потом перезапускает приложение в MR) и требует ВЕРДИКТ С ЧИСЛАМИ:
+#   планшет — «стол найден · площадь … · высота над полом …» / «пол (не стол) · площадь …» /
+#             «поверхностей нет — физического стола в кадре не было» (с числами);
+#   шлем    — «РЕАЛЬНЫЙ СТОЛ: запрос выполнен за … с · столов N · пол …» / объяснение про разметку.
+# Молчание не принимается: именно молчание и было дефектом до правки.
+$realProblems = @()
+$realReport = @()
+
+$rtTests = 0
+$emXml = Join-Path $LogsDir 'gate-editmode.xml'
+if (Test-Path -LiteralPath $emXml) {
+    try {
+        $emDoc = [xml](Get-Content $emXml -Raw)
+        $rtTests = @($emDoc.SelectNodes('//test-case') | Where-Object { $_.fullname -match 'KvRealTableTests' }).Count
+    } catch { $realProblems += 'XML прогона EditMode не читается' }
+}
+if ($rtTests -lt 15) { $realProblems += ("правил распознавания стола в наборе мало: тестов " + $rtTests + " (нужно не меньше 15)") }
+else { $realReport += ("правила доказаны тестами: " + $rtTests) }
+
+$rtRunner = Join-Path $ProjectPath 'Tools\real-table-device.ps1'
+if (-not (Test-Path -LiteralPath $rtRunner)) {
+    $realProblems += 'нет Tools\real-table-device.ps1 — доказывать распознавание нечем'
+} else {
+    if ($tablet) {
+        $tabLog = Join-Path $LogsDir ('real-table-' + $tablet.Id + '-auto.logcat.txt')
+        $out = & pwsh -NoProfile -File $rtRunner -DeviceId $tablet.Id -Mode auto -LogOut $tabLog 2>&1
+        ($out | Where-Object { $_ -match 'ВЕРДИКТ ПОЛУЧЕН|  - ' } | Select-Object -First 4) | ForEach-Object { Write-Host ("    " + $_) }
+        if ($LASTEXITCODE -eq 0) { $realReport += ($out | Where-Object { $_ -match 'ВЕРДИКТ ПОЛУЧЕН' } | Select-Object -Last 1) }
+        else { $realProblems += 'планшет: вердикта о поверхностях нет' }
+    } else { $realProblems += 'планшет не найден — распознавание в AR не проверить' }
+
+    if ($headset) {
+        $hsLog = Join-Path $LogsDir ('real-table-' + $headset.Id + '-mr.logcat.txt')
+        $out2 = & pwsh -NoProfile -File $rtRunner -DeviceId $headset.Id -Mode mr -LogOut $hsLog 2>&1
+        ($out2 | Where-Object { $_ -match 'ВЕРДИКТ ПОЛУЧЕН|  - ' } | Select-Object -First 4) | ForEach-Object { Write-Host ("    " + $_) }
+        if ($LASTEXITCODE -eq 0) { $realReport += ($out2 | Where-Object { $_ -match 'ВЕРДИКТ ПОЛУЧЕН' } | Select-Object -Last 1) }
+        else { $realProblems += 'шлем: вердикта о реальном столе нет' }
+    } else { $realProblems += 'шлем не найден — распознавание в MR не проверить' }
+}
+
+if ($realProblems.Count -eq 0) {
+    Add-Result 'REAL_TABLE' $true (($realReport | Where-Object { $_ }) -join ' · ')
+} else {
+    Add-Result 'REAL_TABLE' $false (($realProblems + ($realReport | Where-Object { $_ })) -join ' | ')
+}
+
+
 # ================================================================ ИТОГ + СЧЁТЧИК ПОВТОРОВ
 $red = @($results | Where-Object { -not $_.Ok })
 $redCodes = @($red | ForEach-Object { $_.Code })
@@ -669,7 +828,7 @@ if (-not $NoState) {
         $state | Add-Member -NotePropertyName Counts -NotePropertyValue ([pscustomobject]@{}) -Force
     }
     $newCounts = [ordered]@{}
-    foreach ($code in 'EDITMODE','REPO_GUARDS','SECRET','GIT_ASSETS','APK_NAMES','APK_FRESH','UI_STUBS','P4_3_RATCHET','E2E_PC','E2E_AR','MUTATION','HEADSET') {
+    foreach ($code in 'EDITMODE','REPO_GUARDS','SECRET','GIT_ASSETS','APK_NAMES','APK_FRESH','UI_STUBS','P4_3_RATCHET','E2E_PC','E2E_AR','MUTATION','HEADSET','UI_SWEEP','REAL_TABLE') {
         $prev = 0
         $prop = $state.Counts.PSObject.Properties[$code]
         if ($prop) { $prev = [int]$prop.Value }

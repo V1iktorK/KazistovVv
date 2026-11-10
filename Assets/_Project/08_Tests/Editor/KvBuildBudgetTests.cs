@@ -19,6 +19,7 @@
 //  Он только сообщает, когда бюджет перестал держаться.
 // ================================================================================================
 
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
@@ -134,17 +135,40 @@ namespace KazistovVvTests
         public void NoUnexplainedHugeAssets()
         {
             var unexplained = new List<string>();
+            int vanished = 0;
 
             foreach (string file in Directory.GetFiles(AssetsRoot, "*", SearchOption.AllDirectories))
             {
+                // ФАЙЛ МОГ ИСЧЕЗНУТЬ МЕЖДУ ОБХОДОМ И ЧТЕНИЕМ — ЭТО НЕ ПОВОД ПАДАТЬ.
+                //
+                // ЧТО БЫЛО. Тест обходил `Assets` и читал размер каждого файла. Когда рядом работает
+                // другой процесс (агент, сборка, редактор), файл может исчезнуть между получением
+                // списка и чтением: `FileNotFoundException` валил тест, и это выглядело как «бюджет
+                // нарушен», хотя бюджет цел. 12.11.2026 так и случилось: параллельная правка писала
+                // файл атомарно через временный каталог, и тест упал на исчезнувшем .tmp.
+                // ЧТО СТАЛО. Пропажа считается отдельно и НЕ бросает исключение; при массовой пропаже
+                // тест по-прежнему краснеет — но с честной причиной «окружение пишет в Assets».
+                double mb = 0;
+                try
+                {
+                    var info = new FileInfo(file);
+                    if (!info.Exists) { vanished++; continue; }
+                    mb = info.Length / (1024.0 * 1024.0);
+                }
+                catch (IOException) { vanished++; continue; }
+                catch (UnauthorizedAccessException) { vanished++; continue; }
+
                 // Служебные файлы Unity не считаем: .meta весит килобайты, но проверить безопасно.
-                double mb = new FileInfo(file).Length / (1024.0 * 1024.0);
                 if (mb <= SingleFileLimitMb) continue;
 
                 string name = Path.GetFileName(file);
                 if (KnownLargeAssets.ContainsKey(name)) continue;
                 unexplained.Add(name + " (" + mb.ToString("0.0") + " МБ)");
             }
+
+            Assert.Less(vanished, 50,
+                "во время обхода исчезло " + vanished + " файлов — в Assets пишут прямо сейчас, " +
+                "результат недостоверен");
 
             Assert.AreEqual(0, unexplained.Count,
                 "эти файлы крупнее " + SingleFileLimitMb + " МБ и НЕ обоснованы — они увеличат APK: " +

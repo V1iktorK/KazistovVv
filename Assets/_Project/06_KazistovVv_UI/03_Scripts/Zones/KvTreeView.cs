@@ -326,6 +326,34 @@ namespace KazistovVvUI
             if (onExpansionChanged != null) onExpansionChanged();
         }
 
+        /// <summary>
+        /// СКОЛЬКО УЗЛОВ РАСКРЫТО СЕЙЧАС (для проверок и самопрогона интерфейса).
+        ///
+        /// ЗАЧЕМ ГЕТТЕРЫ. Кнопки `ExpandAll`/`CollapseAll` на уже раскрытом/свёрнутом дереве
+        /// ЗАКОННО ничего не меняют. Чтобы отличить это от «кнопка молчит», самопрогону нужно
+        /// ФАКТИЧЕСКОЕ состояние, а не догадка по имени кнопки. Геттеры только читают.
+        /// </summary>
+        public int ExpandedCount { get { return expanded.Count; } }
+
+        /// <summary>Сколько узлов ВООБЩЕ можно раскрыть (у них есть дети) — по модели дерева.</summary>
+        public int ExpandableCount
+        {
+            get
+            {
+                if (roots == null) return 0;
+                int count = 0;
+                for (int i = 0; i < roots.Count; i++) CountExpandable(roots[i], ref count);
+                return count;
+            }
+        }
+
+        private static void CountExpandable(ProjectNode node, ref int count)
+        {
+            if (node == null || node.Children == null) return;
+            if (node.Children.Count > 0) count++;
+            for (int i = 0; i < node.Children.Count; i++) CountExpandable(node.Children[i], ref count);
+        }
+
         private void ExpandRecursive(ProjectNode node)
         {
             if (node == null) return;

@@ -286,8 +286,7 @@ namespace KazistovVv.Core
         /// <summary>Модель по умолчанию — та, что стоит в сцене сейчас.</summary>
         public static KvRobotModel Default { get { return Find("stand_6axis"); } }
 
-        /// <summary>
-        /// Имена звеньев модели строкой БЕЗ КОПИЙ LOD — ровно то, что ищет `KvRobotSpawner`.
+        /// <summary>Имена звеньев модели строкой БЕЗ КОПИЙ LOD — ровно то, что ищет `KvRobotSpawner`.
         ///
         /// Вынесено отдельным методом, чтобы генератор отчётов и тесты видели ТУ ЖЕ фильтрацию,
         /// что и рантайм: иначе тест мог бы «найти» звено, которого рантайм не видит.
@@ -295,6 +294,105 @@ namespace KazistovVv.Core
         public static string[] JointNamesOf(KvRobotModel model)
         {
             return model != null && model.JointNames != null ? model.JointNames : new string[0];
+        }
+
+        // ============================================================================================
+        // ДОСТУПНОСТЬ МОДЕЛИ: ЕСТЬ ЛИ У НЕЁ ГЕОМЕТРИЯ (найдено тестом сессии S46, 12.11.2026).
+        //
+        // ЧТО БЫЛО. Каталог отвечал на вопрос «какие модели мы перенесли» списком из 12 имён, и
+        // интерфейс предлагал их ВСЕ как рабочие. Фактическая проверка показала: у 11 из 12 моделей
+        // ссылки `m_Mesh` в префабах ведут на меши, которых в проекте НЕТ (в репозитории всего два
+        // FBX роботов: `Assets/Robots/Robot.fbx` и `Assets/Robots/ScaraRobot.fbx`). Геометрия
+        // разрешается только у `stand_6axis`.
+        //
+        // ЧЕМ ЭТО ПЛОХО ДЛЯ ОПЕРАТОРА. «Выбрал UR5» → `KvRobotSpawner.Create` создаёт объект с
+        // суставами, контроллером и именем, но НИ ОДНОГО меша: на столе и в шлеме — ничего.
+        // Для оператора это ровно «нажал, и ничего не произошло», то есть нарушение требования
+        // владельца «каждая кнопка выполняет реальную работу». Хуже: `ApplyModel` и
+        // `KvArContent.SpawnModel` сначала УДАЛЯЮТ текущего робота, поэтому выбор недоступной
+        // модели уносил рабочего робота и не приводил на его место никакого.
+        //
+        // ЧТО СТАЛО. Каталог отвечает на вопрос «можно ли эту модель ПОКАЗАТЬ» отдельно от вопроса
+        // «есть ли она в списке»: `HasGeometry` / `Available` / `Unavailable`. Основание — ФАКТ
+        // разрешения мешей префаба (`KvRobotSpawner.LoadPrefab` + `MeshFilter.sharedMesh != null`),
+        // а не ручной список в коде: починят модели — каталог сам станет «доступным», без правок.
+        //
+        // ПОЧЕМУ С КЭШЕМ. `HasGeometry` спрашивается на отрисовке списка моделей и меню левой руки,
+        // а обход иерархии префаба в каждом кадре — удар по бюджету 72 Гц (раздел P2). Кэш
+        // сбрасывается `InvalidateAvailability()` — после импорта или исправления моделей.
+        // ============================================================================================
+
+        /// <summary>Сколько мешей с разрешаемым ассетом в префабе модели (0 — геометрии нет).</summary>
+        private static readonly Dictionary<string, int> meshCountCache = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        /// <summary>
+        /// СКОЛЬКО В МОДЕЛИ МЕШЕЙ, КОТОРЫЕ РЕАЛЬНО РАЗРЕШАЮТСЯ. Ноль означает «модель невидима»:
+        /// суставы и контроллер будут, а нарисовать нечего.
+        ///
+        /// Считается по `MeshFilter.sharedMesh != null` у ВСЕХ потомков (включая выключенные: в
+        /// префабах роботов часть звеньев выключена и включается контроллером). Кэш — по пути префаба,
+        /// потому что именно он определяет результат (`KvRobotModel` может быть собран и вручную).
+        /// </summary>
+        public static int GeometryMeshCount(KvRobotModel model)
+        {
+            if (model == null || string.IsNullOrEmpty(model.PrefabPath)) return 0;
+
+            int cached;
+            if (meshCountCache.TryGetValue(model.PrefabPath, out cached)) return cached;
+
+            int meshes = 0;
+            GameObject prefab = KvRobotSpawner.LoadPrefab(model);
+            if (prefab != null)
+            {
+                MeshFilter[] filters = prefab.GetComponentsInChildren<MeshFilter>(true);
+                for (int i = 0; i < filters.Length; i++)
+                {
+                    if (filters[i] == null) continue;
+                    if (filters[i].sharedMesh != null) meshes++;
+                }
+            }
+
+            meshCountCache[model.PrefabPath] = meshes;
+            return meshes;
+        }
+
+        /// <summary>
+        /// МОЖНО ЛИ ПОКАЗЫВАТЬ МОДЕЛЬ КАК РАБОЧУЮ. Ложь означает «выбор ничего не даст»: робот
+        /// создастся без единого меша, то есть не появится.
+        /// </summary>
+        public static bool HasGeometry(KvRobotModel model)
+        {
+            return GeometryMeshCount(model) > 0;
+        }
+
+        /// <summary>Модели, которые РЕАЛЬНО можно поставить в сцену (есть геометрия).</summary>
+        public static KvRobotModel[] Available { get { return WithGeometry(true); } }
+
+        /// <summary>
+        /// Модели каталога БЕЗ геометрии: их НЕЛЬЗЯ предлагать как рабочие. Список публичный, чтобы
+        /// долг был виден (журнал, отчёт, панель диагностики), а не спрятан внутри проверки.
+        /// </summary>
+        public static KvRobotModel[] Unavailable { get { return WithGeometry(false); } }
+
+        private static KvRobotModel[] WithGeometry(bool hasGeometry)
+        {
+            var result = new List<KvRobotModel>();
+            KvRobotModel[] all = All;
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (all[i] == null) continue;
+                if (HasGeometry(all[i]) == hasGeometry) result.Add(all[i]);
+            }
+            return result.ToArray();
+        }
+
+        /// <summary>
+        /// СБРОСИТЬ КЭШ ДОСТУПНОСТИ — после импорта, починки модели или в тестах. Результат зависит
+        /// от содержимого проекта, поэтому «навсегда запомнить» его нельзя.
+        /// </summary>
+        public static void InvalidateAvailability()
+        {
+            meshCountCache.Clear();
         }
 
         /// <summary>Строка для журнала: сколько моделей и какие.</summary>
@@ -306,6 +404,35 @@ namespace KazistovVv.Core
             {
                 if (i > 0) sb.Append(", ");
                 sb.Append(All[i].Title);
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// ЧЕСТНАЯ СТРОКА О ГЕОМЕТРИИ: сколько моделей можно показать и какие нельзя.
+        ///
+        /// Нужна там, где раньше молча печаталось «моделей 12»: 12 моделей в каталоге и 12
+        /// РАБОТАЮЩИХ — разные вещи, и разница здесь одиннадцать. Имя отличается от
+        /// `KvRobotSpawner.DescribeAvailability` (та строка про НАЛИЧИЕ ПРЕФАБА, эта — про меши).
+        /// </summary>
+        public static string DescribeGeometry()
+        {
+            KvRobotModel[] available = Available;
+            KvRobotModel[] unavailable = Unavailable;
+
+            var sb = new System.Text.StringBuilder();
+            sb.Append("моделей ").Append(All.Length)
+              .Append(" · с геометрией ").Append(available.Length)
+              .Append(" · недоступны ").Append(unavailable.Length);
+            if (unavailable.Length > 0)
+            {
+                sb.Append(" (");
+                for (int i = 0; i < unavailable.Length; i++)
+                {
+                    if (i > 0) sb.Append(", ");
+                    sb.Append(unavailable[i].Id);
+                }
+                sb.Append(") — их префабы ссылаются на меши, которых нет в проекте");
             }
             return sb.ToString();
         }

@@ -59,6 +59,42 @@ namespace KazistovVvUI
         public const bool DefaultGamepadHud = true;
         public const bool DefaultErrorPlate = true;
 
+        /// <summary>
+        /// УМОЛЧАНИЕ ЧИСЛА РЯДОВ ТУЛБАРА — теперь КОНСТАНТА, а не литерал.
+        ///
+        /// ЧТО БЫЛО. Тройка была записана прямо в двух местах (`Reload` и `ResetToDefaults`),
+        /// поэтому «значение по умолчанию» нельзя было ни назвать в отчёте, ни сверить в тесте:
+        /// проверка умолчания превращалась в сравнение значения с самим собой.
+        /// </summary>
+        public const int DefaultToolbarRows = 3;
+
+        // ---------------------------------------------------------- КОРИДОРЫ ДОПУСТИМЫХ ЗНАЧЕНИЙ
+        //
+        // ЧТО БЫЛО. Каждый сеттер зажимал значение СВОЕЙ парой литералов (`Mathf.Clamp(value, 0.6f, 1.6f)`),
+        // а чтение из хранилища (`Reload`) не зажимало ВООБЩЕ. Значение из старой версии, ручной правки
+        // или испорченного файла применялось как есть: масштаб интерфейса 99 растягивал оболочку, −5
+        // схлопывал её в точку — и «приложение сломалось» на пустом месте.
+        //
+        // ЧЕМ ЭТО ГРОЗИЛО. Правило проекта (§NaN/§storage): испорченное значение не должно ронять
+        // приложение и оставлять его в состоянии, которое нельзя назвать. У настроек ШЛЕМА
+        // (`KazistovVvXr.KvXrSettings`) зажим при чтении был с самого начала — то есть два хранилища
+        // одного проекта вели себя по-разному, и «слетело / не слетело» зависело от того, какое читают.
+        //
+        // ЧТО СТАЛО. Коридоры названы ОДИН раз (эти константы) и применяются И при записи, И при чтении:
+        // третьего числа для того же предела появиться не может.
+        public const float MinUiScale = 0.6f;
+        public const float MaxUiScale = 1.6f;
+        public const int MinDensity = 0;
+        public const int MaxDensity = 1;
+        public const int MinToolbarRows = 1;
+        public const int MaxToolbarRows = 6;
+        public const int MinToolbarLayout = 0;
+        public const int MaxToolbarLayout = 2;
+        public const int MinFontSize = 0;
+        public const int MaxFontSize = 2;
+        public const int MinColorBlind = 0;
+        public const int MaxColorBlind = 3;
+
         private static bool loaded;
 
         /// <summary>Показывать зону достижимости.</summary>
@@ -74,24 +110,24 @@ namespace KazistovVvUI
         /// <summary>Показывать фантомы (задел: пока только флаг, см. PROJECT_CONTEXT).</summary>
         public static bool ShowPhantoms { get { Ensure(); return phantoms; } set { phantoms = value; Save(KeyPhantoms, value ? 1 : 0); } }
         /// <summary>Масштаб интерфейса (0.85 / 1 / 1.15 / 1.3).</summary>
-        public static float UiScale { get { Ensure(); return uiScale; } set { uiScale = Mathf.Clamp(value, 0.6f, 1.6f); Save(KeyUiScale, uiScale); } }
+        public static float UiScale { get { Ensure(); return uiScale; } set { uiScale = Mathf.Clamp(value, MinUiScale, MaxUiScale); Save(KeyUiScale, uiScale); } }
         /// <summary>Плотность строк: 0 — компактная, 1 — обычная.</summary>
-        public static int Density { get { Ensure(); return density; } set { density = Mathf.Clamp(value, 0, 1); Save(KeyDensity, density); } }
+        public static int Density { get { Ensure(); return density; } set { density = Mathf.Clamp(value, MinDensity, MaxDensity); Save(KeyDensity, density); } }
         /// <summary>Сколько рядов кнопок в тулбаре (3 — базовый интерфейс, 4 — с кнопками этапов 1–20).</summary>
-        public static int ToolbarRows { get { Ensure(); return toolbarRows; } set { toolbarRows = Mathf.Clamp(value, 1, 6); Save(KeyToolbarRows, toolbarRows); } }
+        public static int ToolbarRows { get { Ensure(); return toolbarRows; } set { toolbarRows = Mathf.Clamp(value, MinToolbarRows, MaxToolbarRows); Save(KeyToolbarRows, toolbarRows); } }
         /// <summary>
         /// ФИКС 8: раскладка тулбара — 0 «авто» (колонки считаются от ширины канваса),
         /// 1 «широко» (занять всю доступную ширину), 2 «5 в ряд» (исторический вид).
         /// </summary>
-        public static int ToolbarLayout { get { Ensure(); return toolbarLayout; } set { toolbarLayout = Mathf.Clamp(value, 0, 2); Save(KeyToolbarLayout, toolbarLayout); } }
+        public static int ToolbarLayout { get { Ensure(); return toolbarLayout; } set { toolbarLayout = Mathf.Clamp(value, MinToolbarLayout, MaxToolbarLayout); Save(KeyToolbarLayout, toolbarLayout); } }
         /// <summary>ФИКС 9: компактный тулбар — мелкие иконки и скрытие редко используемых кнопок.</summary>
         public static bool ToolbarCompact { get { Ensure(); return toolbarCompact; } set { toolbarCompact = value; Save(KeyToolbarCompact, value ? 1 : 0); } }
         /// <summary>ЭТАП 11: размер шрифта (0 маленький … 2 большой).</summary>
-        public static int FontSize { get { Ensure(); return fontSize; } set { fontSize = Mathf.Clamp(value, 0, 2); Save(KeyFontSize, fontSize); } }
+        public static int FontSize { get { Ensure(); return fontSize; } set { fontSize = Mathf.Clamp(value, MinFontSize, MaxFontSize); Save(KeyFontSize, fontSize); } }
         /// <summary>ЭТАП 11: высокий контраст.</summary>
         public static bool HighContrast { get { Ensure(); return highContrast; } set { highContrast = value; Save(KeyHighContrast, value ? 1 : 0); } }
         /// <summary>ЭТАП 11: схема для дальтоников (0 — выключена, 1…3 — тип).</summary>
-        public static int ColorBlind { get { Ensure(); return colorBlind; } set { colorBlind = Mathf.Clamp(value, 0, 3); Save(KeyColorBlind, colorBlind); } }
+        public static int ColorBlind { get { Ensure(); return colorBlind; } set { colorBlind = Mathf.Clamp(value, MinColorBlind, MaxColorBlind); Save(KeyColorBlind, colorBlind); } }
         /// <summary>ЭТАП 11: навигация по интерфейсу с клавиатуры.</summary>
         public static bool KeyboardNav { get { Ensure(); return keyboardNav; } set { keyboardNav = value; Save(KeyKeyboardNav, value ? 1 : 0); } }
         /// <summary>ЭТАП 9: мини-индикатор геймпада на экране.</summary>
@@ -154,7 +190,20 @@ namespace KazistovVvUI
         /// <summary>Сторона квадратной кнопки-иконки тулбара.</summary>
         public static float IconButtonSize { get { return Density == 0 ? 24f : 28f; } }
 
-        /// <summary>Перечитать настройки из PlayerPrefs.</summary>
+        /// <summary>
+        /// Перечитать настройки из PlayerPrefs — ЕДИНСТВЕННЫЙ путь чтения.
+        ///
+        /// ЧТО БЫЛО. Чтение возвращало из хранилища ЧТО УГОДНО: `uiScale = PlayerPrefs.GetFloat(...)`.
+        /// Зажим стоял только в сеттерах, а в хранилище значение попадает не только сеттером —
+        /// остались настройки прошлых версий, ручные правки, данные с другого шлема.
+        ///
+        /// ЧЕМ ПЛОХО. Масштаб интерфейса 99 растягивает оболочку так, что кнопок не найти, −5
+        /// схлопывает её в точку. «Слетело после обновления» — и причину искать негде.
+        ///
+        /// ЧТО СТАЛО. Каждое число проходит через `ReadInt`/`ReadFloat`: значение зажимается в
+        /// задокументированный коридор, а нечитаемое (`"мусор"`, NaN, ∞, ноль вне коридора —
+        /// Unity читает нечисловую строку как 0) заменяется ДОКУМЕНТИРОВАННЫМ УМОЛЧАНИЕМ.
+        /// </summary>
         public static void Reload()
         {
             loaded = true;
@@ -164,17 +213,43 @@ namespace KazistovVvUI
             flashlight = PlayerPrefs.GetInt(KeyFlashlight, DefaultFlashlight ? 1 : 0) != 0;
             autoTree = PlayerPrefs.GetInt(KeyAutoRefreshTree, DefaultAutoRefreshTree ? 1 : 0) != 0;
             phantoms = PlayerPrefs.GetInt(KeyPhantoms, DefaultPhantoms ? 1 : 0) != 0;
-            uiScale = PlayerPrefs.GetFloat(KeyUiScale, DefaultUiScale);
-            density = PlayerPrefs.GetInt(KeyDensity, DefaultDensity);
-            toolbarRows = PlayerPrefs.GetInt(KeyToolbarRows, 3);
-            toolbarLayout = PlayerPrefs.GetInt(KeyToolbarLayout, DefaultToolbarLayout);
+            uiScale = ReadFloat(KeyUiScale, DefaultUiScale, MinUiScale, MaxUiScale);
+            density = ReadInt(KeyDensity, DefaultDensity, MinDensity, MaxDensity);
+            toolbarRows = ReadInt(KeyToolbarRows, DefaultToolbarRows, MinToolbarRows, MaxToolbarRows);
+            toolbarLayout = ReadInt(KeyToolbarLayout, DefaultToolbarLayout, MinToolbarLayout, MaxToolbarLayout);
             toolbarCompact = PlayerPrefs.GetInt(KeyToolbarCompact, DefaultToolbarCompact ? 1 : 0) != 0;
-            fontSize = PlayerPrefs.GetInt(KeyFontSize, DefaultFontSize);
+            fontSize = ReadInt(KeyFontSize, DefaultFontSize, MinFontSize, MaxFontSize);
             highContrast = PlayerPrefs.GetInt(KeyHighContrast, DefaultHighContrast ? 1 : 0) != 0;
-            colorBlind = PlayerPrefs.GetInt(KeyColorBlind, DefaultColorBlind);
+            colorBlind = ReadInt(KeyColorBlind, DefaultColorBlind, MinColorBlind, MaxColorBlind);
             keyboardNav = PlayerPrefs.GetInt(KeyKeyboardNav, DefaultKeyboardNav ? 1 : 0) != 0;
             gamepadHud = PlayerPrefs.GetInt(KeyGamepadHud, DefaultGamepadHud ? 1 : 0) != 0;
             errorPlate = PlayerPrefs.GetInt(KeyErrorPlate, DefaultErrorPlate ? 1 : 0) != 0;
+        }
+
+        /// <summary>
+        /// ПРОЧИТАТЬ ЦЕЛОЕ ЧИСЛО С ЗАЖИМОМ. Значение вне коридора прижимается к границе; ноль,
+        /// которого в коридоре быть не может (например число рядов тулбара), означает «ключ
+        /// испорчен» — Unity читает нечисловую строку как 0, отличить её от честного нуля
+        /// средствами PlayerPrefs нельзя, поэтому такой ноль заменяется умолчанием.
+        /// </summary>
+        private static int ReadInt(string key, int fallback, int min, int max)
+        {
+            int value = PlayerPrefs.GetInt(key, fallback);
+            if (min > 0 && value == 0) return fallback;
+            return Mathf.Clamp(value, min, max);
+        }
+
+        /// <summary>
+        /// ПРОЧИТАТЬ ДРОБНОЕ ЧИСЛО С ЗАЖИМОМ. NaN и бесконечность (их можно получить правкой файла
+        /// настроек) заменяются умолчанием, ноль вне коридора — тоже: масштаб интерфейса 0 означает
+        /// «оболочки не видно», и это ровно тот случай, когда нужно умолчание, а не граница.
+        /// </summary>
+        private static float ReadFloat(string key, float fallback, float min, float max)
+        {
+            float value = PlayerPrefs.GetFloat(key, fallback);
+            if (float.IsNaN(value) || float.IsInfinity(value)) return fallback;
+            if (value == 0f && min > 0f) return fallback;
+            return Mathf.Clamp(value, min, max);
         }
 
         /// <summary>Сбросить настройки интерфейса к значениям по умолчанию.</summary>
@@ -188,7 +263,7 @@ namespace KazistovVvUI
             phantoms = DefaultPhantoms;
             uiScale = DefaultUiScale;
             density = DefaultDensity;
-            toolbarRows = 3;
+            toolbarRows = DefaultToolbarRows;
             toolbarLayout = DefaultToolbarLayout;
             toolbarCompact = DefaultToolbarCompact;
             fontSize = DefaultFontSize;

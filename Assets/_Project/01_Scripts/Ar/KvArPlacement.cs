@@ -5,6 +5,7 @@ using UnityEngine;
 using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
 using KazistovVvFeatures;
+using KazistovVvRealWorld;
 
 namespace KazistovVvAr
 {
@@ -204,7 +205,15 @@ namespace KazistovVvAr
         }
 
         /// <summary>ПОДСКАЗКА НА ЭКРАНЕ ПО СОСТОЯНИЮ И ЧИСЛАМ (чистая функция — проверяется тестом).</summary>
-        public static string Hint(KvArPlacementState state, int planesFound, float lastPlaneSeconds)
+        /// <param name="tableFound">
+        /// СТОЛ ДЕЙСТВИТЕЛЬНО НАЙДЕН (а не «плоскости есть»). ЧТО БЫЛО: подсказка говорила «Стол
+        /// найден (3 плоскости)» уже при появлении ЛЮБЫХ плоскостей — а первым ARCore находит пол.
+        /// Оператор читал «стол найден» и ставил робота на пол. ЧТО СТАЛО: отсутствие проверенного
+        /// стола проговаривается словами. Параметр необязательный (по умолчанию прежнее поведение),
+        /// чтобы не ломать вызовы без классификатора.
+        /// </param>
+        public static string Hint(KvArPlacementState state, int planesFound, float lastPlaneSeconds,
+                                  bool tableFound = true)
         {
             switch (state)
             {
@@ -212,6 +221,9 @@ namespace KazistovVvAr
                     return "Наведите камеру на стол и поводите ею 2–3 секунды · найдено плоскостей: " +
                            planesFound;
                 case KvArPlacementState.ReadyToPlace:
+                    if (!tableFound)
+                        return "Стол не найден: вижу " + planesFound +
+                               " поверхностей, но столешницы среди них нет · поводите камерой по столу 2–3 секунды";
                     return "Стол найден (" + planesFound + (planesFound == 1 ? " плоскость" : " плоскостей") +
                            ") · «Поставить» — робот встанет на самый большой стол или коснитесь стола";
                 case KvArPlacementState.Placed:
@@ -295,6 +307,9 @@ namespace KazistovVvAr
         private string lastHint = string.Empty;
         private float nextStatusTime;
 
+        /// <summary>О не-столе предупреждаем ОДИН раз: иначе каждое касание пола засоряет журнал.</summary>
+        private bool warnedNotATable;
+
         void Awake()
         {
             startTime = Time.unscaledTime;
@@ -335,12 +350,26 @@ namespace KazistovVvAr
             if (ui != null && Time.unscaledTime >= nextStatusTime)
             {
                 nextStatusTime = Time.unscaledTime + Mathf.Max(0.1f, statusIntervalSeconds);
-                string hint = KvArPlacementMath.Hint(State, PlanesFound, FirstPlaneSeconds);
+                string hint = KvArPlacementMath.Hint(State, PlanesFound, FirstPlaneSeconds, TableFound);
                 if (hint != lastHint)
                 {
                     lastHint = hint;
                     ui.SetHint(hint);
                 }
+            }
+        }
+
+        /// <summary>
+        /// ЕСТЬ ЛИ ПРОВЕРЕННЫЙ СТОЛ (а не просто плоскости). Считается по классификатору в
+        /// `KvArPlaneVisualizer`: пол столом больше не считается. Если визуализатора в сцене нет,
+        /// возвращаем true — прежнее поведение (иначе подсказка врала бы «стол не найден» всегда).
+        /// </summary>
+        public bool TableFound
+        {
+            get
+            {
+                if (planeVisualizer == null) return true;
+                return planeVisualizer.BestTable != null;
             }
         }
 
@@ -443,15 +472,30 @@ namespace KazistovVvAr
                 return PlaceSurface(surface, "центр экрана");
 
             if (allowAutoTable && TryAutoTable(out surface))
-                return PlaceSurface(surface, "авто: самый большой стол");
+                return PlaceSurface(surface, "авто: самый большой стол, прошедший проверку");
 
-            Debug.LogWarning("[KvAr] ПОСТАНОВКА: стола не видно — поводите камерой по столу");
+            // ЧЕСТНЫЙ ОТКАЗ. ЧТО БЫЛО: «стола не видно — поводите камерой», без чисел. Оператор не
+            // мог понять, что именно не так: пол найден, но столом не считается; габариты не те;
+            // поверхности ещё уточняются. ТЕПЕРЬ причина берётся у классификатора — с числами.
+            string reason = planeVisualizer != null
+                ? planeVisualizer.DescribeTable
+                : "визуализатор плоскостей не найден · уверенность 0.00";
+            Debug.LogWarning("[KvAr] ПОСТАНОВКА: стола не видно — " + reason +
+                             " · пол столом не считается: нужна столешница выше пола на 0.25 м и ниже глаз на 0.35–1.50 м");
             if (ui != null)
-                ui.SetHint("Стол не найден: поводите камерой по столу 2–3 секунды, затем «Поставить»");
+                ui.SetHint("Стол не найден: " + reason + " · поводите камерой по столу 2–3 секунды, затем «Поставить»");
             return false;
         }
 
-        /// <summary>НАЙТИ САМЫЙ БОЛЬШОЙ ГОРИЗОНТАЛЬНЫЙ СТОЛ (если луч в центр не попал).</summary>
+        /// <summary>
+        /// НАЙТИ СТОЛ ИЗ КЛАССИФИКАТОРА (если луч в центр не попал).
+        ///
+        /// ЧТО БЫЛО: бралась «самая большая найденная горизонтальная плоскость» — то есть, как
+        /// правило, ПОЛ, и робот вставал на пол с подписью «стол».
+        /// ЧТО СТАЛО: `TryGetBestTable` отдаёт только поверхность, прошедшую классификатор; её
+        /// решение (площадь, высота над полом, уверенность) печатается в журнал рядом с фактом
+        /// постановки — по этой строке тестировщик проверяет результат.
+        /// </summary>
         private bool TryAutoTable(out KvArSurfaceHit surface)
         {
             surface = default;
@@ -475,8 +519,9 @@ namespace KazistovVvAr
             surface.distance = arCamera != null
                 ? Vector3.Distance(arCamera.transform.position, center)
                 : area;
-            Debug.Log("[KvAr] ПОСТАНОВКА: луч в центр не попал — ставлю на найденный стол площадью " +
-                      area.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + " м²");
+            Debug.Log("[KvAr] ПОСТАНОВКА: луч в центр не попал — ставлю на самый большой стол, " +
+                      "прошедший проверку: " + planeVisualizer.DescribeTable +
+                      " · причина: " + planeVisualizer.BestTableReason);
             return true;
         }
 
@@ -502,6 +547,12 @@ namespace KazistovVvAr
             SetState(KvArPlacementState.Placed);
             if (ui != null) ui.HideHint();
 
+            // ЧЕСТНАЯ ПРОВЕРКА ПОВЕРХНОСТИ. ЧТО БЫЛО: робот ставился в точку тапа и назывался
+            // «поставленным на стол» — даже если тап попал в ПОЛ (пол в ARCore находится первым и
+            // занимает пол-экрана). ЧТО СТАЛО: тап по полу по-прежнему работает (это законный
+            // запасной путь оператора), но в журнале и на экране сказано, что стол не подтверждён.
+            string check = DescribeSurfaceCheck(surface);
+
             // МАСШТАБ 1:1: реальная высота модели робота в метрах (для владельца — «как настоящий»).
             if (world.Robot != null)
             {
@@ -526,7 +577,7 @@ namespace KazistovVvAr
                 : -1f;
             if (logOnChange)
             {
-                Debug.Log("[KvAr] ПОСТАНОВКА ВЫПОЛНЕНА (" + source + ") · " + surface.Describe() +
+                Debug.Log("[KvAr] ПОСТАНОВКА ВЫПОЛНЕНА (" + source + ") · " + surface.Describe() + check +
                           " · якорь " + world.AnchorPosition.ToString("0.000") +
                           " · отклонение основания от плоскости " +
                           (baseError >= 0f
@@ -538,6 +589,39 @@ namespace KazistovVvAr
             return true;
         }
 
+        /// <summary>
+        /// ПРОВЕРКА ПЛОЩАДКИ ПОСТАНОВКИ КЛАССИФИКАТОРОМ — короткая приписка к строке постановки.
+        ///
+        /// ЧТО БЫЛО. Любая точка плоскости считалась столом, поэтому «ПОСТАНОВКА ВЫПОЛНЕНА» звучала
+        /// одинаково и для столешницы, и для пола. На приёмке это и был вопрос «а он точно на столе?».
+        /// ЧТО СТАЛО. В строке появилась проверка: «стол подтверждён (уверенность …)» либо
+        /// «НЕ стол (причина с числами)». Постановка при этом не отменяется: оператор коснулся сам.
+        /// </summary>
+        private string DescribeSurfaceCheck(KvArSurfaceHit surface)
+        {
+            if (surface.plane == null)
+                return " · проверка площадки: плоскости нет — подтвердить стол нечем";
+
+            if (planeVisualizer == null) planeVisualizer = FindAnyObjectByType<KvArPlaneVisualizer>();
+            if (planeVisualizer == null)
+                return " · проверка площадки: нет визуализатора плоскостей";
+
+            RealTableVerdict verdict = planeVisualizer.ClassifySurface(surface.plane);
+            if (verdict.IsTable)
+                return " · проверка площадки: СТОЛ подтверждён · уверенность " +
+                       verdict.Confidence.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+
+            if (!warnedNotATable)
+            {
+                warnedNotATable = true;
+                Debug.LogWarning("[KvAr] ПОСТАНОВКА: площадка НЕ признана столом — " + verdict.Reason +
+                                 ". Робот поставлен по вашему выбору, но это может быть ПОЛ: столом " +
+                                 "считается поверхность выше пола на 0.25 м и ниже глаз на 0.35–1.50 м");
+                if (ui != null) ui.SetHint("Внимание: это НЕ стол (" + verdict.Reason + ")");
+            }
+            return " · проверка площадки: НЕ стол · " + verdict.Reason;
+        }
+
         /// <summary>ПЕРЕСТАВИТЬ МИР: убрать якорь и вернуться к выбору места.</summary>
         public void RePlace()
         {
@@ -547,7 +631,7 @@ namespace KazistovVvAr
             if (ui != null)
             {
                 ui.HideHint();
-                ui.SetHint(KvArPlacementMath.Hint(State, PlanesFound, FirstPlaneSeconds));
+                ui.SetHint(KvArPlacementMath.Hint(State, PlanesFound, FirstPlaneSeconds, TableFound));
             }
             Debug.Log("[KvAr] ПЕРЕСТАНОВКА: мир убран, наведите камеру на новое место и коснитесь стола");
         }

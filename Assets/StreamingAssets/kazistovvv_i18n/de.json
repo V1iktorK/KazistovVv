@@ -1470,7 +1470,7 @@
     },
     {
       "key": "settings.cb.note",
-      "text": "Das Schema ersetzt Rot/Grün durch das Paar „Orange ↔ Blau“ (Okabe–Ito-Palette): es bleibt bei allen drei Arten der Farbfehlsichtigkeit unterscheidbar. Der Typ wird aus einer Liste gewählt – eigene Farbsätze pro Typ kommen später."
+      "text": "Das Schema ersetzt Rot/Grün durch das Paar „Orange ↔ Blau“ (Okabe–Ito-Palette): es bleibt bei allen drei Arten der Farbfehlsichtigkeit unterscheidbar, daher gilt EIN Satz für alle Typen. Der gewählte Typ wird gespeichert und in der Themenbeschriftung angezeigt; eigene Farbsätze pro Typ gibt es nicht."
     },
     {
       "key": "settings.cb.off",

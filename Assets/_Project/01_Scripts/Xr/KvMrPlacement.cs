@@ -1,5 +1,6 @@
 using UnityEngine;
 using KazistovVvFeatures;
+using KazistovVvRealWorld;
 
 namespace KazistovVvXr
 {
@@ -78,10 +79,23 @@ namespace KazistovVvXr
             get
             {
                 return "постановка: " + (Placed ? "робот поставлен (" + LastCause + ")" : "ждёт реальную поверхность") +
-                       " · луч " + (hasHit ? "попадает в реальную поверхность" : "не попадает") +
+                       " · луч " + (hasHit ? (hitConfirmedTable ? "попадает в ПОДТВЕРЖДЁННЫЙ стол" :
+                                              "попадает в поверхность, но стол не подтверждён") :
+                                             "не попадает") +
                        " · по кнопке подтверждено " + (PlacedByOperator ? "да" : "нет");
             }
         }
+
+        /// <summary>
+        /// ПОД ЛУЧОМ ПОДТВЕРЖДЁННЫЙ СТОЛ (а не просто горизонтальная поверхность).
+        ///
+        /// ЗАЧЕМ. ЧТО БЫЛО: под лучом в MR любая горизонтальная поверхность считалась столом — а пол
+        /// в шлеме тоже горизонтален и его коллайдер есть (он часть меша комнаты). Поэтому «робот
+        /// поставлен на реальную поверхность» одинаково означало и стол, и пол. ТЕПЕРЬ решение
+        /// принимает классификатор (`KvRealTableClassifier`), и состояние честно говорит, подтверждён
+        /// стол или нет. Постановка при этом не блокируется: место выбирает оператор.
+        /// </summary>
+        public bool HitConfirmedTable { get { return hasHit && hitConfirmedTable; } }
 
         private KvMrSurfaces surfaces;
         private Transform mrWorldRoot;
@@ -115,6 +129,20 @@ namespace KazistovVvXr
         private bool hasHit;
         private Vector3 hitPoint;
         private Vector3 hitNormal;
+
+        /// <summary>Под лучом поверхность, которую классификатор признал СТОЛОМ (а не полом/стеной).</summary>
+        private bool hitConfirmedTable;
+
+        /// <summary>Проверка поверхности под лучом словами — уходит в журнал постановки.</summary>
+        private string hitSurfaceReason = "поверхность под лучом ещё не проверялась · уверенность 0.00";
+
+        /// <summary>Поверхность, для которой вердикт уже посчитан (см. `ClassifyHit`: раз в кадр нельзя).</summary>
+        private Collider lastClassifiedCollider;
+        private bool lastClassifiedIsTable;
+        private string lastClassifiedReason = "поверхность ещё не проверялась · уверенность 0.00";
+
+        /// <summary>О неподтверждённой площадке предупреждаем один раз, а не каждый кадр.</summary>
+        private bool warnedUnconfirmed;
         private float startedAt;
         private float nextAutoTry;
         private bool fallbackTried;
@@ -159,7 +187,17 @@ namespace KazistovVvXr
                 return true;                 // израсходовано: второе действие по тому же A не нужно
             }
 
-            active.Place(active.hitPoint, active.hitNormal, "по кнопке A");
+            // ЧЕСТНАЯ ПОДПИСЬ: если поверхность под лучом не подтверждена как стол, оператор узнаёт
+            // об этом ДО постановки (а не читает потом «робот на столе», стоя на полу).
+            if (!active.hitConfirmedTable)
+            {
+                Debug.LogWarning("[KvMr] A: поверхность под лучом НЕ подтверждена как стол — " +
+                                 active.hitSurfaceReason + ". Робот будет поставлен по вашему выбору; " +
+                                 "если это пол, перенесите луч на столешницу");
+            }
+
+            active.Place(active.hitPoint, active.hitNormal,
+                active.hitConfirmedTable ? "по кнопке A (стол подтверждён)" : "по кнопке A (стол НЕ подтверждён)");
             active.PlacedByOperator = true;
             return true;
         }
@@ -228,6 +266,7 @@ namespace KazistovVvXr
         private void UpdateAim()
         {
             hasHit = false;
+            hitConfirmedTable = false;
 
             Vector3 origin;
             Vector3 direction;
@@ -240,6 +279,47 @@ namespace KazistovVvXr
             hasHit = true;
             hitPoint = hit.point;
             hitNormal = hit.normal;
+            hitConfirmedTable = ClassifyHit(hit.collider);
+        }
+
+        /// <summary>
+        /// ПРОВЕРИТЬ ПОВЕРХНОСТЬ ПОД ЛУЧОМ КЛАССИФИКАТОРОМ. Возвращает true, только если это СТОЛ
+        /// (высота над полом, высота относительно глаз и габариты — в норме), и запоминает причину
+        /// для журнала. Пол, стена и «неизвестно» — false, с числами в причине.
+        ///
+        /// ПОЧЕМУ С ПАМЯТЬЮ ПО КОЛЛАЙДЕРУ. Метод вызывается каждый кадр из `UpdateAim`, а разбор
+        /// строит строку с числами. Каждый кадр в шлеме — это мусор в куче ровно тогда, когда
+        /// оператор ведёт луч; поэтому повторный разбор той же поверхности не выполняется.
+        /// </summary>
+        private bool ClassifyHit(Collider collider)
+        {
+            if (collider != null && collider == lastClassifiedCollider)
+            {
+                hitSurfaceReason = lastClassifiedReason;
+                return lastClassifiedIsTable;
+            }
+
+            if (surfaces == null)
+            {
+                hitSurfaceReason = "проверка недоступна: нет компонента реальных поверхностей · уверенность 0.00";
+                return false;
+            }
+
+            RealTableVerdict verdict;
+            if (!surfaces.TryGetSurfaceVerdict(collider, out verdict))
+            {
+                hitSurfaceReason = verdict.Reason;
+                lastClassifiedCollider = collider;
+                lastClassifiedIsTable = false;
+                lastClassifiedReason = hitSurfaceReason;
+                return false;
+            }
+
+            hitSurfaceReason = surfaces.DescribeSurface(collider);
+            lastClassifiedCollider = collider;
+            lastClassifiedIsTable = verdict.IsTable;
+            lastClassifiedReason = hitSurfaceReason;
+            return verdict.IsTable;
         }
 
         /// <summary>Направление луча: из контроллера руки луча, иначе — из головы вниз-вперёд.</summary>
@@ -337,6 +417,16 @@ namespace KazistovVvXr
             Vector3 direction;
             if (headCamera == null) headCamera = Camera.main;
 
+            // ЧТО БЫЛО: автопостановка ставила робота на первую горизонтальную поверхность под
+            // лучом и писала «постановка на реальную поверхность» — то есть пол тоже годился и
+            // назывался столом.
+            // ЧТО СТАЛО: сначала ищем ПОДТВЕРЖДЁННЫЙ классификатором стол (луч руки, затем луч
+            // взгляда). Если его нет — постановка не отменяется (иначе в MR было бы «пусто и
+            // непонятно»), но подписывается честно: «стол не подтверждён», и в журнал уходит причина
+            // с числами. Запасной путь «пол через 25 с» остаётся и тоже подписан честно.
+            RaycastHit unconfirmed = default(RaycastHit);
+            bool hasUnconfirmed = false;
+
             // Сначала рука: оператор обычно уже держит контроллер и смотрит на стол.
             if (KvXrInputSource.TryRayAimPose(out origin, out Quaternion rotation))
             {
@@ -345,8 +435,13 @@ namespace KazistovVvXr
                 if (surfaces.TryRaycast(origin, direction, maxDistance, out fromHand) &&
                     fromHand.normal.y >= minUpNormalDot)
                 {
-                    Place(fromHand.point, fromHand.normal, "авто (луч руки)");
-                    return;
+                    if (ClassifyHit(fromHand.collider))
+                    {
+                        Place(fromHand.point, fromHand.normal, "авто (луч руки): стол подтверждён");
+                        return;
+                    }
+                    unconfirmed = fromHand;
+                    hasUnconfirmed = true;
                 }
             }
 
@@ -359,9 +454,32 @@ namespace KazistovVvXr
                 if (surfaces.TryRaycast(origin, direction, maxDistance, out fromHead) &&
                     fromHead.normal.y >= minUpNormalDot)
                 {
-                    Place(fromHead.point, fromHead.normal, "авто (луч взгляда)");
-                    return;
+                    if (ClassifyHit(fromHead.collider))
+                    {
+                        Place(fromHead.point, fromHead.normal, "авто (луч взгляда): стол подтверждён");
+                        return;
+                    }
+                    if (!hasUnconfirmed)
+                    {
+                        unconfirmed = fromHead;
+                        hasUnconfirmed = true;
+                    }
                 }
+            }
+
+            if (hasUnconfirmed)
+            {
+                if (!warnedUnconfirmed)
+                {
+                    warnedUnconfirmed = true;
+                    Debug.LogWarning("[KvMr] автопостановка: под лучом горизонтальная поверхность, но " +
+                                     "СТОЛОМ она не подтверждена — " + hitSurfaceReason +
+                                     ". Ставлю на неё как на запасное место; если это пол, перенесите луч " +
+                                     "на столешницу и нажмите A");
+                }
+                Place(unconfirmed.point, unconfirmed.normal,
+                    "авто (луч): поверхность НЕ подтверждена как стол — возможно, пол");
+                return;
             }
 
             if (!warnedNoSurface)
@@ -369,7 +487,8 @@ namespace KazistovVvXr
                 warnedNoSurface = true;
                 Debug.Log("[KvMr] автопостановка: реальная горизонтальная поверхность перед оператором " +
                           "пока не найдена — повторяю попытку каждые " + autoPlaceRetrySeconds.ToString("0") +
-                          " с · можно навести луч на стол и нажать A");
+                          " с · можно навести луч на стол и нажать A · " +
+                          (surfaces != null ? surfaces.DescribeRealTable : "поверхностей нет"));
             }
         }
 
@@ -430,11 +549,24 @@ namespace KazistovVvXr
                 Debug.Log("[KvMr] робот ПЕРЕНЕСЁН с пола на реальную поверхность: поверхности комнаты " +
                           "появились позже — постановка исправлена автоматически");
             }
+
+            // ПРОВЕРКА ПЛОЩАДКИ В СТРОКЕ ПОСТАНОВКИ. Раньше строка звучала одинаково и для стола,
+            // и для пола; теперь рядом с фактом постановки стоит вердикт классификатора с числами.
+            bool fromRay = !fromFallback && cause != null &&
+                           (cause.IndexOf("луч", System.StringComparison.Ordinal) >= 0 ||
+                            cause.IndexOf("кнопке A", System.StringComparison.Ordinal) >= 0);
+            string check = fromRay
+                ? (hitConfirmedTable
+                    ? " · площадка: СТОЛ подтверждён"
+                    : " · площадка: стол НЕ подтверждён — " + hitSurfaceReason)
+                : " · площадка: " + (fromFallback ? "пол (запасной путь)" : "без проверки лучом");
+
             Debug.Log("[KvMr] РОБОТ ПОСТАВЛЕН НА РЕАЛЬНУЮ ПОВЕРХНОСТЬ (" + cause + "): точка " +
                       surfacePoint.x.ToString("0.000", c) + "; " + surfacePoint.y.ToString("0.000", c) + "; " +
                       surfacePoint.z.ToString("0.000", c) + " м · нормаль вверх " +
                       surfaceNormal.y.ToString("0.00", c) + " · поворот " + yaw.ToString("0", c) + "° · масштаб " +
-                      (room != null ? room.RobotSize.y.ToString("0.000", c) : "1.000") + " м (высота робота, замер)");
+                      (room != null ? room.RobotSize.y.ToString("0.000", c) : "1.000") + " м (высота робота, замер)" +
+                      check);
         }
 
         /// <summary>Поворот робота лицом к оператору (робот смотрит на него передней стороной).</summary>

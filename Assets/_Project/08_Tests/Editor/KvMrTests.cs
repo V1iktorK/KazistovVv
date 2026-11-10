@@ -26,6 +26,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using KazistovVvXr;
 using KazistovVvXrEditor;
 using NUnit.Framework;
@@ -414,6 +415,225 @@ namespace KazistovVvTests
                 "в VR стенды обязаны остаться видимыми (регрессия §35: «столов или роботов не видно»)");
             Assert.IsFalse(KvXrMrRoom.ShouldPlaceRobotOnRealTable(false),
                 "в VR робота на реальный стол не ставим — реального стола нет");
+        }
+
+        // ==================================================== Ж. РАСПОЗНАВАНИЕ ВИДНО И ДОКАЗУЕМО (S46)
+
+        // ОТКУДА ЭТИ ТЕСТЫ (журнал шлема PICO 4 Ultra, свежая сборка, запуск В РЕЖИМЕ MR).
+        // MR-конвейер стартовал успешно: «подсистема меша найдена (запускаю)», разрешение на
+        // пространственные данные выдано, системный журнал показывает `ipc_sense_client_data_provider_create
+        // scene capture` и `oxr_start_sense_data_provider_async_pico`. А ДАЛЬШЕ — ТИШИНА: за 2+ минуты
+        // НИ ОДНОЙ строки о результате. Причина по коду: весь результат жил за `await` внутри пакета
+        // PICO (`while (true) { PollFuture; if (state == Ready) … }`), у всего запроса не было одного
+        // жёсткого предела, а итоговую строку не печатал никто. Оператор в шлеме не знал: ждать,
+        // настраивать комнату или это поломка.
+        //
+        // ЧТО ПРОВЕРЯЕТСЯ (по приёмке): три исхода запроса различимы и с числами; при нуле столов
+        // оператор получает указание, что делать; ожидание наблюдаемо (растёт время, есть подсказка);
+        // повторного запроса в той же сессии нет; ни одной строки без числа.
+
+        /// <summary>
+        /// ТРИ ИСХОДА ЗАПРОСА РАЗМЕТКИ РАЗЛИЧИМЫ, И В КАЖДОМ ЕСТЬ ЧИСЛА.
+        ///
+        /// ПОЧЕМУ ЧИСТАЯ ФУНКЦИЯ. На устройстве строку иначе не проверить: журнал шлема читают
+        /// глазами. Здесь решение о тексте отделено от `Debug.Log`, поэтому «найдено N», «столов 0»
+        /// и «не ответил за X с» можно доказать машинно — и нельзя «поправить комментарием».
+        /// </summary>
+        [Test]
+        public void SceneQueryResult_ThreeOutcomesAreDistinguishableAndNumeric()
+        {
+            string found = KvMrSurfaces.DescribeSceneQuery(
+                KvSceneQueryOutcome.Found, 2, true, 12.4f, "PxrSemanticLabel.Table");
+            string empty = KvMrSurfaces.DescribeSceneQuery(
+                KvSceneQueryOutcome.Empty, 0, false, 9.1f, "PxrSemanticLabel.Table");
+            string timeout = KvMrSurfaces.DescribeSceneQuery(
+                KvSceneQueryOutcome.Timeout, 0, false, 15f, string.Empty);
+
+            // 1. ФОРМА ОДНА НА ВСЕ ИСХОДЫ — по ней строку ищут в журнале шлема.
+            StringAssert.StartsWith("[KvMr] РЕАЛЬНЫЙ СТОЛ: запрос выполнен за ", found);
+            StringAssert.StartsWith("[KvMr] РЕАЛЬНЫЙ СТОЛ: запрос выполнен за ", empty);
+            StringAssert.StartsWith("[KvMr] РЕАЛЬНЫЙ СТОЛ: запрос выполнен за ", timeout);
+
+            // 2. ИСХОДЫ РАЗЛИЧИМЫ: три разных состояния не должны читаться одинаково.
+            Assert.AreNotEqual(found, empty, "«столы найдены» и «столов нет» дали одинаковый текст");
+            Assert.AreNotEqual(found, timeout, "«столы найдены» и «тайм-аут» дали одинаковый текст");
+            Assert.AreNotEqual(empty, timeout, "«столов нет» и «тайм-аут» дали одинаковый текст");
+
+            // 3. ЧИСЛА. Успех: секунды, число столов, пол.
+            StringAssert.Contains("за 12.40 с", found);
+            StringAssert.Contains("столов 2", found);
+            StringAssert.Contains("пол есть", found);
+            StringAssert.Contains("найдены", found);
+            // Ноль: те же числа, но столов 0 и пола нет.
+            StringAssert.Contains("за 9.10 с", empty);
+            StringAssert.Contains("столов 0", empty);
+            StringAssert.Contains("пол нет", empty);
+            // Тайм-аут: время названо и слово «не ответил» присутствует.
+            StringAssert.Contains("за 15.00 с", timeout);
+            StringAssert.Contains("не ответил за 15.00 с", timeout);
+            StringAssert.Contains("ТАЙМ-АУТ", timeout);
+
+            Assert.IsTrue(Regex.IsMatch(found, @"\d"), "в строке об успехе нет числа: " + found);
+            Assert.IsTrue(Regex.IsMatch(empty, @"\d"), "в строке о нуле столов нет числа: " + empty);
+            Assert.IsTrue(Regex.IsMatch(timeout, @"\d"), "в строке о тайм-ауте нет числа: " + timeout);
+        }
+
+        /// <summary>
+        /// ПРИ НУЛЕ СТОЛОВ И ПРИ ТАЙМ-АУТЕ ОПЕРАТОР УЗНАЁТ, ЧТО ДЕЛАТЬ.
+        ///
+        /// ЧЕГО НЕЛЬЗЯ ДЕЛАТЬ. Печатать «включите разметку» поверх «стол найден»: это читается как
+        /// поломка. Поэтому подсказка выдаётся по отдельному решению
+        /// (`SceneQueryNeedsOperatorAction`), а не всегда.
+        /// </summary>
+        [Test]
+        public void SceneQueryResult_ZeroTablesSaysWhatToDo()
+        {
+            string empty = KvMrSurfaces.DescribeSceneQuery(
+                KvSceneQueryOutcome.Empty, 0, false, 9.1f, "PxrSemanticLabel.Table");
+
+            // «0 столов» — это не «в комнате нет стола», а «комната не размечена».
+            StringAssert.Contains("разметки комнаты нет", empty);
+            StringAssert.Contains("столов 0", empty);
+
+            Assert.IsTrue(KvMrSurfaces.SceneQueryNeedsOperatorAction(KvSceneQueryOutcome.Empty),
+                "при нуле столов оператор обязан получить указание, что делать");
+            Assert.IsTrue(KvMrSurfaces.SceneQueryNeedsOperatorAction(KvSceneQueryOutcome.Timeout),
+                "при тайм-ауте оператор обязан получить указание, что делать");
+            Assert.IsFalse(KvMrSurfaces.SceneQueryNeedsOperatorAction(KvSceneQueryOutcome.Found),
+                "поверх «столы найдены» подсказка «включите разметку» читается как поломка");
+
+            string hint = KvMrSurfaces.SceneQueryOperatorHint();
+            StringAssert.Contains("включите разметку комнаты в настройках PICO", hint);
+            StringAssert.Contains("нельзя", hint, "подсказка обязана объяснять ПОСЛЕДСТВИЕ, а не только действие");
+            StringAssert.Contains("постановка идёт по поверхностям меша", hint,
+                "подсказка обязана сказать, что происходит ВМЕСТО разметки");
+
+            // ПУТЬ В МЕНЮ НЕ ВЫДУМАН. В пакете SDK, который лежит в проекте, пунктов меню нет —
+            // значит и в подсказке их быть не должно (выдуманный путь хуже отсутствующего).
+            StringAssert.DoesNotContain("→", hint);
+        }
+
+        /// <summary>
+        /// ОЖИДАНИЕ НАБЛЮДАЕМО: время растёт, числа есть, подсказка непустая.
+        ///
+        /// ДЕФЕКТ, КОТОРЫЙ ЭТО ЛОВИТ. Пока поверхностей не было, в журнал не уходило НИЧЕГО
+        /// (`UpdateRealTableReport` на нуле молча выходил): «ждём» и «сломалось» выглядели одинаково.
+        /// </summary>
+        [Test]
+        public void WaitingStatus_GrowsWithTimeAndSurfacesAndHintsAreNotEmpty()
+        {
+            string at5 = KvMrSurfaces.DescribeWaitingSurfaces(0, 0, 5f);
+            string at9 = KvMrSurfaces.DescribeWaitingSurfaces(0, 0, 9f);
+
+            // 1. ВРЕМЯ РАСТЁТ в самой строке — по нему видно, что приложение живо.
+            Assert.AreNotEqual(at5, at9,
+                "строка ожидания не меняется со временем — «ждём» снова не отличить от «сломалось»");
+            StringAssert.Contains("меш 0", at5);
+            StringAssert.Contains("семантика 0", at5);
+            StringAssert.Contains("ждём 5.00 с", at5);
+            StringAssert.Contains("ждём 9.00 с", at9);
+            StringAssert.StartsWith("[KvMr] реальные поверхности: ", at5);
+
+            // 2. ПОДСКАЗКА НЕПУСТАЯ: строка обязана говорить, что делать.
+            StringAssert.Contains("что делать:", at5);
+            int tailStart = at5.IndexOf("что делать:", StringComparison.Ordinal) + "что делать:".Length;
+            Assert.Greater(at5.Length - tailStart, 20, "подсказка в строке ожидания пустая: " + at5);
+
+            // 3. ПОВЕРХНОСТИ ПОЯВИЛИСЬ — строка ДРУГАЯ, ждать больше нечего.
+            string withSurfaces = KvMrSurfaces.DescribeWaitingSurfaces(3, 1, 5f);
+            Assert.AreNotEqual(at5, withSurfaces,
+                "появление поверхностей не изменило строку — оператор продолжит ждать на пустом месте");
+            StringAssert.Contains("меш 3", withSurfaces);
+            StringAssert.Contains("семантика 1", withSurfaces);
+
+            // 4. НЕ ЧАЩЕ РАЗА В СЕКУНДУ: иначе журнал забивается и в нём тонет остальное.
+            float[] moments = { 0f, 1f, 19.9f, 20f, 59f, 60f, 600f, float.NaN };
+            for (int i = 0; i < moments.Length; i++)
+                Assert.GreaterOrEqual(KvMrSurfaces.WaitingStatusIntervalSeconds(moments[i]), 1f,
+                    "строка ожидания печатается чаще раза в секунду при waited=" + moments[i]);
+        }
+
+        /// <summary>
+        /// ПОВТОРНЫЙ ЗАПРОС НЕ СПАМИТ: признак «уже спрашивали» блокирует второй запрос в сессии.
+        ///
+        /// ЧТО БЫЛО. Условие запроса стояло прямо в `Update` и включало `!Ready`: стоило появиться
+        /// одному коллайдеру меша — запрос не выполнялся больше НИКОГДА, и в журнале не было ни
+        /// «столов N», ни «разметки нет». Обратная ошибка (спрашивать каждый кадр) так же плоха:
+        /// это нативные вызовы PICO.
+        /// </summary>
+        [Test]
+        public void SceneQueryGate_AsksOncePerSessionAndNeverSpams()
+        {
+            Assert.IsTrue(KvMrSurfaces.ShouldRequestSceneAnchors(false, false, true, 8f, 8f),
+                "через задержку запрос разметки обязан выполняться");
+            Assert.IsFalse(KvMrSurfaces.ShouldRequestSceneAnchors(false, false, true, 7.9f, 8f),
+                "запрос раньше задержки — лишний нативный вызов");
+            Assert.IsFalse(KvMrSurfaces.ShouldRequestSceneAnchors(false, false, false, 100f, 8f),
+                "подсистема меша ещё не выяснена — порядок строк в журнале был бы непонятным");
+            Assert.IsFalse(KvMrSurfaces.ShouldRequestSceneAnchors(true, false, true, 100f, 8f),
+                "признак «уже спрашивали» НЕ блокирует повторный запрос — это спам нативных вызовов");
+            Assert.IsFalse(KvMrSurfaces.ShouldRequestSceneAnchors(false, true, true, 100f, 8f),
+                "второй запрос поверх уже выполняющегося — спам");
+            Assert.IsFalse(KvMrSurfaces.ShouldRequestSceneAnchors(false, false, true, float.NaN, 8f),
+                "по нечислу времени запрос не решается: мусор на входе не должен ничего запускать");
+
+            // СЕССИЯ ЦЕЛИКОМ: 10 минут (600 с) — ровно ОДИН запрос.
+            bool asked = false;
+            int requests = 0;
+            for (int second = 0; second < 600; second++)
+            {
+                if (!KvMrSurfaces.ShouldRequestSceneAnchors(asked, false, true, second, 8f)) continue;
+                asked = true;                 // так же, как в `UpdateSceneAnchorQuery`: ДО запуска
+                requests++;
+            }
+            Assert.AreEqual(1, requests,
+                "запрос разметки выполнился " + requests + " раз за сессию — обязан ровно один");
+        }
+
+        /// <summary>
+        /// АНТИ-ВАКУУМ: В КАЖДОЙ СТРОКЕ ЕСТЬ ЧИСЛО.
+        ///
+        /// Зачем: строка без числа не доказывает ничего. «Стол не найден» и «стол не найден, ждём 42.0 с»
+        /// читаются по-разному — первое похоже на поломку, второе показывает, что приложение работает.
+        /// Проверяется ВЕСЬ набор исходов, а не выбранные примеры.
+        /// </summary>
+        [Test]
+        public void ReportLines_AllCarryNumbers_NoVacuum()
+        {
+            var lines = new List<string>();
+            int[] tableCounts = { 0, 1, 3 };
+            bool[] floors = { false, true };
+
+            foreach (KvSceneQueryOutcome outcome in Enum.GetValues(typeof(KvSceneQueryOutcome)))
+                for (int i = 0; i < tableCounts.Length; i++)
+                    for (int f = 0; f < floors.Length; f++)
+                        lines.Add(KvMrSurfaces.DescribeSceneQuery(outcome, tableCounts[i], floors[f], 7.5f, "код"));
+
+            float[] moments = { 0f, 1.5f, 25f, 300f };
+            for (int i = 0; i < moments.Length; i++)
+            {
+                lines.Add(KvMrSurfaces.DescribeWaitingSurfaces(0, 0, moments[i]));
+                lines.Add(KvMrSurfaces.DescribeWaitingSurfaces(2, 1, moments[i]));
+            }
+
+            Assert.Greater(lines.Count, 10, "строк для проверки слишком мало — проверка была бы вакуумной");
+
+            var mute = new List<string>();
+            for (int i = 0; i < lines.Count; i++)
+            {
+                if (!Regex.IsMatch(lines[i], @"\d")) mute.Add("без числа: " + lines[i]);
+                else if (lines[i].IndexOf("стол", StringComparison.Ordinal) < 0 &&
+                         lines[i].IndexOf("меш", StringComparison.Ordinal) < 0)
+                    mute.Add("ни о чём: " + lines[i]);
+            }
+            Assert.AreEqual(0, mute.Count,
+                "строки без чисел (или без предмета) — тестировщик не отличит «ждём» от «сломано»: " +
+                string.Join(" | ", mute.ToArray()));
+
+            // Итог запроса обязан нести «столов <число>» — это и есть доказательство распознавания.
+            for (int i = 0; i < lines.Count; i++)
+                if (lines[i].StartsWith("[KvMr] РЕАЛЬНЫЙ СТОЛ:", StringComparison.Ordinal))
+                    StringAssert.IsMatch(@"столов\s+\d+", lines[i]);
         }
     }
 }

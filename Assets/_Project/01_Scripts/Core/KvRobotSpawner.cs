@@ -47,15 +47,30 @@ namespace KazistovVv.Core
                 return null;
             }
 
-            GameObject prefab = Resources.Load<GameObject>(model.PrefabPath);
-            if (prefab == null)
+            // ПОСЛЕДНЯЯ ЛИНИЯ ОБОРОНЫ: МОДЕЛЬ БЕЗ ГЕОМЕТРИИ НЕ СОЗДАЁТСЯ (12.11.2026).
+            //
+            // ЧТО БЫЛО. Создание проверяло только наличие префаба и суставов. У 11 моделей каталога
+            // префаб есть, суставы есть — и создавался робот БЕЗ ЕДИНОГО МЕША: на столе и в шлеме
+            // ничего не появлялось, хотя журнал бодро писал «создан робот «UR5» · суставов 6».
+            //
+            // ЧЕМ ПЛОХО. Оператор нажимает «Робот: UR5» и не видит ничего: «нажал — не работает».
+            // Хуже того, `KvRobotCommands.ApplyModel` и `KvArContent.SpawnModel` удаляют текущего
+            // робота ДО создания нового, поэтому выбор недоступной модели уносил рабочего робота.
+            //
+            // ЧТО СТАЛО. Отказ с названной причиной (а не молчаливая пустышка) — здесь, в одной
+            // точке, чтобы ни один путь создания не мог обойти проверку. Вызывающие, которые
+            // удаляют робота перед созданием, спрашивают `KvRobotCatalog.HasGeometry` ЗАРАНЕЕ
+            // (`UnavailableReason`), иначе отказ случился бы слишком поздно.
+            if (!KvRobotCatalog.HasGeometry(model))
             {
-                // Пробуем без приставки «Resources/» — путь мог быть записан по-разному.
-                string alt = model.PrefabPath.StartsWith("Resources/", StringComparison.Ordinal)
-                    ? model.PrefabPath.Substring("Resources/".Length)
-                    : "Resources/" + model.PrefabPath;
-                prefab = Resources.Load<GameObject>(alt);
+                Debug.LogWarning("[KvRobot] модель «" + model.Title + "» НЕ создана: у её префаба нет " +
+                                 "разрешаемой геометрии (меши отсутствуют в проекте) — в сцене был бы " +
+                                 "робот без единого меша. Недоступные модели: " +
+                                 KvRobotCatalog.DescribeGeometry());
+                return null;
             }
+
+            GameObject prefab = LoadPrefab(model);
             if (prefab == null)
             {
                 Debug.LogWarning("[KvRobot] не найден префаб модели «" + model.Title + "» по пути " +
@@ -229,11 +244,98 @@ namespace KazistovVv.Core
             }
         }
 
+        // ============================================================================================
+        // РАЗРЕШЕНИЕ ПРЕФАБА МОДЕЛИ — ОДНА ФУНКЦИЯ НА ВСЕХ (найдено тестом сессии S46).
+        //
+        // ЧТО БЫЛО. Путь в каталоге записан с приставкой: `Resources/Models/Robots/ur5`.
+        // `Resources.Load` ждёт путь ОТ папки `Resources` (`Models/Robots/ur5`), поэтому сырой путь
+        // НЕ разрешается никогда. `Create` это знал и после неудачи пробовал путь без приставки —
+        // а `DescribeAvailability` (диагностика «какие модели реально можно создать») не пробовал
+        // и складывал из этого строку «префаб есть у 0 · без префаба 12» при полностью рабочих
+        // префабах. То есть ровно та строка, которой отчёт владельцу доказывает «роботы перенесены»,
+        // всегда говорила обратное.
+        //
+        // ЧЕМ ЭТО ГРОЗИЛО. Два разных правила для одного пути — это класс дефекта, который уже был
+        // в проекте (`SetPassthrough` звали из одного места из двух, и вся ветка MR оказалась
+        // мёртвой). Здесь третий вариант пути появился бы при первой же правке любого из двух мест.
+        //
+        // ЧТО СТАЛО. Разрешение живёт в ОДНОМ месте (`LoadPrefab`): сначала путь как записан,
+        // затем — без приставки `Resources/`. Им пользуются и создание робота, и диагностика,
+        // и тесты. `LoadPrefab` возвращает null, если префаба нет; исключений не бросает.
+        // ============================================================================================
+
+        /// <summary>Приставка, которую `Resources.Load` НЕ принимает (путь считается от папки `Resources`).</summary>
+        public const string ResourcesPrefix = "Resources/";
+
+        /// <summary>
+        /// ПУТЬ МОДЕЛИ В ВИДЕ, КОТОРЫЙ ПРИНИМАЕТ `Resources.Load`: без приставки `Resources/`.
+        /// Нужен там, где путь печатается в журнал или сверяется с чем-то ещё (диагностика, тесты).
+        /// </summary>
+        public static string ResourcePathOf(KvRobotModel model)
+        {
+            if (model == null || string.IsNullOrEmpty(model.PrefabPath)) return "";
+            string path = model.PrefabPath;
+            return path.StartsWith(ResourcesPrefix, StringComparison.Ordinal)
+                ? path.Substring(ResourcesPrefix.Length)
+                : path;
+        }
+
+        /// <summary>
+        /// ПРЕФАБ МОДЕЛИ ИЗ `Resources` — ЕДИНСТВЕННЫЙ ПУТЬ ЗАГРУЗКИ.
+        ///
+        /// Пробует путь как записан в каталоге, затем — без приставки `Resources/` (каталог хранит
+        /// путь вместе с приставкой, а `Resources.Load` её не понимает). Возвращает null, если
+        /// префаба нет: это законное состояние, вызывающий обязан его назвать, а не падать.
+        /// </summary>
+        public static GameObject LoadPrefab(KvRobotModel model)
+        {
+            if (model == null || string.IsNullOrEmpty(model.PrefabPath)) return null;
+
+            // 1) ПУТЬ КАК ЗАПИСАН В КАТАЛОГЕ.
+            GameObject prefab = Resources.Load<GameObject>(model.PrefabPath);
+            if (prefab != null) return prefab;
+
+            // 2) ДРУГОЙ ВАРИАНТ ЗАПИСИ ТОГО ЖЕ ПУТИ — ровно один (без приставки, а если её не
+            //    было — с ней). Второй запасной вариант завёл бы третье правило для одного пути.
+            string alternative = model.PrefabPath.StartsWith(ResourcesPrefix, StringComparison.Ordinal)
+                ? model.PrefabPath.Substring(ResourcesPrefix.Length)
+                : ResourcesPrefix + model.PrefabPath;
+            if (string.IsNullOrEmpty(alternative) || alternative == model.PrefabPath) return null;
+            return Resources.Load<GameObject>(alternative);
+        }
+
+        /// <summary>Есть ли у модели префаб, из которого её МОЖНО создать (без загрузки суставов).</summary>
+        public static bool HasPrefab(KvRobotModel model)
+        {
+            return LoadPrefab(model) != null;
+        }
+
+        /// <summary>
+        /// ЧЕСТНАЯ СТРОКА ПРО ОДНУ МОДЕЛЬ: есть префаб или нет, и по какому пути искали.
+        /// Отдельно нужна для случая «модели нет в каталоге» — тогда ответ обязан быть «нет
+        /// префаба», а не исключение или пустая строка.
+        /// </summary>
+        public static string DescribeModelAvailability(KvRobotModel model)
+        {
+            if (model == null) return "модель не задана — префаба нет";
+            if (string.IsNullOrEmpty(model.Id)) return "у модели нет id — префаба нет";
+
+            if (LoadPrefab(model) != null)
+                return model.Id + ": префаб есть (" + ResourcePathOf(model) + ")";
+
+            return model.Id + ": НЕТ ПРЕФАБА (искали «" + model.PrefabPath + "» и «" +
+                   ResourcePathOf(model) + "»)";
+        }
+
         /// <summary>
         /// Строка для журнала: какие модели каталога РЕАЛЬНО можно создать.
         ///
         /// Нужна, чтобы отчёт не врал: «в каталоге 12 моделей» и «создаются 9» — разные вещи.
         /// Здесь проверяется наличие префаба, а не суставов (суставы требуют загрузки сцены).
+        ///
+        /// ГРУЗИТ ТЕМ ЖЕ ПУТЁМ, ЧТО И СОЗДАНИЕ (`LoadPrefab`). До этого здесь стоял сырой путь
+        /// каталога, который `Resources.Load` не разрешает, — и диагностика утверждала «префаб есть
+        /// у 0» при полностью доступных префабах.
         /// </summary>
         public static string DescribeAvailability()
         {
@@ -241,13 +343,10 @@ namespace KazistovVv.Core
             int ok = 0, noPrefab = 0;
             foreach (KvRobotModel m in KvRobotCatalog.All)
             {
-                GameObject prefab = Resources.Load<GameObject>(m.PrefabPath);
-                if (prefab == null)
-                {
-                    noPrefab++;
-                    sb.Append(m.Id).Append(": НЕТ ПРЕФАБА; ");
-                }
-                else ok++;
+                if (HasPrefab(m)) { ok++; continue; }
+                noPrefab++;
+                // Причина называется по модели: «НЕТ ПРЕФАБА» + оба пути, которые пробовали.
+                sb.Append(DescribeModelAvailability(m)).Append("; ");
             }
             return "моделей " + KvRobotCatalog.All.Length + " · префаб есть у " + ok +
                    (noPrefab > 0 ? " · без префаба " + noPrefab + " (" + sb + ")" : "");

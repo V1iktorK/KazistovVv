@@ -1470,7 +1470,7 @@
     },
     {
       "key": "settings.cb.note",
-      "text": "The scheme replaces red/green with the \"orange ↔ blue\" pair (Okabe–Ito palette): it stays distinguishable for all three types of color blindness. The type is chosen from a single list — separate color sets per type will come later."
+      "text": "The scheme replaces red/green with the \"orange ↔ blue\" pair (Okabe–Ito palette): it stays distinguishable for all three types of color blindness, so ONE set covers every type. The chosen type is remembered and shown in the theme caption; there are no separate per-type sets."
     },
     {
       "key": "settings.cb.off",

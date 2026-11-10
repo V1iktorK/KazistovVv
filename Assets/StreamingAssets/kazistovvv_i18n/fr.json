@@ -1470,7 +1470,7 @@
     },
     {
       "key": "settings.cb.note",
-      "text": "Le schéma remplace le rouge/vert par la paire « orange ↔ bleu » (palette Okabe–Ito) : elle reste distinguable pour les trois types de daltonisme. Le type se choisit dans une liste unique — des palettes par type viendront plus tard."
+      "text": "Le schéma remplace le rouge/vert par la paire « orange ↔ bleu » (palette Okabe–Ito) : elle reste distinguable pour les trois types de daltonisme, donc UN seul jeu vaut pour tous. Le type choisi est mémorisé et affiché dans la légende du thème ; il n'y a pas de palettes par type."
     },
     {
       "key": "settings.cb.off",

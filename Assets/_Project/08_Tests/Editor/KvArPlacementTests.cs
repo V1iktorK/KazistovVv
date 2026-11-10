@@ -1044,6 +1044,219 @@ namespace KazistovVvTests
             StringAssert.Contains("cameraGate = GetComponent<KvArCameraGate>()", runtime,
                 "рантайм не держит ссылку на сторож камеры");
         }
+
+        // ================================================ ПОВЕРХНОСТИ: МОЛЧАНИЕ — ЭТО ДЕФЕКТ (S45)
+
+        // ЧТО БЫЛО. `KvArPlaneVisualizer.LogTableOncePerSecond()` печатал состояние только для трёх
+        // случаев: найден стол, найден пол, «плоскости есть, но стола нет». Если плоскостей НОЛЬ
+        // (обычная ситуация: планшет лежит на столе и камера не видит поверхностей) — не печаталось
+        // НИЧЕГО. Факт с планшета (свежая сборка, 75 с работы, ARCore работает, сцена ArMain): в
+        // журнале была только стартовая строка «сетка плоскостей включена» и ни одного слова о том,
+        // что поверхностей нет. ЧЕМ ПЛОХО. Оператор не понимает, работает ли распознавание, а
+        // приёмка не может отличить «поверхностей нет» от «код сломался» — оба случая выглядят как
+        // тишина. ЧТО СТАЛО. Решение «что печатать» вынесено в ЧИСТЫЕ функции визуализатора
+        // (`SurfaceLogStateOf`, `DescribeSurfaceState`, `DescribeSurfaceDiagnosis`, `SurfaceStateKey`,
+        // `ShouldLogSurfaceState`) и проверяется здесь без устройства и без планшета.
+
+        /// <summary>
+        /// (а) ПЛОСКОСТЕЙ НОЛЬ — СТРОКА ОБЯЗАТЕЛЬНА, С ЧИСЛАМИ И ПОДСКАЗКОЙ.
+        /// Раньше это состояние не печаталось вообще; тест падал бы на пустой строке.
+        /// </summary>
+        [Test]
+        public void SurfaceLog_NoPlanes_IsNeverSilent()
+        {
+            Assert.AreEqual(KvArPlaneVisualizer.KvSurfaceLogState.NoPlanes,
+                KvArPlaneVisualizer.SurfaceLogStateOf(false, false, 0,
+                    ARSessionState.SessionTracking, 4f),
+                "нулевые плоскости при живом трекинге — это своё состояние «плоскостей нет»");
+
+            string line = KvArPlaneVisualizer.DescribeSurfaceState(
+                0, 0, ARSessionState.SessionTracking, 4f, false, false);
+
+            Assert.IsFalse(string.IsNullOrWhiteSpace(line),
+                "ноль плоскостей обязан давать строку журнала: молчание — это дефект");
+            StringAssert.StartsWith("[KvAr] ПОВЕРХНОСТИ: ", line,
+                "строку ищет приёмка по этому префиксу: " + line);
+            StringAssert.Contains("плоскостей 0", line, "нет числа плоскостей: " + line);
+            StringAssert.Contains("трекаблов 0", line, "нет числа трекаблов: " + line);
+            StringAssert.Contains("трекинг SessionTracking", line,
+                "состояние трекинга не фактическое: " + line);
+            StringAssert.Contains("ждём 4 с", line, "нет времени ожидания в секундах: " + line);
+            StringAssert.Contains("что делать:", line, "оператору не сказано, что делать: " + line);
+            StringAssert.Contains("медленно поводите планшетом над столом", line,
+                "нет подсказки про движение планшетом: " + line);
+            StringAssert.Contains("добавьте света", line, "нет подсказки про освещение: " + line);
+        }
+
+        /// <summary>
+        /// (б) ПЛОСКОСТЕЙ НЕТ ДОЛЬШЕ 15 с ПРИ ЖИВОМ ТРЕКИНГЕ — ДОПОЛНИТЕЛЬНАЯ ДИАГНОСТИКА С ЧИСЛОМ
+        /// СЕКУНД. Она отвечает на вопрос приёмки «кто виноват»: подсистема, режим обнаружения или
+        /// сам ARCore, который не строит карту.
+        /// </summary>
+        [Test]
+        public void SurfaceLog_NoPlanesLongerThan15Seconds_AddsDiagnosis()
+        {
+            Assert.AreEqual(KvArPlaneVisualizer.KvSurfaceLogState.NoPlanes,
+                KvArPlaneVisualizer.SurfaceLogStateOf(false, false, 0,
+                    ARSessionState.SessionTracking, 14f),
+                "14 с ожидания — ещё обычное состояние, без диагностики");
+            Assert.AreEqual(KvArPlaneVisualizer.KvSurfaceLogState.NoPlanesLong,
+                KvArPlaneVisualizer.SurfaceLogStateOf(false, false, 0,
+                    ARSessionState.SessionTracking, KvArPlaneVisualizer.SurfaceWaitSeconds),
+                "на пороге 15 с состояние обязано смениться на «плоскостей нет долго»");
+            Assert.AreEqual(15f, KvArPlaneVisualizer.SurfaceWaitSeconds, 0.001f,
+                "порог ожидания обязан быть 15 с — иначе диагностика не совпадёт с журналом устройства");
+
+            string line = KvArPlaneVisualizer.DescribeSurfaceDiagnosis(0, 0,
+                ARSessionState.SessionTracking, 16f, "Horizontal | Vertical", "Horizontal | Vertical",
+                true, null);
+
+            StringAssert.StartsWith("[KvAr] ПОВЕРХНОСТИ: ДИАГНОСТИКА (плоскостей нет 16 с", line,
+                "форма «ДИАГНОСТИКА (плоскостей нет N с …)» — та, что ищет гейт: " + line);
+            StringAssert.Contains("при трекинге SessionTracking", line,
+                "в диагностике нет фактического состояния трекинга: " + line);
+            StringAssert.Contains("подсистема плоскостей: работает", line,
+                "не сказано, работает ли подсистема: " + line);
+            StringAssert.Contains("запрошено: Horizontal | Vertical", line,
+                "не напечатаны запрошенные режимы обнаружения: " + line);
+            StringAssert.Contains("применяется: Horizontal | Vertical", line,
+                "не напечатан фактически применяемый режим обнаружения: " + line);
+            StringAssert.Contains("трекаблов: 0", line, "нет числа трекаблов: " + line);
+            StringAssert.Contains("что делать:", line, "в диагностике нет подсказки оператору: " + line);
+        }
+
+        /// <summary>
+        /// (в) ПЛОСКОСТЬ ЕСТЬ, СТОЛА НЕТ — ОТДЕЛЬНАЯ ФОРМУЛИРОВКА. Её нельзя путать с «плоскостей 0»:
+        /// в первом случае распознавание работает и надо водить камерой по столешнице, во втором —
+        /// не работает вообще и надо искать свет и текстуру.
+        /// </summary>
+        [Test]
+        public void SurfaceLog_PlanesWithoutTable_HasItsOwnWording()
+        {
+            Assert.AreEqual(KvArPlaneVisualizer.KvSurfaceLogState.PlanesNoTable,
+                KvArPlaneVisualizer.SurfaceLogStateOf(false, false, 2,
+                    ARSessionState.SessionTracking, 0f),
+                "две плоскости без стола — это состояние «плоскости есть, стола нет»");
+
+            string line = KvArPlaneVisualizer.DescribeSurfaceState(2, 2, ARSessionState.SessionTracking, 0f,
+                false, false, "стол не найден: площадь 0.10 м² меньше столешницы · уверенность 0.00");
+
+            StringAssert.Contains("плоскости есть (2)", line, "нет числа найденных плоскостей: " + line);
+            StringAssert.Contains("но стола нужной площади нет", line,
+                "потеряна прежняя формулировка «плоскости есть, стола нет»: " + line);
+            StringAssert.Contains("площадь 0.10 м²", line, "вердикт классификатора потерян: " + line);
+            Assert.IsFalse(line.Contains("плоскостей 0"),
+                "строка «плоскости есть» не имеет права печатать «плоскостей 0»: " + line);
+            Assert.IsFalse(line.Contains("что делать: медленно поводите"),
+                "подсказка для нуля плоскостей попала в случай «плоскости есть»: " + line);
+        }
+
+        /// <summary>
+        /// (г) СТОЛ НАЙДЕН — ПРЕЖНЯЯ ФОРМУЛИРОВКА ЦЕЛА, И ПРАВИЛО «ПЛОСКОСТЕЙ НЕТ» ЕГО НЕ
+        /// ПЕРЕХВАТЫВАЕТ (анти-вакуум). Без этой проверки «лечение молчания» могло бы само сломать
+        /// рабочий случай: оператор получал бы «поводите планшетом» при уже подсвеченном столе.
+        /// </summary>
+        [Test]
+        public void SurfaceLog_TableFound_KeepsPreviousWording_AndIsNotSwallowedByNoPlanesRule()
+        {
+            Assert.AreEqual(KvArPlaneVisualizer.KvSurfaceLogState.Table,
+                KvArPlaneVisualizer.SurfaceLogStateOf(true, false, 1,
+                    ARSessionState.SessionTracking, 0f),
+                "найденный стол — рабочий случай, он главнее любых «нет»");
+            Assert.AreEqual(KvArPlaneVisualizer.KvSurfaceLogState.Table,
+                KvArPlaneVisualizer.SurfaceLogStateOf(true, false, 0,
+                    ARSessionState.SessionTracking, 30f),
+                "правило «плоскостей нет» перехватило рабочий случай: стол уже выбран классификатором");
+            Assert.AreEqual(KvArPlaneVisualizer.KvSurfaceLogState.FloorOnly,
+                KvArPlaneVisualizer.SurfaceLogStateOf(false, true, 1,
+                    ARSessionState.SessionTracking, 0f),
+                "найденный пол обязан остаться отдельным состоянием");
+
+            string line = KvArPlaneVisualizer.DescribeSurfaceState(1, 1, ARSessionState.SessionTracking, 0f,
+                true, true,
+                "стол найден · площадь 0.82 м² · высота над полом 0.74 м · уверенность 0.86" +
+                " · уровень пола 0.00 м · причина: разметка ARCore Table");
+
+            StringAssert.StartsWith("[KvAr] ПОВЕРХНОСТИ: стол найден · площадь 0.82 м²", line,
+                "потеряна прежняя формулировка строки про стол: " + line);
+            StringAssert.Contains("уровень пола 0.00 м", line, "в строке про стол нет уровня пола: " + line);
+            StringAssert.Contains("· причина:", line, "в строке про стол нет причины выбора: " + line);
+            StringAssert.Contains("подсвечен зелёным, робот встанет на него по кнопке «Поставить»", line,
+                "потеряна прежняя фраза про подсветку и кнопку «Поставить»: " + line);
+            Assert.IsFalse(line.Contains("плоскостей 0"),
+                "строка про стол не должна нести «плоскостей 0»: " + line);
+            Assert.IsFalse(line.Contains("что делать: медленно поводите"),
+                "подсказка «нет поверхностей» попала в рабочий случай: " + line);
+        }
+
+        /// <summary>
+        /// (д) ПРАВИЛО «ПЕЧАТАТЬ ПРИ СМЕНЕ» — БЕЗ СПАМА. Проверяется чистая функция сравнения
+        /// состояний: рост секунд ожидания состояние не меняет, а переход в «долго ждём» и смена
+        /// трекинга — меняют, и каждая такая строка печатается ровно один раз.
+        /// </summary>
+        [Test]
+        public void SurfaceLog_PrintsOnlyOnStateChange()
+        {
+            ARSessionState tracking = ARSessionState.SessionTracking;
+            string first = KvArPlaneVisualizer.SurfaceStateKey(false, false, 0, tracking, 3f);
+            string sameState = KvArPlaneVisualizer.SurfaceStateKey(false, false, 0, tracking, 9f);
+
+            Assert.IsTrue(KvArPlaneVisualizer.ShouldLogSurfaceState(string.Empty, first),
+                "первая строка обязана печататься");
+            Assert.IsFalse(KvArPlaneVisualizer.ShouldLogSurfaceState(first, sameState),
+                "секунды ожидания не меняют состояние — повторной строки быть не должно");
+            Assert.IsFalse(KvArPlaneVisualizer.ShouldLogSurfaceState(first, first),
+                "одинаковый ключ дал повторную строку — это спам");
+
+            string longWait = KvArPlaneVisualizer.SurfaceStateKey(false, false, 0, tracking,
+                KvArPlaneVisualizer.SurfaceWaitSeconds + 1f);
+            Assert.IsTrue(KvArPlaneVisualizer.ShouldLogSurfaceState(sameState, longWait),
+                "переход в «плоскостей нет долго» обязан напечатать диагностику");
+            Assert.IsFalse(KvArPlaneVisualizer.ShouldLogSurfaceState(longWait,
+                    KvArPlaneVisualizer.SurfaceStateKey(false, false, 0, tracking, 90f)),
+                "диагностика повторилась на следующей секунде — это спам");
+
+            string table = KvArPlaneVisualizer.SurfaceStateKey(true, false, 1, tracking, 0f);
+            Assert.IsTrue(KvArPlaneVisualizer.ShouldLogSurfaceState(longWait, table),
+                "смена на «стол найден» не напечаталась");
+            Assert.IsTrue(KvArPlaneVisualizer.ShouldLogSurfaceState(
+                    KvArPlaneVisualizer.SurfaceStateKey(false, false, 0, tracking, 1f),
+                    KvArPlaneVisualizer.SurfaceStateKey(false, false, 0,
+                        ARSessionState.SessionInitializing, 1f)),
+                "потеря трекинга — другая строка, её надо печатать сразу");
+        }
+
+        /// <summary>
+        /// ПОТЕРЯ ТРЕКИНГА — ОТДЕЛЬНОЕ СОСТОЯНИЕ С ПРИЧИНОЙ, А НЕ МОЛЧАНИЕ. Раньше Limited/None
+        /// попадали в общий случай «нет», который при нуле плоскостей не печатался: оператор видел
+        /// неподвижную картинку и пустой журнал.
+        /// </summary>
+        [Test]
+        public void SurfaceLog_TrackingLost_IsItsOwnStateWithReason()
+        {
+            Assert.AreEqual(KvArPlaneVisualizer.KvSurfaceLogState.TrackingLost,
+                KvArPlaneVisualizer.SurfaceLogStateOf(false, false, 0,
+                    ARSessionState.SessionInitializing, 5f),
+                "без трекинга состояние обязано называться «трекинг потерян», а не «плоскостей нет»");
+            Assert.AreEqual(KvArPlaneVisualizer.KvSurfaceLogState.TrackingLost,
+                KvArPlaneVisualizer.SurfaceLogStateOf(false, false, 0, ARSessionState.None, 5f),
+                "состояние None (нет подсистемы) — тоже потеря трекинга, а не тишина");
+
+            string line = KvArPlaneVisualizer.DescribeSurfaceState(0, 0,
+                ARSessionState.SessionInitializing, 5f, false, false, null,
+                "мало света — включите освещение");
+
+            StringAssert.Contains("трекинг НЕ идёт", line, "потеря трекинга не названа: " + line);
+            StringAssert.Contains("сессия SessionInitializing", line,
+                "состояние сессии не напечатано: " + line);
+            StringAssert.Contains("причина: мало света — включите освещение", line,
+                "причина потери трекинга не напечатана: " + line);
+            StringAssert.Contains("плоскостей 0", line, "нет числа плоскостей: " + line);
+            StringAssert.Contains("ждём 5 с", line, "нет времени ожидания: " + line);
+            StringAssert.Contains("что делать:", line, "оператору не сказано, что делать: " + line);
+            Assert.IsFalse(line.Contains("что делать: медленно поводите планшетом над столом"),
+                "при потере трекинга бесполезно советовать «поводите над столом»: " + line);
+        }
     }
 }
 

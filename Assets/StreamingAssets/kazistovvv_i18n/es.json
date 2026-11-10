@@ -1470,7 +1470,7 @@
     },
     {
       "key": "settings.cb.note",
-      "text": "El esquema sustituye el rojo/verde por el par «naranja ↔ azul» (paleta Okabe–Ito): se distingue en los tres tipos de daltonismo. El tipo se elige de una sola lista — los juegos de colores por tipo aparecerán más tarde."
+      "text": "El esquema sustituye el rojo/verde por el par «naranja ↔ azul» (paleta Okabe–Ito): se distingue en los tres tipos de daltonismo, así que UN solo juego sirve para todos. El tipo elegido se guarda y se muestra en la etiqueta del tema; no hay juegos de colores por tipo."
     },
     {
       "key": "settings.cb.off",

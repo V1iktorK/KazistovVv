@@ -1,8 +1,10 @@
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEngine;
 using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
 using KazistovVvFeatures;
+using KazistovVvRealWorld;
 
 namespace KazistovVvAr
 {
@@ -15,11 +17,17 @@ namespace KazistovVvAr
     /// ЧТО ДЕЛАЕТ:
     ///   • каждую найденную ARCore плоскость рисует СЕТКОЙ (контур + линии внутри) прямо поверх
     ///     реального стола/пола — видно, что планшет действительно нашёл поверхность;
-    ///   • самую большую горизонтальную плоскость подсвечивает ЗЕЛЁНЫМ и подписывает «СТОЛ» —
-    ///     это место, куда встанет робот по кнопке «Поставить»;
+    ///   • стол выбирает КЛАССИФИКАТОР (`KvRealTableClassifier`), а не «площадь»: зелёным
+    ///     подсвечивается только та плоскость, которая прошла проверку наклоном, высотой над полом,
+    ///     высотой относительно глаз и габаритами столешницы;
     ///   • остальные горизонтальные — синие, вертикальные — серые (не мешают);
     ///   • отдаёт `TryGetBestTable` — по нему `KvArPlacement` ставит якорь ровно на стол,
     ///     даже если луч из центра экрана не попал в плоскость.
+    ///
+    /// ЧТО БЫЛО НЕ ТАК (дефект, исправленный после S45). Правилом выбора была «самая большая
+    /// горизонтальная плоскость площадью ≥ 0.15 м²». Пол горизонтален, огромен и стабилен, поэтому
+    /// правило почти всегда выбирало ПОЛ — и подписывало его «СТОЛ». На приёмке это выглядело как
+    /// «робот стоит на полу, а приложение говорит, что на столе».
     ///
     /// ПОЧЕМУ СВОЯ ОТРИСОВКА, А НЕ ПРЕФАБ AR FOUNDATION. Префаб плоскости в сцене может быть
     /// отключён/невидим (в шлеме он не нужен), а на планшете видимость найденных поверхностей —
@@ -38,7 +46,14 @@ namespace KazistovVvAr
         /// <summary>Показывать сетку поверхностей.</summary>
         public bool showPlanes = true;
 
-        /// <summary>Минимальная площадь стола, м² — меньше считаем шумом.</summary>
+        /// <summary>
+        /// ПОРОГ ШУМА ARCore, м² — плоскости меньше этого вообще не рассматриваются.
+        ///
+        /// ЧЕМ ОТЛИЧАЕТСЯ ОТ ПОРОГА КЛАССИФИКАТОРА. Здесь 0.15 м² — «это ещё не поверхность, а
+        /// несколько полигонов»; коридор столешницы (0.25…3.0 м²) проверяет уже классификатор.
+        /// Порог оставлен публичным и прежним: на него опирается существующая проверка проекта, и
+        /// менять его значило бы менять поведение фильтра, не связанного с дефектом «пол вместо стола».
+        /// </summary>
         public float minTableAreaMeters = 0.15f;
 
         /// <summary>Как часто обновлять сетку (секунды).</summary>
@@ -47,7 +62,10 @@ namespace KazistovVvAr
         /// <summary>Писать в журнал о найденном столе (обязательная строка-доказательство).</summary>
         public bool logOnChange = true;
 
-        /// <summary>Лучший найденный стол (самая большая горизонтальная плоскость).</summary>
+        /// <summary>
+        /// Лучший найденный СТОЛ (прошедший классификатор). null — стола нет: пол столом больше не
+        /// считается, даже если он самый большой.
+        /// </summary>
         public ARPlane BestTable { get; private set; }
 
         /// <summary>Площадь лучшего стола, м².</summary>
@@ -58,6 +76,27 @@ namespace KazistovVvAr
 
         /// <summary>Нормаль лучшего стола (вверх).</summary>
         public Vector3 BestTableNormal { get; private set; } = Vector3.up;
+
+        /// <summary>
+        /// КЕМ ПРИЗНАНА ВЫБРАННАЯ ПОВЕРХНОСТЬ. Нужно, чтобы на экране и в журнале можно было
+        /// отличить «стол по разметке ARCore» от «стол по геометрии» — и увидеть, что пол отвергнут.
+        /// </summary>
+        public KvRealSurfaceKind BestTableKind { get; private set; } = KvRealSurfaceKind.Unknown;
+
+        /// <summary>УВЕРЕННОСТЬ ВЫБОРА 0…1 — по ней работает гистерезис и по ней видно, насколько выбор шаткий.</summary>
+        public float BestTableConfidence { get; private set; }
+
+        /// <summary>
+        /// ПРИЧИНА ВЫБОРА С ЧИСЛАМИ (площадь, высота над полом, наклон, уверенность). Это строка-
+        /// доказательство для logcat: по ней видно, ПОЧЕМУ поверхность признана столом.
+        /// </summary>
+        public string BestTableReason { get; private set; } = "плоскости ещё не найдены · уверенность 0.00";
+
+        /// <summary>Пол найден: либо разметкой ARCore, либо по двум уровням поверхностей.</summary>
+        public bool FloorFound { get; private set; }
+
+        /// <summary>Высота пола в мировых координатах сессии, метры (имеет смысл только при `FloorFound`).</summary>
+        public float FloorHeight { get; private set; }
 
         /// <summary>Сколько плоскостей сейчас нарисовано (для журнала/строки состояния).</summary>
         public int VisualizedPlanes { get; private set; }
@@ -90,9 +129,63 @@ namespace KazistovVvAr
         private Material materialVerticalGrid;
         private float nextRefreshTime;
         private float nextLogTime;
-        private bool loggedTable;
-        private bool loggedNoTable;
         private bool loggedLabelFont;
+
+        /// <summary>Буферы разбора: переиспользуются, чтобы не сорить сборками мусора каждый пересчёт.</summary>
+        private readonly List<RealSurfaceCandidate> candidates = new List<RealSurfaceCandidate>();
+        private readonly List<ARPlane> candidatePlanes = new List<ARPlane>();
+        private readonly List<RealTableVerdict> verdicts = new List<RealTableVerdict>();
+        private readonly List<TrackableId> trackedNow = new List<TrackableId>();
+        private readonly List<TrackableId> staleAges = new List<TrackableId>();
+
+        /// <summary>Когда каждая плоскость впервые попала в разбор — из этого считается `TrackedSeconds`.</summary>
+        private readonly Dictionary<TrackableId, float> firstSeenAt = new Dictionary<TrackableId, float>();
+
+        /// <summary>Стол, выбранный на прошлом шаге: по нему работает гистерезис (без мерцания выбора).</summary>
+        private TrackableId lastBestId;
+        private bool hasLastBest;
+
+        /// <summary>
+        /// Последнее записанное в журнал состояние (КЛЮЧ, а не текст: см. `SurfaceStateKey`) — чтобы
+        /// печатать при смене, а не каждую секунду.
+        /// </summary>
+        private string loggedSurfaceState = string.Empty;
+
+        /// <summary>
+        /// КОГДА ПЛОСКОСТЕЙ СТАЛО НОЛЬ, `Time.unscaledTime`. Из этого считается «сколько ждём»:
+        /// без числа секунд оператор не отличает «пропали только что» от «не было ни минуты», а
+        /// приёмка не может сказать, дождались ли мы порога 15 с вообще.
+        /// </summary>
+        private float planesWithoutSince;
+
+        /// <summary>
+        /// СКОЛЬКО СЕКУНД ЖДЁМ ПЛОСКОСТИ, прежде чем печатать диагностику подсистемы. Порог тот же,
+        /// что у сторожа обнаружения в `KvArRuntime.planeWatchdogSeconds` (15 с): два разных порога
+        /// дали бы в журнале две противоречащие фразы про «плоскостей нет».
+        /// </summary>
+        public const float SurfaceWaitSeconds = 15f;
+
+        /// <summary>
+        /// ПРЕФИКС СТРОК ЖУРНАЛА О ПОВЕРХНОСТЯХ. По нему ищет приёмка
+        /// (`Tools/ar-planes-verify.ps1`, `Tools/real-table-device.ps1`), поэтому он вынесен в
+        /// константу, а не склеивается в пяти местах по-разному.
+        /// </summary>
+        public const string SurfaceLogPrefix = "[KvAr] ПОВЕРХНОСТИ: ";
+
+        /// <summary>ПОДСКАЗКА, КОГДА ТРЕКИНГ ИДЁТ, А ПОВЕРХНОСТЕЙ НЕТ (слова владельца с приёмки).</summary>
+        public const string SurfaceHint =
+            "медленно поводите планшетом над столом, добавьте света, " +
+            "поверхность должна быть с текстурой и без бликов";
+
+        /// <summary>
+        /// ПОДСКАЗКА, КОГДА ПОТЕРЯН САМ ТРЕКИНГ. Здесь бесполезно советовать «поводите над столом»:
+        /// пока ARCore не держит позу, он не строит карту вовсе (журнал планшета 07.11.2026:
+        /// `VIO_OUTPUT_NOT_TRACKING`), и лечится это светом, текстурой и плавным движением.
+        /// </summary>
+        public const string TrackingHint =
+            "наведите планшет на освещённую поверхность с текстурой и двигайте плавнее — " +
+            "без трекинга ARCore не строит карту";
+
         private static readonly Color ColorTable = new Color(0.20f, 1f, 0.45f, 1f);
         private static readonly Color ColorHorizontal = new Color(0.35f, 0.75f, 1f, 0.95f);
         private static readonly Color ColorVertical = new Color(0.85f, 0.85f, 0.9f, 0.55f);
@@ -186,15 +279,26 @@ namespace KazistovVvAr
         {
             if (Time.unscaledTime < nextRefreshTime) return;
             nextRefreshTime = Time.unscaledTime + Mathf.Max(0.1f, refreshSeconds);
-            if (!showPlanes || planeManager == null) return;
 
-            SyncEntries();
-            ChooseBestTable();
-            RecolorPlanes();
+            if (showPlanes && planeManager != null)
+            {
+                SyncEntries();
+                ChooseBestTable();
+                RecolorPlanes();
+            }
+
+            // ЧТО БЫЛО. Вызов журнала стоял ПОСЛЕ выхода из ветки отрисовки: при выключенной сетке
+            // (`showPlanes == false`) или без менеджера плоскостей о поверхностях не печаталось
+            // НИЧЕГО. ЧЕМ ПЛОХО. Молчание — тот же дефект, что и раньше: по нему нельзя отличить
+            // «поверхностей нет» от «код сломался». ЧТО СТАЛО. Журнал пишется всегда, а сама строка
+            // честно говорит, чего не хватает (в т.ч. «менеджер плоскостей НЕ найден»).
             LogTableOncePerSecond();
         }
 
-        /// <summary>ЛУЧШИЙ СТОЛ: самая большая горизонтальная плоскость (для постановки робота).</summary>
+        /// <summary>
+        /// ЛУЧШИЙ СТОЛ (для постановки робота). Возвращает true ТОЛЬКО если поверхность прошла
+        /// классификатор: пол и прочие большие горизонтальные плоскости сюда больше не попадают.
+        /// </summary>
         public bool TryGetBestTable(out ARPlane plane, out Vector3 center, out Vector3 normal,
                                     out float area)
         {
@@ -449,51 +553,270 @@ namespace KazistovVvAr
             return plane.transform.TransformPoint(local);
         }
 
+        /// <summary>
+        /// ВЫБОР СТОЛА — ЧЕРЕЗ КЛАССИФИКАТОР, А НЕ ПО ПЛОЩАДИ.
+        ///
+        /// ЧТО БЫЛО. Здесь стоял отбор «самая большая горизонтальная плоскость площадью ≥ 0.15 м²».
+        /// Пол горизонтален и всегда больше столешницы, поэтому «столом» становился пол: робот
+        /// вставал на пол, а зелёная подпись «СТОЛ» — на полу.
+        ///
+        /// ЧТО СТАЛО. Каждая подходящая плоскость превращается в ЧИСЛОВОГО кандидата (габариты,
+        /// нормаль, возраст, что говорит разметка ARCore) и уходит в `KvRealTableClassifier`, где
+        /// проверяются наклон, высота над полом, высота относительно глаз и габариты столешницы.
+        /// Выбор между прошедшими — с гистерезисом 20 %, чтобы подсветка не мерцала между двумя
+        /// столами. Пол отвергается по высоте над полом, а не по площади.
+        /// </summary>
         private void ChooseBestTable()
         {
-            ARPlane best = null;
-            float bestArea = 0f;
-            Vector3 bestCenter = Vector3.zero;
-            Vector3 bestNormal = Vector3.up;
+            candidates.Clear();
+            candidatePlanes.Clear();
+            verdicts.Clear();
+            trackedNow.Clear();
 
+            if (planeManager == null)
+            {
+                ApplyNoTable("стол не найден: менеджер плоскостей AR не найден · уверенность 0.00");
+                return;
+            }
+
+            float eyeHeight = arCamera != null ? arCamera.transform.position.y : 0f;
+
+            // 1. СБОР КАНДИДАТОВ. Отсекается только шум ARCore (`minTableAreaMeters`): решение
+            // «стол это или пол» принимает классификатор, а не площадь.
+            int largestIndex = -1;
+            float largestArea = 0f;
             foreach (ARPlane plane in planeManager.trackables)
             {
                 if (plane == null) continue;
-                bool horizontal = plane.alignment == PlaneAlignment.HorizontalUp ||
-                                  plane.alignment == PlaneAlignment.HorizontalDown;
-                if (!horizontal) continue;
+                trackedNow.Add(plane.trackableId);
 
                 float width = Mathf.Abs(plane.size.x * plane.transform.lossyScale.x);
                 float depth = Mathf.Abs(plane.size.y * plane.transform.lossyScale.z);
-                float area = width > 0f && depth > 0f ? width * depth : 0f;
-                if (area < minTableAreaMeters) continue;
-                if (area <= bestArea) continue;
+                float area = width * depth;
 
-                best = plane;
-                bestArea = area;
-                bestCenter = plane.transform.position;
-                bestNormal = plane.alignment == PlaneAlignment.HorizontalUp
-                    ? plane.transform.up
-                    : -plane.transform.up;
+                float seenAt;
+                if (!firstSeenAt.TryGetValue(plane.trackableId, out seenAt))
+                {
+                    seenAt = Time.unscaledTime;
+                    firstSeenAt[plane.trackableId] = seenAt;
+                }
+
+                if (area < minTableAreaMeters) continue;    // шум: это ещё не поверхность
+
+                RealSurfaceCandidate candidate = BuildCandidate(plane, width, depth,
+                    Time.unscaledTime - seenAt);
+                candidates.Add(candidate);
+                candidatePlanes.Add(plane);
+
+                bool horizontalUp = plane.alignment == PlaneAlignment.HorizontalUp;
+                if (horizontalUp && area > largestArea)
+                {
+                    largestArea = area;
+                    largestIndex = candidates.Count - 1;
+                }
             }
 
-            BestTable = best;
-            BestTableArea = bestArea;
-            BestTableCenter = bestCenter;
-            BestTableNormal = bestNormal;
-            if (best != null)
+            // Пометка «это самая большая горизонтальная»: в ARCore так выглядит ПОЛ, и классификатор
+            // учитывает это как признак против стола (а не как довод «за», как было раньше).
+            if (largestIndex >= 0)
             {
-                float cameraHeight = arCamera != null
-                    ? bestCenter.y - arCamera.transform.position.y
-                    : 0f;
-                DescribeTable = "стол найден · площадь " + bestArea.ToString("0.00") +
-                                " м² · камера выше стола на " + Mathf.Abs(cameraHeight).ToString("0.00") +
-                                " м";
+                RealSurfaceCandidate largest = candidates[largestIndex];
+                largest.IsLargestHorizontal = true;
+                candidates[largestIndex] = largest;
             }
-            else
+            PruneAges();
+
+            // 2. УРОВЕНЬ ПОЛА: сначала верим разметке ARCore, иначе выводим по двум уровням.
+            float floorHeight;
+            bool floorKnown = TryDetermineFloor(out floorHeight);
+            FloorFound = floorKnown;
+            FloorHeight = floorKnown ? floorHeight : 0f;
+
+            // 3. РАЗБОР КАЖДОГО КАНДИДАТА.
+            for (int i = 0; i < candidates.Count; i++)
+                verdicts.Add(KvRealTableClassifier.Classify(candidates[i], eyeHeight, floorHeight, floorKnown));
+
+            // 4. ВЫБОР С ГИСТЕРЕЗИСОМ: новый стол заменяет прежний, только если он лучше заметно.
+            int previous = -1;
+            if (hasLastBest)
             {
-                DescribeTable = "стол не найден";
+                for (int i = 0; i < candidatePlanes.Count; i++)
+                    if (candidatePlanes[i].trackableId == lastBestId) { previous = i; break; }
             }
+            int best = KvRealTableClassifier.SelectBestIndex(verdicts, previous);
+
+            if (best >= 0)
+            {
+                BestTable = candidatePlanes[best];
+                BestTableArea = Mathf.Abs(candidates[best].SideA * candidates[best].SideB);
+                BestTableCenter = candidates[best].Center;
+                BestTableNormal = candidates[best].Up.sqrMagnitude > 0.0001f
+                    ? candidates[best].Up.normalized
+                    : Vector3.up;
+                BestTableKind = verdicts[best].Kind;
+                BestTableConfidence = verdicts[best].Confidence;
+                BestTableReason = verdicts[best].Reason;
+                DescribeTable = KvRealTableClassifier.Describe(candidates[best], verdicts[best],
+                    floorHeight, floorKnown);
+                lastBestId = candidatePlanes[best].trackableId;
+                hasLastBest = true;
+                return;
+            }
+
+            hasLastBest = false;
+            ApplyNoTable(ExplainNoTable(floorHeight, floorKnown));
+        }
+
+        /// <summary>
+        /// ПОЧЕМУ СТОЛА НЕТ — САМАЯ ВЕСКАЯ ПРИЧИНА ИЗ ВСЕХ ОТКАЗОВ.
+        ///
+        /// Раньше на экране было просто «стол не найден», и оператор не понимал, что делать: водить
+        /// камерой, отойти от стола или дело в том, что найдено только пол. Теперь берётся отказ с
+        /// наибольшей уверенностью (пол — 0.90) и показывается его причина с числами.
+        /// </summary>
+        private string ExplainNoTable(float floorHeight, bool floorKnown)
+        {
+            int notable = -1;
+            float bestReject = -1f;
+            for (int i = 0; i < verdicts.Count; i++)
+            {
+                if (verdicts[i].IsTable) continue;
+                if (verdicts[i].Confidence > bestReject)
+                {
+                    bestReject = verdicts[i].Confidence;
+                    notable = i;
+                }
+            }
+            if (notable >= 0)
+                return KvRealTableClassifier.Describe(candidates[notable], verdicts[notable],
+                    floorHeight, floorKnown);
+
+            int planes = planeManager != null ? planeManager.trackables.count : 0;
+            return "стол не найден: подходящих поверхностей нет (плоскостей " + planes +
+                   ") — поводите камерой по столу · уверенность 0.00";
+        }
+
+        /// <summary>СБРОС ВЫБОРА: стола нет, но причина и уровень пола остаются честными.</summary>
+        private void ApplyNoTable(string describe)
+        {
+            BestTable = null;
+            BestTableArea = 0f;
+            BestTableKind = KvRealSurfaceKind.Unknown;
+            BestTableConfidence = 0f;
+            BestTableReason = describe;
+            DescribeTable = describe;
+        }
+
+        /// <summary>
+        /// УРОВЕНЬ ПОЛА. Два источника, в порядке доверия:
+        ///   1) разметка ARCore (`PlaneClassifications.Floor`) — точный ответ платформы;
+        ///   2) геометрический вывод по ДВУМ уровням поверхностей (см. `TryInferFloorHeight`).
+        ///
+        /// ПОЧЕМУ НЕ «САМАЯ НИЖНЯЯ ПЛОСКОСТЬ». Если камера видит только столешницу, самая нижняя
+        /// плоскость — это она сама; объявить её полом значило бы навсегда запретить постановку на
+        /// настоящий стол. Поэтому вывод требует второго уровня.
+        /// </summary>
+        private bool TryDetermineFloor(out float floorHeight)
+        {
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                if (candidates[i].Kind != KvRealSurfaceKind.Floor) continue;
+                floorHeight = candidates[i].Center.y;
+                return true;
+            }
+            return KvRealTableClassifier.TryInferFloorHeight(candidates, out floorHeight);
+        }
+
+        /// <summary>
+        /// КАНДИДАТ ИЗ ПЛОСКОСТИ ARCore. `Kind` берётся из разметки плоскости: ARCore умеет
+        /// говорить «пол», «стол», «стена» — это ответ платформы, а не наша догадка.
+        /// </summary>
+        private static RealSurfaceCandidate BuildCandidate(ARPlane plane, float width, float depth,
+                                                           float trackedSeconds)
+        {
+            // Нормаль горизонтальной плоскости, смотрящей ВНИЗ (потолок), разворачиваем: у стола
+            // «верх» обязан смотреть вверх, иначе правило наклона отвергло бы даже столешницу.
+            Vector3 up = plane.alignment == PlaneAlignment.HorizontalDown
+                ? -plane.transform.up
+                : plane.transform.up;
+
+            RealSurfaceCandidate candidate;
+            candidate.Kind = KindFromClassifications(plane.classifications);
+            candidate.Source = KvRealSurfaceSource.Plane;
+            candidate.Center = plane.transform.position;
+            candidate.Up = up;
+            candidate.SideA = width;
+            candidate.SideB = depth;
+            candidate.TrackedSeconds = trackedSeconds;
+            candidate.IsLargestHorizontal = false;
+            return candidate;
+        }
+
+        /// <summary>
+        /// ЧТО СКАЗАЛ ARCORE О ПЛОСКОСТИ. Разметка приходит набором флагов; порядок проверки важен:
+        /// «стол» проверяется первым, потому что ARCore может пометить столешницу сразу как
+        /// Table + SeatOfAnyType.
+        ///
+        /// Публично и статически специально: это чистая функция, и она проверяется тестом без
+        /// устройства — иначе единственным доказательством был бы скриншот с планшета.
+        /// </summary>
+        public static KvRealSurfaceKind KindFromClassifications(PlaneClassifications classifications)
+        {
+            if (classifications == PlaneClassifications.None) return KvRealSurfaceKind.Unknown;
+            if ((classifications & PlaneClassifications.Table) != 0) return KvRealSurfaceKind.Table;
+            if ((classifications & PlaneClassifications.Floor) != 0) return KvRealSurfaceKind.Floor;
+            if ((classifications & PlaneClassifications.Ceiling) != 0) return KvRealSurfaceKind.Ceiling;
+            if ((classifications & (PlaneClassifications.WallFace |
+                                    PlaneClassifications.InvisibleWallFace |
+                                    PlaneClassifications.InnerWallFace |
+                                    PlaneClassifications.WallArt |
+                                    PlaneClassifications.DoorFrame |
+                                    PlaneClassifications.WindowFrame)) != 0)
+                return KvRealSurfaceKind.Wall;
+            return KvRealSurfaceKind.Other;
+        }
+
+        /// <summary>
+        /// РАЗОБРАТЬ ОДНУ ПЛОСКОСТЬ (для постановки тапом). Нужна, чтобы `KvArPlacement` не
+        /// называл столом то, что классификатор столом не признал: тап по полу — законный запасной
+        /// путь, но подписан он обязан честно.
+        /// </summary>
+        public RealTableVerdict ClassifySurface(ARPlane plane)
+        {
+            if (plane == null)
+            {
+                RealTableVerdict none;
+                none.IsTable = false;
+                none.Confidence = 0f;
+                none.Kind = KvRealSurfaceKind.Unknown;
+                none.Reason = "плоскость не передана · уверенность 0.00";
+                return none;
+            }
+
+            float width = Mathf.Abs(plane.size.x * plane.transform.lossyScale.x);
+            float depth = Mathf.Abs(plane.size.y * plane.transform.lossyScale.z);
+            float seenAt;
+            if (!firstSeenAt.TryGetValue(plane.trackableId, out seenAt)) seenAt = Time.unscaledTime;
+            RealSurfaceCandidate candidate = BuildCandidate(plane, width, depth,
+                Time.unscaledTime - seenAt);
+
+            float eyeHeight = arCamera != null ? arCamera.transform.position.y : 0f;
+            return KvRealTableClassifier.Classify(candidate, eyeHeight, FloorHeight, FloorFound);
+        }
+
+        /// <summary>СЧЁТЧИКИ ВОЗРАСТА НЕ РАСТУТ: записи по исчезнувшим плоскостям удаляются.</summary>
+        private void PruneAges()
+        {
+            if (firstSeenAt.Count <= trackedNow.Count) return;
+            staleAges.Clear();
+            foreach (KeyValuePair<TrackableId, float> pair in firstSeenAt)
+            {
+                bool present = false;
+                for (int i = 0; i < trackedNow.Count; i++)
+                    if (trackedNow[i] == pair.Key) { present = true; break; }
+                if (!present) staleAges.Add(pair.Key);
+            }
+            for (int i = 0; i < staleAges.Count; i++) firstSeenAt.Remove(staleAges[i]);
         }
 
         private void RecolorPlanes()
@@ -543,26 +866,303 @@ namespace KazistovVvAr
             line.endWidth = width;
         }
 
+        /// <summary>
+        /// СОСТОЯНИЕ РАСПОЗНАВАНИЯ ПОВЕРХНОСТЕЙ — ровно то, что уходит в журнал.
+        ///
+        /// ЗАЧЕМ ОТДЕЛЬНЫЙ ТИП. Раньше состояний было три («стол» / «пол» / «нет»), и слово «нет»
+        /// означало сразу ДВА разных случая: «плоскости есть, но стола нет» и «плоскостей нет
+        /// вообще». Второй случай не печатался никогда — на планшете (свежая сборка, 75 с работы,
+        /// ARCore работает) в журнале была только стартовая строка «сетка плоскостей включена», и
+        /// приёмка не могла отличить «поверхностей нет» от «код сломался».
+        ///
+        /// ПОЧЕМУ ПЕРЕЧИСЛЕНИЕМ, А НЕ СТРОКОЙ. Состояние теперь проверяется ЧИСТОЙ функцией
+        /// (`SurfaceLogStateOf`) без устройства: сам `Update` на планшете не воспроизводится ни в
+        /// EditMode, ни в PlayMode, а решение «что печатать» должно быть проверяемым машинно.
+        /// </summary>
+        public enum KvSurfaceLogState
+        {
+            /// <summary>Стол найден и подсвечен зелёным — рабочий случай.</summary>
+            Table,
+
+            /// <summary>Найден пол, стола нет: пол столом не считается.</summary>
+            FloorOnly,
+
+            /// <summary>Плоскости есть, но ни одна не прошла классификатор.</summary>
+            PlanesNoTable,
+
+            /// <summary>Плоскостей нет И трекинга нет: искать бессмысленно, нужна причина.</summary>
+            TrackingLost,
+
+            /// <summary>Плоскостей нет при живом трекинге — обычная ситуация первых секунд.</summary>
+            NoPlanes,
+
+            /// <summary>Плоскостей нет дольше порога — дополнительно печатается диагностика.</summary>
+            NoPlanesLong
+        }
+
+        /// <summary>
+        /// СОСТОЯНИЕ РАСПОЗНАВАНИЯ — ЧИСТАЯ ФУНКЦИЯ (проверяется тестом без планшета).
+        ///
+        /// ПОРЯДОК ПРОВЕРОК И ЕСТЬ ПРАВИЛО ПРИОРИТЕТА, и он не случаен:
+        ///   1) СТОЛ — рабочий случай, он перекрывает всё остальное. Это анти-вакуум: правило
+        ///      «плоскостей нет» не имеет права перехватить сессию, где стол уже найден и подсвечен
+        ///      (иначе оператор получил бы подсказку «поводите планшетом» при зелёном столе);
+        ///   2) ПОЛ — тоже находка, пусть и не стол;
+        ///   3) ПЛОСКОСТИ ЕСТЬ, СТОЛА НЕТ — своя формулировка, не путать с «плоскостей 0»;
+        ///   4) ТРЕКИНГ ПОТЕРЯН — только когда не нашлось вообще ничего: сначала честно называем
+        ///      потерю трекинга с причиной, иначе оператор ищет плоскости там, где не работает поза;
+        ///   5) ПЛОСКОСТЕЙ НЕТ (трекинг идёт) — и, если ждём дольше порога, 6) с диагностикой.
+        /// </summary>
+        public static KvSurfaceLogState SurfaceLogStateOf(bool bestTable, bool floorFound, int planeCount,
+                                                         ARSessionState trackingState,
+                                                         float secondsWithoutPlanes)
+        {
+            if (bestTable) return KvSurfaceLogState.Table;
+            if (floorFound) return KvSurfaceLogState.FloorOnly;
+            if (planeCount > 0) return KvSurfaceLogState.PlanesNoTable;
+            if (trackingState != ARSessionState.SessionTracking) return KvSurfaceLogState.TrackingLost;
+            if (secondsWithoutPlanes >= SurfaceWaitSeconds) return KvSurfaceLogState.NoPlanesLong;
+            return KvSurfaceLogState.NoPlanes;
+        }
+
+        /// <summary>
+        /// КЛЮЧ СТРОКИ ЖУРНАЛА — по нему работает правило «печатать при СМЕНЕ, а не каждую секунду».
+        ///
+        /// В ключ НЕ входят секунды ожидания, координаты и площади: иначе текст менялся бы каждую
+        /// секунду и журнал превратился бы в спам, который оператор перестаёт читать (а приёмка —
+        /// считать доказательством). Смена трекинга в ключ входит: о потере позы надо сказать сразу.
+        /// </summary>
+        public static string SurfaceStateKey(bool bestTable, bool floorFound, int planeCount,
+                                             ARSessionState trackingState, float secondsWithoutPlanes)
+        {
+            return SurfaceLogStateOf(bestTable, floorFound, planeCount, trackingState, secondsWithoutPlanes)
+                       .ToString() + "|" + trackingState;
+        }
+
+        /// <summary>
+        /// ПРАВИЛО «ПЕЧАТАТЬ ПРИ СМЕНЕ» — ЧИСТАЯ ФУНКЦИЯ: одинаковый ключ второй строки не даёт.
+        /// Вынесена отдельно, чтобы это правило проверялось тестом, а не чтением `Update` глазами.
+        /// </summary>
+        public static bool ShouldLogSurfaceState(string previousKey, string currentKey)
+        {
+            return !string.Equals(previousKey ?? string.Empty, currentKey ?? string.Empty,
+                System.StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// СТРОКА ЖУРНАЛА О СОСТОЯНИИ ПОВЕРХНОСТЕЙ — ЧИСТАЯ ФУНКЦИЯ (без Unity-объектов и статики
+        /// AR Foundation), поэтому проверяется тестом целиком, а не поиском слов в исходнике.
+        ///
+        /// ЧТО БЫЛО. Три состояния и молчание в четвёртом: при нуле плоскостей не печаталось ничего.
+        /// ЧЕМ ПЛОХО. Оператор в планшете не понимал, работает ли распознавание, а приёмка не могла
+        /// отличить «поверхностей нет» от «код сломался» — оба случая выглядели как тишина.
+        /// ЧТО СТАЛО. Печатаются ЧЕТЫРЕ состояния с числами (плоскостей / трекаблов / секунды
+        /// ожидания), фактическим состоянием трекинга и подсказкой, что делать. Формулировки про
+        /// стол и пол оставлены прежними слово в слово: на них опирается приёмка и
+        /// `Tools/real-table-device.ps1`.
+        /// </summary>
+        /// <param name="details">Готовый разбор классификатора (для строк про стол/пол/отказ).</param>
+        /// <param name="notTrackingReason">Причина «не отслеживается» (для состояния «трекинг потерян»).</param>
+        public static string DescribeSurfaceState(int planeCount, int trackedPlaneCount,
+            ARSessionState trackingState, float secondsWithoutPlanes, bool bestTable, bool floorFound,
+            string details = null, string notTrackingReason = null)
+        {
+            switch (SurfaceLogStateOf(bestTable, floorFound, planeCount, trackingState, secondsWithoutPlanes))
+            {
+                case KvSurfaceLogState.Table:
+                    return SurfaceLogPrefix + DetailOr(details, "стол найден") +
+                           " · подсвечен зелёным, робот встанет на него по кнопке «Поставить»";
+
+                case KvSurfaceLogState.FloorOnly:
+                    return SurfaceLogPrefix + DetailOr(details, "пол найден, стола нет") +
+                           " · пол НЕ считается столом — вожу камерой по столешнице";
+
+                case KvSurfaceLogState.PlanesNoTable:
+                    // Секунд ожидания здесь нет намеренно: плоскости уже найдены, ожидание кончилось,
+                    // и «ждём 0 с» было бы шумом, по которому оператор ищет смысл.
+                    return SurfaceLogPrefix + "плоскости есть (" + planeCount + "), но стола нужной " +
+                           "площади нет — " + DetailOr(details, "классификатор не признал ни одну") +
+                           " · трекаблов " + trackedPlaneCount +
+                           " · трекинг " + trackingState;
+
+                case KvSurfaceLogState.TrackingLost:
+                    return SurfaceLogPrefix + "трекинг НЕ идёт · сессия " + trackingState +
+                           (string.IsNullOrEmpty(notTrackingReason)
+                               ? string.Empty
+                               : " · причина: " + notTrackingReason) +
+                           " · плоскостей " + planeCount +
+                           " · трекаблов " + trackedPlaneCount +
+                           " · ждём " + SecondsText(secondsWithoutPlanes) + " с" +
+                           " · что делать: " + TrackingHint;
+
+                default: // NoPlanes и NoPlanesLong: текст один, разница только в дополнительной диагностике
+                    return SurfaceLogPrefix + "плоскостей " + planeCount +
+                           " · трекаблов " + trackedPlaneCount +
+                           " · трекинг " + trackingState +
+                           " · ждём " + SecondsText(secondsWithoutPlanes) + " с" +
+                           " · что делать: " + SurfaceHint;
+            }
+        }
+
+        /// <summary>
+        /// ДОПОЛНИТЕЛЬНАЯ ДИАГНОСТИКА, когда поверхностей нет дольше 15 с при живом трекинге —
+        /// ЧИСТАЯ ФУНКЦИЯ. Печатается ОДИН раз за эпизод (правило смены состояния).
+        ///
+        /// ЗАЧЕМ. «Плоскостей нет» само по себе не отвечает на вопрос приёмки «кто виноват»: то ли
+        /// подсистема не запущена, то ли запрошен только вертикальный поиск, то ли ARCore не строит
+        /// карту. Поэтому печатаются: состояние подсистемы, запрошенный и ФАКТИЧЕСКИ применяемый
+        /// режим обнаружения, число трекаблов и подсказка оператору. Текст намеренно начинается с
+        /// «ПОВЕРХНОСТИ: ДИАГНОСТИКА (плоскостей нет N с при трекинге …)» — эту форму ищет гейт
+        /// `Tools/ar-planes-verify.ps1`.
+        /// </summary>
+        public static string DescribeSurfaceDiagnosis(int planeCount, int trackedPlaneCount,
+            ARSessionState trackingState, float secondsWithoutPlanes, string requestedDetectionMode,
+            string currentDetectionMode, bool subsystemRunning, string notTrackingReason = null)
+        {
+            string line = SurfaceLogPrefix + "ДИАГНОСТИКА (плоскостей нет " +
+                          SecondsText(secondsWithoutPlanes) + " с при трекинге " + trackingState + ")";
+            line += " · сессия " + trackingState;
+            line += " · подсистема плоскостей: " + (subsystemRunning ? "работает" : "ОСТАНОВЛЕНА");
+            line += " · запрошено: " + DetailOr(requestedDetectionMode, "нет данных");
+            line += " · применяется: " + DetailOr(currentDetectionMode, "нет данных");
+            line += " · трекаблов: " + trackedPlaneCount;
+            line += " · плоскостей: " + planeCount;
+            if (!string.IsNullOrEmpty(notTrackingReason))
+                line += " · причина нетрекинга: " + notTrackingReason;
+            line += " · что делать: " + SurfaceHint;
+            return line;
+        }
+
+        /// <summary>СЕКУНДЫ В СТРОКЕ: целое число, без культуры устройства (иначе «16,3 с» на планшете).</summary>
+        private static string SecondsText(float seconds)
+        {
+            float value = seconds > 0f ? seconds : 0f;
+            return value.ToString("0", CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>Подробность, если она есть; иначе короткая замена — строка не должна быть пустой.</summary>
+        private static string DetailOr(string details, string fallback)
+        {
+            return string.IsNullOrEmpty(details) ? fallback : details;
+        }
+
+        /// <summary>
+        /// СТРОКА-ДОКАЗАТЕЛЬСТВО В ЖУРНАЛ — не чаще раза в секунду и только при смене состояния.
+        ///
+        /// ЧТО БЫЛО (часть 1). Прежний журнал печатал «стол найден · площадь X м²» — то же самое,
+        /// что было на экране, и по нему нельзя было понять, найден СТОЛ или ПОЛ.
+        ///
+        /// ЧТО БЫЛО (часть 2, дефект S45). Состояний осталось три, и четвёртое — «плоскостей НОЛЬ»,
+        /// обычная ситуация (планшет лежит на столе, камера не видит поверхностей) — не печаталось
+        /// вообще: в журнале с устройства за 75 с была только стартовая строка. Молчание — дефект.
+        ///
+        /// ЧТО СТАЛО. Печать идёт по чистым функциям выше: четыре состояния с числами, отдельное
+        /// состояние «трекинг потерян» с причиной и дополнительная диагностика после 15 с ожидания —
+        /// каждая строка ОДИН раз при смене состояния, без спама.
+        /// </summary>
         private void LogTableOncePerSecond()
         {
             if (!logOnChange) return;
             if (Time.unscaledTime < nextLogTime) return;
             nextLogTime = Time.unscaledTime + 1f;
 
-            if (BestTable != null && !loggedTable)
+            int planes = planeManager != null ? planeManager.trackables.count : 0;
+            int tracked = CountTrackingPlanes();
+
+            // СКОЛЬКО ЖДЁМ. Отсчёт начинается в момент, когда плоскостей стало ноль, и обнуляется,
+            // как только появилась хоть одна: иначе «ждём 300 с» врало бы после удачного поиска.
+            if (planes > 0)
             {
-                loggedTable = true;
-                loggedNoTable = false;
-                Debug.Log("[KvAr] ПОВЕРХНОСТИ: " + DescribeTable + " · подсвечен зелёным, " +
-                          "робот встанет на него по кнопке «Поставить»");
+                planesWithoutSince = 0f;
             }
-            else if (BestTable == null && VisualizedPlanes > 0 && !loggedNoTable)
+            else if (planesWithoutSince <= 0f)
             {
-                loggedNoTable = true;
-                loggedTable = false;
-                Debug.Log("[KvAr] ПОВЕРХНОСТИ: плоскости есть (" + VisualizedPlanes +
-                          "), но стола нужной площади нет — вожу камерой");
+                planesWithoutSince = Time.unscaledTime;
             }
+            float seconds = planes == 0 && planesWithoutSince > 0f
+                ? Time.unscaledTime - planesWithoutSince
+                : 0f;
+
+            ARSessionState tracking = ARSession.state;
+            bool bestTable = BestTable != null;
+            string key = SurfaceStateKey(bestTable, FloorFound, planes, tracking, seconds);
+            if (!ShouldLogSurfaceState(loggedSurfaceState, key)) return;
+            loggedSurfaceState = key;
+
+            KvSurfaceLogState state = SurfaceLogStateOf(bestTable, FloorFound, planes, tracking, seconds);
+            if (state == KvSurfaceLogState.NoPlanesLong)
+            {
+                // ОДНА дополнительная строка на эпизод: состояние подсистемы и режимы обнаружения.
+                Debug.Log(DescribeSurfaceDiagnosis(planes, tracked, tracking, seconds,
+                    DetectionModeText(true), DetectionModeText(false), SubsystemRunning()));
+                return;
+            }
+
+            string line = DescribeSurfaceState(planes, tracked, tracking, seconds, bestTable, FloorFound,
+                SurfaceDetails(), TrackingReasonText());
+            if (planeManager == null)
+                line += " · менеджер плоскостей ARPlaneManager НЕ найден — распознавание не работает";
+            Debug.Log(line);
+        }
+
+        /// <summary>
+        /// СКОЛЬКО ПЛОСКОСТЕЙ РЕАЛЬНО В ТРЕКИНГЕ. `planeManager.trackables.count` отвечает «сколько
+        /// менеджер знает», а оператору важно «сколько из них живы»: после потери позы ARCore
+        /// оставляет трекаблы в состоянии Limited, и число «плоскостей 3» без этого уточнения
+        /// выглядело бы как работающее распознавание.
+        /// </summary>
+        private int CountTrackingPlanes()
+        {
+            if (planeManager == null) return 0;
+            int tracked = 0;
+            foreach (ARPlane plane in planeManager.trackables)
+            {
+                if (plane == null) continue;
+                if (plane.trackingState == TrackingState.Tracking) tracked++;
+            }
+            return tracked;
+        }
+
+        /// <summary>РЕЖИМ ОБНАРУЖЕНИЯ ПЛОСКОСТЕЙ (AR Foundation 6.5): запрошенный или фактический.</summary>
+        private string DetectionModeText(bool requested)
+        {
+            if (planeManager == null) return "нет менеджера";
+            return requested
+                ? planeManager.requestedDetectionMode.ToString()
+                : planeManager.currentDetectionMode.ToString();
+        }
+
+        /// <summary>ПОДСИСТЕМА ПЛОСКОСТЕЙ РАБОТАЕТ? Остановленная подсистема объясняет «плоскостей 0».</summary>
+        private bool SubsystemRunning()
+        {
+            return planeManager != null && planeManager.subsystem != null && planeManager.subsystem.running;
+        }
+
+        /// <summary>
+        /// ПРИЧИНА «НЕ ОТСЛЕЖИВАЕТСЯ» СЛОВАМИ. `ARSession.notTrackingReason` заполняет сама
+        /// подсистема AR Foundation; в рабочем состоянии она равна None — тогда честно пишем, что
+        /// причина не указана, а не выдумываем её.
+        /// </summary>
+        private static string TrackingReasonText()
+        {
+            NotTrackingReason reason = ARSession.notTrackingReason;
+            if (reason == NotTrackingReason.None) return "не указана";
+            return KvArSessionController.DescribeNotTracking(reason);
+        }
+
+        /// <summary>
+        /// ПОДРОБНОСТИ ВЕРДИКТА ДЛЯ СТРОКИ — теми же словами, что печатались раньше: по ним
+        /// приёмка (`Tools/real-table-device.ps1`) отличает «стол найден» от «пол (не стол)» и
+        /// «стол не найден».
+        /// </summary>
+        private string SurfaceDetails()
+        {
+            string floorText = FloorFound
+                ? " · уровень пола " + FloorHeight.ToString("0.00", CultureInfo.InvariantCulture) + " м"
+                : " · пол пока не найден";
+            if (BestTable != null) return DescribeTable + floorText + " · причина: " + BestTableReason;
+            if (FloorFound) return DescribeTable + floorText;
+            return DescribeTable;
         }
 
         /// <summary>УБРАТЬ ВСЮ ОТРИСОВКУ (очистка рабочего пространства).</summary>
@@ -572,9 +1172,18 @@ namespace KazistovVvAr
                 if (pair.Value.root != null) Destroy(pair.Value.root);
             entries.Clear();
             VisualizedPlanes = 0;
-            BestTable = null;
-            BestTableArea = 0f;
-            DescribeTable = "стол не найден";
+            candidates.Clear();
+            candidatePlanes.Clear();
+            verdicts.Clear();
+            firstSeenAt.Clear();
+            hasLastBest = false;
+            FloorFound = false;
+            FloorHeight = 0f;
+            loggedSurfaceState = string.Empty;
+            // Отсчёт «сколько ждём плоскости» тоже сбрасывается: после очистки это новый эпизод,
+            // и первая же строка журнала должна быть обычной, а не «плоскостей нет 200 с».
+            planesWithoutSince = 0f;
+            ApplyNoTable("стол не найден");
         }
 
         void OnDestroy()

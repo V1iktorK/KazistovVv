@@ -29,6 +29,15 @@ namespace KazistovVvUI
         private Image dropdownBg;
         private Text infoText;
 
+        /// <summary>
+        /// ОТКРЫТО ЛИ ХОТЬ ОДНО МЕНЮ (для проверок и самопрогона интерфейса).
+        ///
+        /// ЗАЧЕМ ГЕТТЕР. Плашка `KvMenuBlocker` существует, чтобы ЗАКРЫТЬ открытое меню. Когда
+        /// меню не открыто, нажимать её нечего — и самопрогон обязан отличать «нечего закрывать»
+        /// от «кнопка молчит». Геттер только ЧИТАЕТ состояние, поведение не меняется.
+        /// </summary>
+        public bool AnyOpen { get { return openMenu != null && openMenu.Length > 0; } }
+
         /// <summary>Собрать строку меню. Возвращает её высоту.</summary>
         public float Build(RectTransform canvas, Canvas owner)
         {
