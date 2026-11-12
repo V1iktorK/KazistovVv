@@ -152,6 +152,22 @@ namespace KazistovVvAr
         private string loggedSurfaceState = string.Empty;
 
         /// <summary>
+        /// ПОСЛЕДНЯЯ НАПЕЧАТАННАЯ ПОЗА КАМЕРЫ (ключ состояния `Up`/`Down`/`Level`). Пустая строка —
+        /// ещё не печатали. Нужна, чтобы строка о позе появлялась при СМЕНЕ, а не каждую секунду:
+        /// иначе журнал превращается в спам, который перестают читать.
+        /// </summary>
+        private string loggedCameraPose = string.Empty;
+
+        /// <summary>Когда в последний раз печатали позу камеры — не чаще раза в секунду.</summary>
+        private float nextPoseLogTime;
+
+        /// <summary>
+        /// ТЕКУЩАЯ ПРОЕКЦИЯ `dot(forward, up)` AR-камеры. Считается в `Update`, чтобы строка
+        /// «плоскостей 0» могла сослаться на позу без второго обращения к камере.
+        /// </summary>
+        private float cameraDotUp;
+
+        /// <summary>
         /// КОГДА ПЛОСКОСТЕЙ СТАЛО НОЛЬ, `Time.unscaledTime`. Из этого считается «сколько ждём»:
         /// без числа секунд оператор не отличает «пропали только что» от «не было ни минуты», а
         /// приёмка не может сказать, дождались ли мы порога 15 с вообще.
@@ -185,6 +201,167 @@ namespace KazistovVvAr
         public const string TrackingHint =
             "наведите планшет на освещённую поверхность с текстурой и двигайте плавнее — " +
             "без трекинга ARCore не строит карту";
+
+        /// <summary>
+        /// ПРЕФИКС СТРОК ЖУРНАЛА О ПОЗЕ КАМЕРЫ. Вынесен в константу по той же причине, что и
+        /// `SurfaceLogPrefix`: по нему ищет приёмка, и он не должен склеиваться в разных местах
+        /// по-разному.
+        /// </summary>
+        public const string PoseLogPrefix = "[KvAr] ПОЗА КАМЕРЫ: ";
+
+        /// <summary>
+        /// ПОРОГ «КАМЕРА СМОТРИТ НЕ НА СТОЛ», по проекции `dot(forward, up)`.
+        ///
+        /// ЧТО БЫЛО. Такого порога не было вовсе, и поза камеры не проверялась нигде. На приёмке
+        /// 12.11.2026 планшет лежал ЭКРАНОМ ВВЕРХ: камера смотрела в потолок, в кадре не было стола,
+        /// ARCore не мог построить карту — и в журнале появилось «плоскостей 0», что читается как
+        /// поломка распознавания. Настоящая причина (камера смотрит в небо) не была видна НИГДЕ.
+        ///
+        /// ЧЕМ ПЛОХО 0.5. Это ровно 30° от горизонта вверх (acos(0.5) = 60° от вертикали). При
+        /// таком наклоне камера заведомо не видит столешницу: чтобы она попала в кадр, объектив
+        /// должен быть направлен вниз хотя бы на 10…15°. Порог оставлен грубым намеренно — он
+        /// обязан молчать при обычной работе, а не ловить «планшет наклонён на 2°».
+        /// </summary>
+        public const float CameraPoseThreshold = 0.5f;
+
+        /// <summary>
+        /// ПОДСКАЗКА ДЛЯ «КАМЕРА СМОТРИТ ВВЕРХ» — что именно сделать руками (слова с приёмки).
+        /// </summary>
+        public const string PoseUpHint =
+            "опустите планшет, чтобы камера смотрела на столешницу";
+
+        /// <summary>
+        /// ПОЗА AR-КАМЕРЫ ОТНОСИТЕЛЬНО ГОРИЗОНТА (enum, а не строка: состояние проверяется тестом).
+        ///
+        /// ОТКУДА ВЗЯТЫ ЗНАКИ — ПО КОДУ ПРОЕКТА, А НЕ ПО ПАМЯТИ.
+        ///   1) В `Assets/_Project/00_Scenes/ArMain.unity` AR-камера `ArCamera` лежит в
+        ///      `Camera Offset`, её ЛОКАЛЬНЫЙ поворот — `m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}`
+        ///      (строка 792), у `Camera Offset` и у `AR XR Origin` — тоже ноль. Значит ось `+Z`
+        ///      камеры в мире — это ось `+Z` Unity, и `Camera.transform.forward` — куда смотрит
+        ///      объектив. Ничего не переворачивается.
+        ///   2) Мир ARCore в Unity — «правая тройка, Y вверх» (справка multiset: «ARKit (iOS),
+        ///      ARCore (Android), WebXR, Three.js, OpenGL — Right-handed, Y-up»,
+        ///      https://docs.multiset.ai/fundamentals/localization/coordinate-systems.md), поэтому
+        ///      «горизонт» — это `Vector3.up`, и проекция `dot(forward, up) > 0` означает «объектив
+        ///      смотрит ВВЕРХ».
+        ///   3) Согласованность с собственными правилами проекта: классификатор требует, чтобы стол
+        ///      был НИЖЕ камеры на 0.35…1.5 м (`KvRealTableClassifier.MinHeightBelowEyesMeters` /
+        ///      `MaxHeightBelowEyesMeters`), то есть рабочая поза — камера НАД столом, взгляд вниз.
+        ///      Это тоже даёт `dot(forward, up) < 0`.
+        /// </summary>
+        public enum KvCameraPoseState
+        {
+            /// <summary>Камера смотрит ВВЕРХ (в потолок/небо): стола в кадре нет.</summary>
+            Up,
+
+            /// <summary>Камера смотрит ВНИЗ, на столешницу или на пол — рабочая поза.</summary>
+            Down,
+
+            /// <summary>Камера почти параллельна горизонту: помещается в «норму» без подсказок.</summary>
+            Level
+        }
+
+        /// <summary>
+        /// ПОЗА КАМЕРЫ ИЗ ПРОЕКЦИИ `dot(forward, up)` — ЧИСТАЯ ФУНКЦИЯ (тест без устройства).
+        ///
+        /// ПОЧЕМУ ОТДЕЛЬНО ОТ `Camera`. `Camera.transform.forward` в EditMode недоступен без сцены,
+        /// а решение «на стол смотрит или нет» обязано проверяться машинно. Поэтому вся арифметика
+        /// вынесена сюда: на вход одно число, на выход одно из трёх различимых состояний.
+        ///
+        /// ГРАНИЦЫ. `> +0.5` — вверх, `< −0.5` — вниз, РОВНО `±0.5` — ещё «норма»: порог включающий,
+        /// чтобы на границе не появлялось ложной тревоги «смотрит в потолок».
+        /// </summary>
+        public static KvCameraPoseState CameraPoseState(float dotUp)
+        {
+            // NaN/∞ приходят из трекинга штатно (потеря позы) — это не «вверх» и не «вниз»:
+            // сравнение с NaN дало бы ложь в обе стороны, и состояние осталось бы «Level».
+            float dot = IsFinite(dotUp) ? Mathf.Clamp(dotUp, -1f, 1f) : 0f;
+            if (dot > CameraPoseThreshold) return KvCameraPoseState.Up;
+            if (dot < -CameraPoseThreshold) return KvCameraPoseState.Down;
+            return KvCameraPoseState.Level;
+        }
+
+        /// <summary>Конечное ли число (NaN/∞ отсекаются до сравнений — иначе правила молчат).</summary>
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
+        }
+
+        /// <summary>
+        /// УГОЛ НАКЛОНА КАМЕРЫ ОТ ГОРИЗОНТА В ГРАДУСАХ — ЧИСТАЯ ФУНКЦИЯ.
+        ///
+        /// Это угол от ГОРИЗОНТАЛИ (0° — объектив параллелен столу, 90° — строго в потолок), а не
+        /// от вертикали: на приёмке оператор говорит «смотрит вверх на 62°», и это именно угол над
+        /// горизонтом. `asin` от `dot(forward, up)` даёт ровно его.
+        /// </summary>
+        public static float CameraTiltDegrees(float dotUp)
+        {
+            float dot = IsFinite(dotUp) ? Mathf.Clamp(dotUp, -1f, 1f) : 0f;
+            return Mathf.Asin(dot) * Mathf.Rad2Deg;
+        }
+
+        /// <summary>
+        /// СТРОКА ЖУРНАЛА О ПОЗЕ КАМЕРЫ — ЧИСТАЯ ФУНКЦИЯ (числа + подсказка только там, где нужна).
+        ///
+        /// ЧТО БЫЛО. Позы камеры в журнале не было ВООБЩЕ. Планшет на приёмке лежал экраном вверх,
+        /// камера смотрела в потолок, и единственной строкой было «плоскостей 0» — по ней нельзя
+        /// отличить «ARCore сломался» от «оператор положил планшет не той стороной».
+        ///
+        /// ЧТО БЫЛО НЕ ТАК В ПЕРВОМ ВАРИАНТЕ ЭТОЙ ЖЕ ПРАВКИ. Для `Level` печаталось «почти
+        /// горизонтально» — БЕЗ СЛОВА НАПРАВЛЕНИЯ и с модулем угла. Из-за этого рабочая поза
+        /// (планшет над столом, наклон ~25° вниз) выглядела как «25° — норма», где не сказано,
+        /// вниз или вверх: два РАЗНЫХ состояния читались одинаково, и приёмка не могла отличить
+        /// «камера на столе» от «камера задрана к потолку, но меньше порога».
+        ///
+        /// ЧТО СТАЛО (12.11.2026). У КАЖДОГО из трёх состояний своё слово направления и ЗНАКОВЫЙ
+        /// угол: «ВВЕРХ на 62°», «ВНИЗ на 25°», «РОВНО (горизонт), 3° вниз». Три состояния
+        /// различаются ТЕКСТОМ, а не только числом, — это и проверяет
+        /// `DescribeCameraPose_StatesDifferByWord`.
+        ///
+        /// ЗНАК УГЛА ВАЖЕН. В `Down` и `Level` печатается угол со знаком (вниз = минус): при
+        /// `Level` направление ещё не дотянуло до порога, и единственное, что отличает «чуть вниз»
+        /// от «чуть вверх», — этот минус. В `Up` печатается модуль, потому что слово «ВВЕРХ» уже
+        /// задаёт направление (форма строки — из задачи, слово в слово).
+        ///
+        /// Пустой угол невозможен: число печатается всегда, это же и анти-вакуум для теста.
+        /// </summary>
+        public static string DescribeCameraPose(float dotUp)
+        {
+            float degrees = CameraTiltDegrees(dotUp);
+            // МОДУЛЬ — для «ВВЕРХ» (направление задано словом, форма строки из задачи).
+            string magnitude = Mathf.Abs(degrees).ToString("0", CultureInfo.InvariantCulture);
+            // ЗНАКОВЫЙ УГОЛ — для «ВНИЗ» и «РОВНО»: там минус и есть направление.
+            string signed = degrees.ToString("0", CultureInfo.InvariantCulture);
+            KvCameraPoseState state = CameraPoseState(dotUp);
+
+            if (state == KvCameraPoseState.Up)
+                return PoseLogPrefix + "смотрит ВВЕРХ на " + magnitude +
+                       "° — в кадре потолок, стол в кадр не попадает; " + PoseUpHint;
+
+            if (state == KvCameraPoseState.Down)
+                return PoseLogPrefix + "смотрит ВНИЗ на " + magnitude + "° — норма, стол в кадре";
+
+            // LEVEL — НЕ «просто норма», а отдельная формулировка СО СЛОВОМ НАПРАВЛЕНИЯ:
+            // объектив почти параллелен горизонту, и знак угла говорит, куда именно наклонён.
+            return PoseLogPrefix + "смотрит РОВНО (горизонт), " + signed + "° — норма";
+        }
+
+        /// <summary>
+        /// ССЫЛКА НА ПОЗУ ДЛЯ СТРОКИ «ПЛОСКОСТЕЙ 0» — ЧИСТАЯ ФУНКЦИЯ.
+        ///
+        /// ЗАЧЕМ. Две диагностики («плоскостей 0» и «камера смотрит не туда») по отдельности
+        /// заставляют оператора гадать. Здесь они связываются: если камера смотрит вверх, строка о
+        /// плоскостях ОБЯЗАНА назвать это вероятной причиной.
+        ///
+        /// АНТИ-ВАКУУМ: при нормальной позе возвращается ПУСТАЯ строка, и вызывающий код ничего не
+        /// дописывает. Иначе ссылка на позу висела бы и на рабочей сессии, и приёмка снова читала
+        /// бы «вероятная причина» там, где причины нет.
+        /// </summary>
+        public static string PoseCulpritSuffix(float dotUp)
+        {
+            if (CameraPoseState(dotUp) != KvCameraPoseState.Up) return string.Empty;
+            return " · ПОЗА: смотрит вверх — это вероятная причина";
+        }
 
         private static readonly Color ColorTable = new Color(0.20f, 1f, 0.45f, 1f);
         private static readonly Color ColorHorizontal = new Color(0.35f, 0.75f, 1f, 0.95f);
@@ -292,7 +469,59 @@ namespace KazistovVvAr
             // НИЧЕГО. ЧЕМ ПЛОХО. Молчание — тот же дефект, что и раньше: по нему нельзя отличить
             // «поверхностей нет» от «код сломался». ЧТО СТАЛО. Журнал пишется всегда, а сама строка
             // честно говорит, чего не хватает (в т.ч. «менеджер плоскостей НЕ найден»).
+            //
+            // ПОЗА КАМЕРЫ СЧИТАЕТСЯ ДО СТРОКИ О ПЛОСКОСТЯХ (12.11.2026): строка «плоскостей 0»
+            // обязана сослаться на позу, если камера смотрит в потолок — иначе две диагностики
+            // снова пришлось бы складывать в голове оператора.
+            ReadCameraPose();
             LogTableOncePerSecond();
+            LogCameraPoseOnce();
+        }
+
+        /// <summary>
+        /// ПРОЧИТАТЬ ПОЗУ AR-КАМЕРЫ ОТНОСИТЕЛЬНО ГОРИЗОНТА (12.11.2026).
+        ///
+        /// ЧТО БЫЛО. Поза камеры не читалась нигде. Планшет на приёмке лежал ЭКРАНОМ ВВЕРХ, камера
+        /// смотрела в потолок, стола в кадре не было — и ARCore не мог построить карту. В журнале
+        /// это выглядело как «плоскостей 0», то есть как поломка распознавания.
+        /// ЧЕМ ПЛОХО. Оператор и приёмка искали дефект в ARCore, а причина была в том, как положили
+        /// планшет. Ни одного числа про позу в журнале не было.
+        /// ЧТО СТАЛО. Каждый пересчёт берёт `dot(camera.forward, Vector3.up)` — единственное число,
+        /// которого достаточно, чтобы отличить «смотрит в потолок» от «смотрит на стол».
+        ///
+        /// ПОЧЕМУ `forward`, А НЕ `transform.up`. В `ArMain.unity` AR-камера `ArCamera` лежит в
+        /// `Camera Offset` с ЛОКАЛЬНЫМ поворотом `{x:0,y:0,z:0,w:1}`, значит её `+Z` — куда смотрит
+        /// объектив — совпадает с мировой осью `+Z` Unity, а мир ARCore в Unity Y-вверх. Тот же
+        /// смысл заложен в `KvArTouchInput.MoveAxisFromScreenDelta`, где по `camera.forward` строится
+        /// горизонтальная ось движения пальца.
+        /// </summary>
+        private void ReadCameraPose()
+        {
+            if (arCamera == null) arCamera = KvArRigBridge.FindArCamera();
+            cameraDotUp = arCamera != null
+                ? Vector3.Dot(arCamera.transform.forward, Vector3.up)
+                : 0f;
+        }
+
+        /// <summary>
+        /// СТРОКА О ПОЗЕ КАМЕРЫ В ЖУРНАЛ — не чаще раза в секунду и ТОЛЬКО при смене состояния.
+        ///
+        /// ЧТО БЫЛО. Такой строки не было вовсе: при «плоскостей 0» журнал молчал о том, куда
+        /// смотрит камера (дефект приёмки 12.11.2026 — планшет лежал экраном вверх).
+        /// ЧТО СТАЛО. Одна строка с углом в градусах при смене состояния `Up`/`Down`/`Level`; при
+        /// «смотрит вверх» — готовое действие. Смена печатается сразу (в пределах секунды), а не
+        /// «когда-нибудь»: именно в первые секунды оператор и решает, что делать.
+        /// </summary>
+        private void LogCameraPoseOnce()
+        {
+            if (!logOnChange) return;
+            if (Time.unscaledTime < nextPoseLogTime) return;
+            nextPoseLogTime = Time.unscaledTime + 1f;
+
+            string key = CameraPoseState(cameraDotUp).ToString();
+            if (!ShouldLogSurfaceState(loggedCameraPose, key)) return;
+            loggedCameraPose = key;
+            Debug.Log(DescribeCameraPose(cameraDotUp));
         }
 
         /// <summary>
@@ -963,10 +1192,22 @@ namespace KazistovVvAr
         /// </summary>
         /// <param name="details">Готовый разбор классификатора (для строк про стол/пол/отказ).</param>
         /// <param name="notTrackingReason">Причина «не отслеживается» (для состояния «трекинг потерян»).</param>
+        /// <param name="cameraDotUp">
+        /// `dot(camera.forward, up)`. Добавлено 12.11.2026: при «плоскостей 0» строка ОБЯЗАНА
+        /// сослаться на позу, если камера смотрит в потолок — иначе оператор и приёмка ищут поломку
+        /// распознавания там, где планшет просто лежит экраном вверх. `null` — поза неизвестна,
+        /// ссылки нет (и строка не врёт про причину, которой не видела).
+        /// </param>
         public static string DescribeSurfaceState(int planeCount, int trackedPlaneCount,
             ARSessionState trackingState, float secondsWithoutPlanes, bool bestTable, bool floorFound,
-            string details = null, string notTrackingReason = null)
+            string details = null, string notTrackingReason = null, float? cameraDotUp = null)
         {
+            // ССЫЛКА НА ПОЗУ. В отдельную переменную, чтобы правило было одно на все состояния и
+            // проверялось одной чистой функцией (`PoseCulpritSuffix`): при нормальной позе — пусто.
+            string poseCulprit = cameraDotUp.HasValue
+                ? PoseCulpritSuffix(cameraDotUp.Value)
+                : string.Empty;
+
             switch (SurfaceLogStateOf(bestTable, floorFound, planeCount, trackingState, secondsWithoutPlanes))
             {
                 case KvSurfaceLogState.Table:
@@ -996,10 +1237,15 @@ namespace KazistovVvAr
                            " · что делать: " + TrackingHint;
 
                 default: // NoPlanes и NoPlanesLong: текст один, разница только в дополнительной диагностике
+                    // ССЫЛКА НА ПОЗУ ВСТАВЛЯЕТСЯ ПЕРЕД ПОДСКАЗКОЙ «что делать»: именно здесь
+                    // «поводите планшетом над столом» бесполезно, если камера смотрит в потолок.
+                    // При нормальной позе `poseCulprit` пуст и строка остаётся прежней слово в слово
+                    // (на неё опирается `Tools/ar-planes-verify.ps1`).
                     return SurfaceLogPrefix + "плоскостей " + planeCount +
                            " · трекаблов " + trackedPlaneCount +
                            " · трекинг " + trackingState +
                            " · ждём " + SecondsText(secondsWithoutPlanes) + " с" +
+                           poseCulprit +
                            " · что делать: " + SurfaceHint;
             }
         }
@@ -1098,8 +1344,11 @@ namespace KazistovVvAr
                 return;
             }
 
+            // ПОЗА КАМЕРЫ ПЕРЕДАЁТСЯ В СТРОКУ (12.11.2026). Без неё «плоскостей 0» и «камера
+            // смотрит в потолок» остаются двумя несвязанными фактами, и приёмка ищет поломку
+            // ARCore вместо того, чтобы опустить планшет.
             string line = DescribeSurfaceState(planes, tracked, tracking, seconds, bestTable, FloorFound,
-                SurfaceDetails(), TrackingReasonText());
+                SurfaceDetails(), TrackingReasonText(), cameraDotUp);
             if (planeManager == null)
                 line += " · менеджер плоскостей ARPlaneManager НЕ найден — распознавание не работает";
             Debug.Log(line);
@@ -1183,6 +1432,11 @@ namespace KazistovVvAr
             // Отсчёт «сколько ждём плоскости» тоже сбрасывается: после очистки это новый эпизод,
             // и первая же строка журнала должна быть обычной, а не «плоскостей нет 200 с».
             planesWithoutSince = 0f;
+            // ПОЗА КАМЕРЫ — НОВЫЙ ЭПИЗОД (12.11.2026). Ключ сбрасывается, иначе после очистки
+            // рабочего пространства оператор не увидел бы в журнале, ЧТО планшет всё ещё смотрит
+            // в потолок: состояние не изменилось, значит и строка не печатается.
+            loggedCameraPose = string.Empty;
+            cameraDotUp = 0f;
             ApplyNoTable("стол не найден");
         }
 

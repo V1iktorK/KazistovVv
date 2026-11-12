@@ -38,6 +38,18 @@ namespace KazistovVvXr
             public WindowAction Collapse;
             public KvWindowState State = KvWindowState.Expanded;
 
+            /// <summary>
+            /// ДЕЙСТВИЕ «СКРЫТЬ» ЭТОГО ОКНА ВЫПОЛНЯЕТСЯ ПРЯМО СЕЙЧАС.
+            ///
+            /// ЗАЧЕМ. Окно вправе зарегистрировать здесь свой собственный метод скрытия
+            /// (`KvFeatureWindow.Hide`), и если этот метод заглянет в реестр, получится взаимный
+            /// вызов `SendToBelt → Hide → SendToBelt`. На устройстве это SIGSEGV (tombstone
+            /// планшета, сборка 10.11.2026), а в редакторе — только строка в консоли. Флаг
+            /// взводится ВОКРУГ вызова действия и снимается в `finally`; пока он взведён,
+            /// повторный `SendToBelt` для этого окна возвращает отказ.
+            /// </summary>
+            public bool Dispatching;
+
             /// <summary>Человеческая подпись окна (для плитки пояса и журнала).</summary>
             public string Title;
 
@@ -119,16 +131,46 @@ namespace KazistovVvXr
         /// СКРЫТЬ ОКНО И ПОЛОЖИТЬ ЕГО НА ПОЯС ([D21] + [D22]).
         /// Возвращает false, если места на поясе нет: в этом случае окно ОСТАЁТСЯ видимым,
         /// а вызывающий код обязан сказать оператору «на поясе нет места».
+        ///
+        /// ЧТО БЫЛО (нативное падение приложения, планшет Redmi, сборка 10.11.2026). Окно
+        /// регистрирует в реестре СВОЙ ЖЕ метод скрытия (`KvFeatureWindow.Hide`), а `Hide` в свою
+        /// очередь спрашивал реестр: `SendToBelt → entry.Hide() → Hide → SendToBelt → …`.
+        /// Tombstone: SIGSEGV, «likely stack overflow», 512 кадров с двумя чередующимися
+        /// адресами `libil2cpp.so`, последняя строка журнала — нажатие «✕» в шапке окна.
+        /// ЧЕМ ПЛОХО БЫЛО БЫ ПРОСТО ПОЧИНИТЬ ОДНО ОКНО. Реестр — общий: любое следующее окно,
+        /// чьё действие «скрыть» хоть раз заглянет в реестр, снова уронит приложение. Поэтому
+        /// защита стоит И в окне (цикл разорван), И здесь (страховка от повторного входа).
+        /// ЧТО СТАЛО. Пока идёт вызов действия этого окна, повторный `SendToBelt` для него
+        /// возвращает false и НЕ прячет окно (второй укладки на пояс тоже нет): вызывающий код
+        /// видит отказ, а не бесконечность. Флаг снимается в `finally`, поэтому исключение внутри
+        /// действия окна не оставит запись «навсегда занятой».
         /// </summary>
         public static bool SendToBelt(string id)
         {
             Entry entry = Find(id);
             if (entry == null) return false;
+
+            // ПОВТОРНЫЙ ВХОД: это действие УЖЕ выполняется (окно спрашивает реестр изнутри
+            // своего же скрытия). Второй раз ничего не делаем — иначе взаимный вызов.
+            if (!KvUiClickGuard.CanStart(entry.Dispatching)) return false;
+
             if (!belt.HasRoom && !belt.Contains(id)) return false;   // окно не теряем
 
             entry.State = KvWindowStates.SendToBelt(entry.State);
             belt.Put(id);
-            if (entry.Hide != null) entry.Hide();
+
+            if (entry.Hide != null)
+            {
+                entry.Dispatching = true;
+                try
+                {
+                    entry.Hide();
+                }
+                finally
+                {
+                    entry.Dispatching = false;
+                }
+            }
             return true;
         }
 

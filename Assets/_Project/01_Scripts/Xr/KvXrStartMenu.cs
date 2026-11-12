@@ -334,6 +334,12 @@ namespace KazistovVvXr
             KvXrMrRoom room = KvXrMrRoom.Instance;
             if (room == null || !room.MrActive) return;          // в VR реального стола нет
 
+            // РОБОТ ПОКАЗЫВАЕТСЯ В ТОТ ЖЕ МОМЕНТ (пункт 3 требования владельца 12.11.2026).
+            // ЧТО БЫЛО: выход из меню включал режим выбора места, но робот оставался скрытым —
+            // постановка гасила его при входе в MR, а включать обратно было некому: оператор видел
+            // пустой стол и подсказку «ведём робота за лучом». ЧЕМ ПЛОХО: шаг «робот появляется после
+            // закрытия меню» не выполнялся именно там, где он виднее всего. ЧТО СТАЛО: `EnterAfterMenu`
+            // и `BeginPicking` снимают скрытость сами (одно действие — одно место), здесь только вызов.
             KvMrRobotPick pick = KvMrRobotPick.Ensure(room.transform, headCamera, room);
             pick.headCamera = headCamera != null ? headCamera : Camera.main;
             pick.EnterAfterMenu();

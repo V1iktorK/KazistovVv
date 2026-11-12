@@ -40,6 +40,29 @@ namespace KazistovVvAr
         /// <summary>Сколько кадров камера реально отдала (диагностика/тесты).</summary>
         public int CameraFrames { get; private set; }
 
+        /// <summary>
+        /// ПЕРИОДИЧЕСКИЙ СНИМОК КАДРА, секунды (12.11.2026).
+        ///
+        /// ЧТО БЫЛО. `ar_camera_frame.png` писался РОВНО ОДИН РАЗ за сеанс — при подтверждении
+        /// камеры. На приёмке в папке лежал один файл 144 КБ с одним таймштампом, и доказать, что
+        /// камера видела ВО ВРЕМЯ РАБОТЫ (например, что планшет лежал экраном вверх), было нечем.
+        /// ЧТО СТАЛО. Кадр пишется раз в `framePeriodSeconds`; файлов не больше `maxFrameFiles`.
+        /// </summary>
+        public float framePeriodSeconds = 5f;
+
+        /// <summary>
+        /// СКОЛЬКО ФАЙЛОВ КАДРА ДЕРЖИМ, максимум (12.11.2026). Десять кадров по ~150 КБ — это
+        /// ~1.5 МБ, что безопасно для памяти планшета. Дальше счёт начинается сначала и старый файл
+        /// с тем же именем ПЕРЕЗАПИСЫВАЕТСЯ: копить снимки «навсегда» на устройстве нельзя.
+        /// </summary>
+        public int maxFrameFiles = 10;
+
+        /// <summary>Номер последнего сохранённого периодического кадра (для журнала и тестов).</summary>
+        public int FrameSessionIndex { get; private set; }
+
+        /// <summary>Сколько периодических кадров сохранено за сеанс (для журнала и тестов).</summary>
+        public int FramesSaved { get; private set; }
+
         /// <summary>Разрешение уже запрошено в этой сессии.</summary>
         public bool PermissionRequested { get; private set; }
 
@@ -74,6 +97,13 @@ namespace KazistovVvAr
         /// <summary>О пустом кадре уже сообщено (чтобы не заливать журнал каждый кадр).</summary>
         private bool emptyImageReported;
 
+        // --- ПЕРИОДИЧЕСКИЙ СНИМОК КАДРА (добавлено 12.11.2026): доказательство того, что камера
+        // видела ВО ВРЕМЯ РАБОТЫ, а не только в момент подтверждения.
+        /// <summary>Когда писать следующий периодический кадр, `Time.unscaledTime`.</summary>
+        private float nextFrameCaptureTime;
+        /// <summary>Снимок уже пишется — второй параллельно не запускаем (защита от накладок).</summary>
+        private bool frameCaptureRunning;
+
         private ARCameraManager cameraManager;
         private ARSession session;
         private ARCameraBackground background;
@@ -87,6 +117,11 @@ namespace KazistovVvAr
         {
             startedAt = Time.unscaledTime;
             ResolveReferences();
+
+            // ПЕРВЫЙ ПЕРИОДИЧЕСКИЙ КАДР — НЕ В ПЕРВУЮ ЖЕ СЕКУНДУ (12.11.2026): пока ARCore не отдал
+            // ни одного кадра, `TryAcquireLatestCpuImage` только пишет предупреждение в журнал и
+            // пугает оператора. Один период ожидания — и серия снимков начинается.
+            nextFrameCaptureTime = Time.unscaledTime + Mathf.Max(1f, framePeriodSeconds);
 
             if (cameraManager != null)
                 cameraManager.frameReceived += OnFrameReceived;
@@ -140,6 +175,18 @@ namespace KazistovVvAr
         void Update()
         {
             float elapsed = Time.unscaledTime - startedAt;
+
+            // ПЕРИОДИЧЕСКИЙ СНИМОК КАДРА (12.11.2026) — ПЕРВЫМ ДЕЛОМ И ДО ВСЕХ `return`.
+            //
+            // ЧТО БЫЛО. Снимок делался один раз и внутри ветки подтверждения, то есть до неё (пока
+            // окно «ДОСТУП К КАМЕРЕ» висит, `confirmed == false`) не писался вовсе, а после —
+            // никогда. На приёмке в папке был один файл с одним таймштампом: чем камера занималась
+            // во время работы, доказать было нечем.
+            // ЧЕМ ПЛОХО. Причина «плоскостей 0» (планшет лежал экраном вверх) осталась невидимой:
+            // снимка этого момента просто не существовало.
+            // ЧТО СТАЛО. Снимок снимается по расписанию независимо от состояния окна — состояние
+            // разрешения/подтверждения к доказательству «что видела камера» отношения не имеет.
+            CaptureFrameIfDue();
 
             // ЭКРАН ПОДТВЕРЖДЕНИЯ — ПЕРВЫМ ДЕЛОМ: любое касание снимает его. Раньше проверка
             // разрешения могла «съесть» кадр, в котором пришло касание (пропущенный таймаут) —
@@ -225,7 +272,11 @@ namespace KazistovVvAr
                 Debug.Log("[KvAr] КАМЕРА: РАБОТАЕТ — получено кадров " + CameraFrames +
                           " · изображение НЕ пустое (яркость " + lastAverageLuminance.ToString("0.000") +
                           ") · программа действительно использует камеру");
-                StartCoroutine(CaptureCameraFrameOnce());
+                // ПЕРВЫЙ КАДР БЕРЁМ СРАЗУ (12.11.2026). Раньше здесь был единственный вызов
+                // `CaptureCameraFrameOnce()` — и он же оставался единственным за весь сеанс.
+                // Теперь расписание одно (`CaptureFrameIfDue`), а подтверждение лишь выравнивает
+                // его: первый снимок серии появляется сразу, следующие — по периоду.
+                nextFrameCaptureTime = Time.unscaledTime;
                 // НЕ ПРЯЧЕМ САМИ: владелец должен увидеть подтверждение и нажать кнопку — иначе
                 // «увидел запрос, но не успел нажать» (жалоба 06.11.2026).
                 SetStatus("Камера работает: получено кадров " + CameraFrames +
@@ -401,41 +452,151 @@ namespace KazistovVvAr
         // ================================================================ резервный предпросмотр
 
         /// <summary>
-        /// СНИМОК КАДРА ARCore ДЛЯ ДИАГНОСТИКИ (06.11.2026): доказать, что камера реально
-        /// отдаёт изображение, и посмотреть его без наложения интерфейса. Файл кладётся в
-        /// `Application.persistentDataPath/ar_camera_frame.png` и забирается через adb.
+        /// ИМЯ ФАЙЛА КАДРА ПО НОМЕРУ — ЧИСТАЯ ФУНКЦИЯ (тест без устройства и без диска).
+        ///
+        /// ЧТО БЫЛО (12.11.2026). Имя было ОДНО — `ar_camera_frame.png`, и файл писался один раз за
+        /// сеанс. На приёмке в папке лежал ровно один снимок с одним таймштампом, поэтому доказать,
+        /// что камера видела ВО ВРЕМЯ РАБОТЫ (например, потолок вместо стола), было нечем.
+        ///
+        /// ЧЕМ ПЛОХО БЕЗ ПРАВИЛА «ПОСЛЕ `max` — СНОВА С 1». Номер, растущий без предела, копил бы
+        /// файлы на устройстве до заполнения памяти; номер, замирающий на `max`, перестал бы
+        /// показывать свежие кадры. Поэтому счётчик КОЛЬЦЕВОЙ: 1…max, затем снова 1, и старый файл
+        /// с тем же именем перезаписывается.
+        ///
+        /// ГРАНИЦЫ. `index` приводится к 1…max включительно (значение вне диапазона не даёт имени
+        /// вне диапазона). `max` меньше 1 — тоже 1: имя `ar_frame_001.png` существует всегда, и
+        /// вызывающий код не получает пустой путь.
+        /// </summary>
+        public static string FrameFileName(int index, int max)
+        {
+            int limit = max < 1 ? 1 : max;
+            // КОЛЬЦО: ((index − 1) mod limit) + 1. Для index = 1 → 1, для index = limit → limit,
+            // для index = limit + 1 → 1. Оба края проверяются тестом.
+            int normalized = ((index - 1) % limit + limit) % limit + 1;
+            return "ar_frame_" + normalized.ToString("000", System.Globalization.CultureInfo.InvariantCulture) +
+                   ".png";
+        }
+
+        /// <summary>
+        /// СТРОКА ЖУРНАЛА О СОХРАНЁННОМ КАДРЕ — ЧИСТАЯ ФУНКЦИЯ (числа: номер, размер, яркость, путь).
+        ///
+        /// ЗАЧЕМ ОТДЕЛЬНО. Приёмке нужен не «файл есть», а «файл №3, 320×240, яркость 0.412, путь…»:
+        /// по номеру видно, что снимки идут ПЕРИОДИЧЕСКИ, по яркости — что кадр не пустой, по пути —
+        /// что именно забирать через adb.
+        /// </summary>
+        public static string DescribeFrameSaved(int index, int width, int height, float luminance,
+                                                string path)
+        {
+            return "[KvAr] КАДР: сохранён №" + index +
+                   " · " + width + "×" + height +
+                   " · яркость " + luminance.ToString("0.000",
+                       System.Globalization.CultureInfo.InvariantCulture) +
+                   " · путь " + (string.IsNullOrEmpty(path) ? "—" : path);
+        }
+
+        /// <summary>
+        /// ЗАПИСЫВАТЬ ЛИ КАДР СЕЙЧАС — ЧИСТАЯ ФУНКЦИЯ (правило «не чаще периода и не поверх
+        /// незаконченного снимка»).
+        ///
+        /// ВЫНЕСЕНО ОТДЕЛЬНО, потому что это ровно то правило, которое на устройстве проверить
+        /// нечем: накладки двух корутин дают битый PNG, а «пишем каждый кадр» — просадку на планшете.
+        /// </summary>
+        public static bool ShouldCaptureFrame(float now, float nextCaptureTime, bool captureRunning)
+        {
+            if (captureRunning) return false;       // предыдущий снимок ещё не сохранён
+            return now >= nextCaptureTime;
+        }
+
+        /// <summary>
+        /// СНИМОК КАДРА ARCore ДЛЯ ДИАГНОСТИКИ — ТЕПЕРЬ ПЕРИОДИЧЕСКИЙ (12.11.2026).
+        ///
+        /// ЧТО БЫЛО. Метод писал ОДИН файл `ar_camera_frame.png` через 2 с после подтверждения и
+        /// больше никогда. На приёмке это дало ровно один снимок 144 КБ с одним таймштампом: чем
+        /// камера занималась следующие пять минут работы, оставалось неизвестным — а именно там и
+        /// была причина «плоскостей 0» (планшет лежал экраном вверх, камера смотрела в потолок).
+        ///
+        /// ЧЕМ ПЛОХО. Один снимок отвечает на вопрос «камера когда-то видела изображение», а не
+        /// «что камера видела, когда сломалось распознавание».
+        ///
+        /// ЧТО СТАЛО. Кадр пишется раз в `framePeriodSeconds`, имена — `ar_frame_001.png` …
+        /// `ar_frame_010.png` (`FrameFileName`), после десятого счёт идёт сначала и файл
+        /// ПЕРЕЗАПИСЫВАЕТСЯ (память устройства не растёт). В журнал уходит строка с номером,
+        /// размером, яркостью и путём. Пока предыдущий снимок не сохранён, новый не начинается.
         /// </summary>
         private IEnumerator CaptureCameraFrameOnce()
         {
-            yield return new WaitForSecondsRealtime(2f);
-            if (cameraManager == null) yield break;
-            if (!cameraManager.TryAcquireLatestCpuImage(out UnityEngine.XR.ARSubsystems.XRCpuImage image))
+            // Защита от накладок: пока снимок пишется, второй не начинаем.
+            frameCaptureRunning = true;
+            try
             {
-                Debug.LogWarning("[KvAr] КАМЕРА: CPU-кадр недоступен (TryAcquireLatestCpuImage = false)");
-                yield break;
-            }
-
-            using (image)
-            {
-                int w = Mathf.Max(2, image.width / 2);
-                int h = Mathf.Max(2, image.height / 2);
-                var conversion = new UnityEngine.XR.ARSubsystems.XRCpuImage.ConversionParams
+                if (cameraManager == null) yield break;
+                if (!cameraManager.TryAcquireLatestCpuImage(
+                        out UnityEngine.XR.ARSubsystems.XRCpuImage image))
                 {
-                    inputRect = new RectInt(0, 0, image.width, image.height),
-                    outputDimensions = new Vector2Int(w, h),
-                    outputFormat = TextureFormat.RGBA32,
-                    transformation = UnityEngine.XR.ARSubsystems.XRCpuImage.Transformation.MirrorY
-                };
-                var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
-                image.Convert(conversion, tex.GetRawTextureData<byte>());
-                tex.Apply();
-                byte[] png = tex.EncodeToPNG();
-                Object.Destroy(tex);
-                string path = System.IO.Path.Combine(Application.persistentDataPath, "ar_camera_frame.png");
-                System.IO.File.WriteAllBytes(path, png);
-                Debug.Log("[KvAr] КАМЕРА: кадр ARCore сохранён для проверки · " + path +
-                          " · " + w + "×" + h + " · " + png.Length + " байт");
+                    Debug.LogWarning("[KvAr] КАМЕРА: CPU-кадр недоступен (TryAcquireLatestCpuImage = false)");
+                    yield break;
+                }
+
+                using (image)
+                {
+                    int w = Mathf.Max(2, image.width / 2);
+                    int h = Mathf.Max(2, image.height / 2);
+                    var conversion = new UnityEngine.XR.ARSubsystems.XRCpuImage.ConversionParams
+                    {
+                        inputRect = new RectInt(0, 0, image.width, image.height),
+                        outputDimensions = new Vector2Int(w, h),
+                        outputFormat = TextureFormat.RGBA32,
+                        transformation = UnityEngine.XR.ARSubsystems.XRCpuImage.Transformation.MirrorY
+                    };
+                    var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+                    float luminance = 0f;
+                    byte[] png;
+                    try
+                    {
+                        image.Convert(conversion, tex.GetRawTextureData<byte>());
+                        tex.Apply();
+                        // ЯРКОСТЬ — В ТУ ЖЕ СТРОКУ, ЧТО И ФАЙЛ: чёрный кадр нельзя отличить от
+                        // «камера смотрит в тёмный угол», если в журнале нет числа.
+                        luminance = AverageLuminance(tex.GetPixels32());
+                        png = tex.EncodeToPNG();
+                    }
+                    finally
+                    {
+                        Object.Destroy(tex);
+                    }
+
+                    // КОЛЬЦЕВОЙ НОМЕР: 1…max, затем снова 1. Старый файл с тем же именем
+                    // перезаписывается — так сеанс не копит снимки на устройстве.
+                    int index = FrameSessionIndex + 1;
+                    string name = FrameFileName(index, maxFrameFiles);
+                    string path = System.IO.Path.Combine(Application.persistentDataPath, name);
+                    System.IO.File.WriteAllBytes(path, png);
+
+                    FrameSessionIndex = index;
+                    FramesSaved++;
+                    Debug.Log(DescribeFrameSaved(index, w, h, luminance, path));
+                }
             }
+            finally
+            {
+                frameCaptureRunning = false;
+                // Следующий снимок — через период от момента, когда ЭТОТ закончился: иначе на
+                // медленном устройстве снимки шли бы подряд без пауз.
+                nextFrameCaptureTime = Time.unscaledTime + Mathf.Max(1f, framePeriodSeconds);
+            }
+        }
+
+        /// <summary>
+        /// ЗАПУСТИТЬ ПЕРИОДИЧЕСКИЙ СНИМОК, ЕСЛИ ПРИШЛО ВРЕМЯ. Вызывается из `Update`.
+        ///
+        /// Условие вынесено в чистую `ShouldCaptureFrame`, чтобы правило «не чаще периода и не поверх
+        /// незаконченного снимка» проверялось тестом, а не чтением `Update` глазами.
+        /// </summary>
+        private void CaptureFrameIfDue()
+        {
+            if (cameraManager == null) return;
+            if (!ShouldCaptureFrame(Time.unscaledTime, nextFrameCaptureTime, frameCaptureRunning)) return;
+            StartCoroutine(CaptureCameraFrameOnce());
         }
 
         private void EnableFallbackPreview()
@@ -666,12 +827,18 @@ namespace KazistovVvAr
             return true;
         }
 
-        /// <summary>Строка для журнала/отчёта.</summary>
+        /// <summary>
+        /// Строка для журнала/отчёта. Снимки добавлены 12.11.2026: раньше по этой строке нельзя было
+        /// понять, есть ли вообще доказательство того, что камера видела во время работы.
+        /// </summary>
         public string Describe()
         {
             return "стража камеры: кадров " + CameraFrames +
                    " · разрешение " + (PermissionRequested ? "запрошено" : "не требовалось") +
-                   " · резерв " + (FallbackPreviewActive ? "включён" : "не нужен");
+                   " · резерв " + (FallbackPreviewActive ? "включён" : "не нужен") +
+                   " · снимков " + FramesSaved + " из " + maxFrameFiles +
+                   " (последний " + FrameFileName(FrameSessionIndex <= 0 ? 1 : FrameSessionIndex,
+                                                    maxFrameFiles) + ")";
         }
     }
 }

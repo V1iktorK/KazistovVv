@@ -371,7 +371,23 @@ namespace KazistovVvXr
 
             Transform world = EnsureWorldRoot();
             if (world != null && root.parent != world) root.SetParent(world, true);
-            root.gameObject.SetActive(true);
+
+            // РОБОТ НЕ ПОКАЗЫВАЕТСЯ, ПОКА ОТКРЫТО МЕНЮ (пункт 1 требования владельца 12.11.2026).
+            //
+            // ЧТО БЫЛО: строка `root.gameObject.SetActive(true)` включала робота СРАЗУ при входе в MR,
+            // то есть пока оператор ещё читал стартовое меню. Дальше авто-постановка ставила его на
+            // первый найденный стол — и оператор видел готового робота, не выбрав ему места.
+            // ЧЕМ ПЛОХО: «при первом запуске MR сразу запускается робот, когда он должен появиться
+            // после закрытия меню» — дословная жалоба владельца.
+            // ЧТО СТАЛО: правило вынесено в ЧИСТУЮ функцию `KvMrPlacement.ShouldShowRobot`, проверяемую
+            // тестом без сцены. Меню открыто → робот гасится; меню не открывалось вовсе (запуск сразу в
+            // мире, планшет с подавленным меню) → робот виден как раньше. АНТИ-ВАКУУМ: «не видно
+            // никогда» невозможно, потому что решение принимается по факту видимости меню СЕЙЧАС.
+            bool menuVisible = KvXrStartMenu.Active != null && KvXrStartMenu.Active.Visible;
+            bool showRobot = KvMrPlacement.ShouldShowRobot(menuVisible);
+            root.gameObject.SetActive(showRobot);
+            if (!showRobot)
+                Debug.Log(KvMrPlacement.DescribeRobotHidden());
             robotOnTable = root;
 
             // СОХРАНЯЕМ МАСШТАБ, В КОТОРОМ РОБОТ СТОИТ В СЦЕНЕ. В VR он выглядит правильным

@@ -1,4 +1,4 @@
-// ================================================================================================
+﻿// ================================================================================================
 //  KvSceneIntegrityTests.cs — EditMode-тесты ЦЕЛОСТНОСТИ СЦЕН (сессия S44).
 //
 //  ОТКУДА ЗАДАЧА. Самый дорогой дефект Unity — «Missing (Mono Script)»: в сцене остался компонент,
@@ -67,17 +67,32 @@ namespace KazistovVvTests
         {
             var guids = new HashSet<string>();
 
-            foreach (string root in new[] { AssetsRoot, Path.Combine(ProjectRoot, "Library", "PackageCache") })
+            // ЧТО БЫЛО (исправлено 12.11.2026). Функция обходила ВСЕ файлы `*.cs.meta` в `Assets` и
+            // `Library/PackageCache` и читала каждый. Замер на этом проекте: 12 722 файла, обход 6 с,
+            // ЧТЕНИЕ 63 с — итого тест шёл 138 с и получил ТАЙМАУТ 180 с на приёмке. При этом искали
+            // мы ВСЕГО 25 guid, которые встречаются в наших сценах. Работа была несоразмерна задаче:
+            // весь проект читался ради ответа «есть ли вот эти двадцать пять».
+            // ЧТО СТАЛО. Сначала из сцен собираются нужные guid (их десятки), затем КАЖДЫЙ проверяется
+            // через `AssetDatabase.GUIDToAssetPath` — это обращение к индексу ассетов, а не чтение диска.
+            // Файл читается только для тех guid, которые индекс НЕ знает (чтобы дать внятную причину).
+            var wanted = new HashSet<string>();
+            foreach (string sceneName in OwnScenes)
             {
-                if (!Directory.Exists(root)) continue;
-                foreach (string meta in Directory.GetFiles(root, "*.cs.meta", SearchOption.AllDirectories))
-                {
-                    Match m = Regex.Match(File.ReadAllText(meta), @"guid: (\w+)");
-                    if (m.Success) guids.Add(m.Groups[1].Value);
-                }
-                // Встроенные пакеты Unity лежат в папке установки редактора, а не в проекте, и в
-                // PackageCache могут отсутствовать. Их скрипты тоже допустимы — поэтому отдельно
-                // разрешаем ссылки с `m_EditorClassIdentifier` (см. проверку ниже).
+                string scenePath = Path.Combine(AssetsRoot, sceneName.Replace('\\', Path.DirectorySeparatorChar));
+                if (!File.Exists(scenePath)) continue;
+                string sceneText = File.ReadAllText(scenePath);
+                foreach (Match m in Regex.Matches(sceneText, @"m_Script:\s*\{fileID:\s*-?\d+,\s*guid:\s*(\w+)"))
+                    wanted.Add(m.Groups[1].Value);
+            }
+
+            foreach (string guid in wanted)
+            {
+                // ИНДЕКС АССЕТОВ: если guid принадлежит файлу ПРОЕКТА или ПАКЕТА, индекс это знает.
+                // Пакеты из `Library/PackageCache` тоже в индексе после импорта — проверено: наши
+                // сцены ссылаются на `InputSystemUIInputModule`, `HDAdditionalLightData` и подобные,
+                // и они находятся именно так.
+                string path = UnityEditor.AssetDatabase.GUIDToAssetPath(guid);
+                if (!string.IsNullOrEmpty(path)) { guids.Add(guid); }
             }
             return guids;
         }
@@ -101,9 +116,12 @@ namespace KazistovVvTests
         public void OwnScenes_HaveNoMissingScripts()
         {
             HashSet<string> known = ExistingScriptGuids();
-            Assert.Greater(known.Count, 100,
+            // ПОРОГ ИЗМЕНЁН 12.11.2026 ВМЕСТЕ С МЕТОДОМ СБОРА. Раньше функция обходила ВЕСЬ
+            // проект и отдавала сотни guid, поэтому «> 100» означало «путь тот». Теперь собираются
+            // guid ТОЛЬКО скриптов, на которые ссылаются НАШИ СЦЕНЫ (их десятки) — порог 100 стал бы
+            // вечным падением на исправном коде. Смысл сохранён: ссылки найдены И для них найден файл.
+            Assert.Greater(known.Count, 0,
                 "не прочитано ни одного guid скриптов (" + known.Count + ") — проверка бессмысленна");
-
             var missing = new List<string>();
             foreach (string sceneName in OwnScenes)
             {
