@@ -685,13 +685,13 @@ if ($sweepProblems.Count -eq 0) {
         # ЧТО СТАЛО. Если процесса нет и итоговой строки нет — это состояние СТЕНДА, а не приложения:
         # прогон повторяется один раз. Второе убийство подряд уже считается результатом и честно
         # попадает в красное: два раза подряд память не хватает — это факт о приложении и устройстве.
-        $out = & pwsh -NoProfile -File $sweepRunner -DeviceId $plan.Id -Mode $plan.Mode -LogOut $logFile -CleanState -TimeoutSeconds 600 2>&1
+        $out = & pwsh -NoProfile -File $sweepRunner -DeviceId $plan.Id -Mode $plan.Mode -LogOut $logFile -CleanState -TimeoutSeconds 1200 2>&1
         $code = $LASTEXITCODE
         $killedBySystem = ($out | Where-Object { $_ -match "процесс завершился|экран перехватило" })
         $hasTotal = ($out | Where-Object { $_ -match "ИТОГ:" })
         if ($code -ne 0 -and $killedBySystem -and -not $hasTotal) {
             Write-Host "    повтор: приложение убила система (память устройства), не код — прогоняю ещё раз"
-            $out = & pwsh -NoProfile -File $sweepRunner -DeviceId $plan.Id -Mode $plan.Mode -LogOut $logFile -CleanState -TimeoutSeconds 600 2>&1
+            $out = & pwsh -NoProfile -File $sweepRunner -DeviceId $plan.Id -Mode $plan.Mode -LogOut $logFile -CleanState -TimeoutSeconds 1200 2>&1
             $code = $LASTEXITCODE
             $hasTotal = ($out | Where-Object { $_ -match "ИТОГ:" })
         }

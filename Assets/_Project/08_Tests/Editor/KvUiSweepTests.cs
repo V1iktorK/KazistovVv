@@ -1831,5 +1831,197 @@ namespace KazistovVvTests
             StringAssert.Contains("MenuRow_3", reason);
             StringAssert.Contains("нажимать нечего", reason);
         }
+
+        // ------------------------------------ 4. восстановление экрана панели шлема (UI_SWEEP)
+
+        /// <summary>ГРУППЫ ДЛЯ ЦЕПОЧКИ (свои названия, чтобы тест не зависел от сборки проекта).</summary>
+        private static readonly string[] GroupTitles = { "Стол", "Робот", "Проект" };
+
+        /// <summary>
+        /// ЦЕПОЧКА ВОССТАНОВЛЕНИЯ ЭКРАНА — ИЗ ШТАТНЫХ НАЖАТИЙ ОТ БАЗЫ: иконка группы → иконка
+        /// экрана. Именно её прогон проигрывает перед проверкой элемента панели шлема: нажатие
+        /// раздела пересобирает панель целиком, и без возврата на «свой» экран 152 из 209
+        /// элементов «исчезали» (гейт UI_SWEEP, красный три прогона подряд).
+        ///
+        /// ГРАНИЦЫ ПРАВИЛА (честно закреплены тестом): базовый уровень — пустая цепочка; веер —
+        /// подпись группы; стартовое меню — НЕ цепочка (оно показывается своим путём `Show`);
+        /// экран без подписи и веер без группы — восстанавливать нечем (`null`), и тогда элемент
+        /// обязан получить причину «панель не открыта», а не тихий «исчез».
+        /// </summary>
+        [Test]
+        public void PanelNav_ChainFor_RestoresByStandardPath()
+        {
+            CollectionAssert.AreEqual(new string[0],
+                KvUiSweepPanelNav.ChainFor(KvXrPanelLevel.Groups, -1, GroupTitles, "Состояние"),
+                "базовый уровень — возвращаться не надо, цепочка пустая");
+
+            CollectionAssert.AreEqual(new[] { "Робот" },
+                KvUiSweepPanelNav.ChainFor(KvXrPanelLevel.GroupFan, 1, GroupTitles, "Состояние"),
+                "веер достигается нажатием иконки группы");
+
+            Assert.IsNull(KvUiSweepPanelNav.ChainFor(KvXrPanelLevel.GroupFan, -1, GroupTitles, "Состояние"),
+                "веер без известной группы — восстанавливать нечем");
+            Assert.IsNull(KvUiSweepPanelNav.ChainFor(KvXrPanelLevel.GroupFan, 99, GroupTitles, "Состояние"),
+                "номер группы вне раскладки — цепочка не выдумывается");
+            Assert.IsNull(KvUiSweepPanelNav.ChainFor(KvXrPanelLevel.GroupFan, 0, null, "Состояние"),
+                "без списка групп — цепочки нет");
+
+            CollectionAssert.AreEqual(new[] { "Состояние" },
+                KvUiSweepPanelNav.ChainFor(KvXrPanelLevel.StatusScreen, -1, GroupTitles, "Состояние"),
+                "экран достигается нажатием его иконки на базе");
+            Assert.IsNull(KvUiSweepPanelNav.ChainFor(KvXrPanelLevel.StatusScreen, -1, GroupTitles, ""),
+                "экран без подписи — по какой иконке нажимать, неизвестно");
+
+            Assert.IsNull(KvUiSweepPanelNav.ChainFor(KvXrPanelLevel.StartMenu, -1, GroupTitles, "Стартовое меню"),
+                "стартовое меню — НЕ цепочка: оно показывается штатным Show, иначе пункт меню");
+        }
+
+        /// <summary>
+        /// ПРИЧИНА «ПАНЕЛЬ НЕ ОТКРЫТА» ОБЯЗАНА НАЗЫВАТЬ ЭКРАН И ДЕТАЛЬ — иначе это снова тихий
+        /// «исчез», только другими словами. Попыток — ограниченное число (`MaxAttempts`), и в
+        /// причине это видно: тестировщик должен отличить «не открывается вообще» от «не успели».
+        /// </summary>
+        [Test]
+        public void PanelNav_NotOpenReason_NamesScreenAndAttemptLimit()
+        {
+            Assert.AreEqual(3, KvUiSweepPanelNav.MaxAttempts,
+                "число попыток восстановления закреплено: больше — это уже не «ограниченное число»");
+
+            string reason = KvUiSweepPanelNav.NotOpenReason("экран «Состояние»",
+                "путь не найден после 3 попыток");
+            StringAssert.Contains("панель не открыта", reason, "причина обязана начинаться с проверяемой фразы");
+            StringAssert.Contains("Состояние", reason, "без имени экрана причину нельзя проверить");
+            StringAssert.Contains("путь не найден после 3 попыток", reason, "без детали причина — общие слова");
+
+            string withoutDetail = KvUiSweepPanelNav.NotOpenReason("веер", "");
+            StringAssert.Contains("панель не открыта: веер", withoutDetail);
+        }
+
+        /// <summary>ИМЯ УРОВНЯ ДЛЯ ПРИЧИНЫ — по уровню панели, а не по догадке.</summary>
+        [Test]
+        public void PanelNav_LevelTitle_NamesEveryLevel()
+        {
+            Assert.AreEqual("иконки групп", KvUiSweepPanelNav.LevelTitle(KvXrPanelLevel.Groups, ""));
+            Assert.AreEqual("веер", KvUiSweepPanelNav.LevelTitle(KvXrPanelLevel.GroupFan, ""));
+            Assert.AreEqual("стартовое меню", KvUiSweepPanelNav.LevelTitle(KvXrPanelLevel.StartMenu, "Стартовое меню"));
+            Assert.AreEqual("экран «Состояние»",
+                KvUiSweepPanelNav.LevelTitle(KvXrPanelLevel.StatusScreen, "Состояние"));
+            StringAssert.Contains("уровень 42",
+                KvUiSweepPanelNav.LevelTitle((KvXrPanelLevel)42, ""), "неизвестный уровень назван номером");
+        }
+
+        // ------------------------------------ 5. два «без эффекта» без причины (VR/MR)
+
+        /// <summary>
+        /// СВОЙ РАЗДЕЛ КНОПКИ `MenuSec_*` — ЭТО ЕЁ НОМЕР, А НЕ РАЗДЕЛ, ОТКРЫТЫЙ ПРИ СБОРЕ.
+        ///
+        /// ОТКУДА (шлем, отчёт 11.11.2026): `MenuSec_1«Робот»` получил `ok=0 effect=нет
+        /// изменений` — единственная причина: перед нажатием прогон ставил меню в раздел,
+        /// ЗАПИСАННЫЙ при сборе (0 «Стол»), то есть DifferentSection(0) = 1 — РОВНО тот раздел,
+        /// который собирался нажимать. Нажатие на уже открытый раздел ничего не меняет, и
+        /// рабочая кнопка получила «без эффекта». Теперь у раздела — собственный номер, и
+        /// перед нажатием всегда стоит СОСЕДНИЙ раздел.
+        /// </summary>
+        [Test]
+        public void StartMenu_OwnSection_ExtractsElementOwnIndex()
+        {
+            Assert.AreEqual(1, KvUiSweepStartMenu.OwnSection(
+                "KvXrStartMenu/KvXrStartMenuPanel/KvXrGroupCanvas#3/MenuSec_1«Робот»", SectionTitles),
+                "номер раздела берётся из имени кнопки, а не из состояния панели");
+
+            Assert.AreEqual(2, KvUiSweepStartMenu.OwnSection(
+                "KvXrGroupCanvas#3/MenuSec_2«Проект»", SectionTitles));
+
+            // ПУНКТ ПАНЕЛИ: имени MenuSec_* нет — номер даёт подпись среди названий разделов.
+            Assert.AreEqual(1, KvUiSweepStartMenu.OwnSection(
+                "ПанельШлема/Стартовое меню/Робот«Робот»", SectionTitles));
+
+            Assert.AreEqual(-1, KvUiSweepStartMenu.OwnSection(
+                "KvXrGroupCanvas#3/MenuRow_0«Стол (квадратный, как в …»", SectionTitles),
+                "строка — не раздел, её номер раздела не выдумывается");
+            Assert.AreEqual(-1, KvUiSweepStartMenu.OwnSection("ПанельШлема/Стартовое меню/Сменить робота", SectionTitles));
+            Assert.AreEqual(-1, KvUiSweepStartMenu.OwnSection("", SectionTitles));
+        }
+
+        /// <summary>
+        /// СТРОКА МЕНЮ, КОТОРАЯ ВЫЗЫВАЕТ КОМАНДУ РЕЕСТРА, УЗНАЁТСЯ ПО ПОДПИСИ — для проверки
+        /// «команда сейчас недоступна». Второй «без эффекта» без причины: «Сменить робота»
+        /// вызывает `robot.switch`, у которого `IsEnabled = роботов > 1`; строка нажимается
+        /// ПОСЛЕ удаления последнего робота, команда недоступна, `InvokeMenuCommand` честно
+        /// возвращается — и снимок не видит НИ ОДНОГО признака. Причина обязана опираться на
+        /// ФАКТИЧЕСКОЕ состояние реестра, а не на догадку.
+        /// </summary>
+        [Test]
+        public void StartMenu_RowCommand_NamesSwitchRobot()
+        {
+            Assert.AreEqual("robot.switch", KvUiSweepStartMenu.RowCommandId(
+                "ПанельШлема/Стартовое меню/Сменить робота", "Сменить робота"));
+            Assert.AreEqual("robot.switch", KvUiSweepStartMenu.RowCommandId(
+                "KvXrGroupCanvas#3/MenuRow_5«Сменить робота»", "Сменить робота"),
+                "строка из раскладки меню — тот же пункт");
+
+            Assert.AreEqual("", KvUiSweepStartMenu.RowCommandId(
+                "KvXrGroupCanvas#3/MenuRow_0«Стол (квадратный, как в …»", "Стол (квадратный, как в …"),
+                "обычная строка не получает причину про чужую команду");
+            Assert.AreEqual("", KvUiSweepStartMenu.RowCommandId("", ""));
+        }
+
+        /// <summary>
+        /// ПРИЧИНА «КОМАНДА НЕДОСТУПНА» ДАЁТСЯ ТОЛЬКО КОГДА РЕЕСТР ТАК ГОВОРИТ. Правило узкое и
+        /// с проверкой фактического состояния: если команда зарегистрирована и включена, причины
+        /// НЕТ — тогда отсутствие эффекта остаётся настоящей находкой (`без эффекта`), а не
+        /// оправданием.
+        /// </summary>
+        [Test]
+        public void Exemptions_CommandUnavailableReason_OnlyWhenRegistrySaysSo()
+        {
+            string missing = KvUiSweepExemptions.CommandUnavailableReason(
+                "robot.switch", false, false, "роботов в сцене 0");
+            StringAssert.Contains("не найдена в реестре", missing);
+            StringAssert.Contains("robot.switch", missing);
+            StringAssert.Contains("роботов в сцене 0", missing, "причина обязана содержать фактическое состояние");
+
+            string disabled = KvUiSweepExemptions.CommandUnavailableReason(
+                "robot.switch", true, false, "роботов в сцене 0");
+            StringAssert.Contains("недоступна", disabled);
+            StringAssert.Contains("robot.switch", disabled);
+            StringAssert.Contains("роботов в сцене 0", disabled);
+
+            Assert.AreEqual("", KvUiSweepExemptions.CommandUnavailableReason(
+                "robot.switch", true, true, "роботов в сцене 2"),
+                "включённая команда не получает оправдания");
+            Assert.AreEqual("", KvUiSweepExemptions.CommandUnavailableReason("", false, false, ""),
+                "без команды причина не выдумывается");
+        }
+
+        /// <summary>
+        /// ЭЛЕМЕНТ С ПРИЧИНОЙ «ПАНЕЛЬ НЕ ОТКРЫТА» — ЭТО ИСКЛЮЧЕНИЕ, А НЕ «ИСЧЕЗ» И НЕ «БЕЗ
+        /// ЭФФЕКТА». Тождество отчёта N = P + F + E + исчезло обязано держаться, иначе внешний
+        /// скрипт `Tools/ui-sweep-device.ps1` увидит не те числа.
+        /// </summary>
+        [Test]
+        public void PanelNotOpenElement_CountsAsExemption_NotAsVanishedOrNoEffect()
+        {
+            string reason = KvUiSweepPanelNav.NotOpenReason("экран «Объекты»", "путь не найден после 3 попыток");
+            var run = new KvUiSweepRun { Layout = "vr" };
+            run.Add(new KvUiSweepElement { Path = "a", Ok = true, Effect = "команд выполнено: 1→2" });
+            run.Add(new KvUiSweepElement
+            {
+                Path = "XrRig/XrQuickPanel/KvXrGroupCanvas/Cmd_robot.switch",
+                Ok = false,
+                Effect = "не нажимали — " + reason,
+                ExemptReason = reason,
+                Method = "пропущен"
+            });
+            run.Add(KvUiSweepElement.Vanished("b/c", KvUiSweepKind.Button));
+
+            Assert.AreEqual(3, run.Total);
+            Assert.AreEqual(1, run.Worked, "сработавший элемент — в «сработало»");
+            Assert.AreEqual(1, run.Exempted, "«панель не открыта» — исключение с причиной");
+            Assert.AreEqual(1, run.Missing, "исчез — только то, что не восстанавливали");
+            Assert.AreEqual(0, run.NoEffect, "не ни в «без эффекта»: причина заявлена заранее");
+            Assert.AreEqual(run.Total, run.Worked + run.NoEffect + run.Exempted + run.Missing,
+                "тождество отчёта N = P + F + E + исчезло");
+        }
     }
 }

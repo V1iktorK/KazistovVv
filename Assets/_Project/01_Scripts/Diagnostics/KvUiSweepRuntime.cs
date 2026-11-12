@@ -202,6 +202,36 @@
 //   35) МЕНЮ, КОТОРОЕ НЕ ВЕРНУЛОСЬ, НАЗВАНО ПРЯМО: `ВОЗВРАТ МЕНЮ НЕ УДАЛСЯ после «…»` и
 //       «проверено N из M». Молчаливое «3 из 12» выглядело бы как «а больше пунктов и не было».
 //
+//  ДОРАБОТКА ПО КРАСНОМУ ГЕЙТУ UI_SWEEP (12.11.2026, VR/MR: 209 найдено, 152 «исчезло»):
+//   36) ВОССТАНОВЛЕНИЕ ЭКРАНА ПЕРЕД КАЖДЫМ ЭЛЕМЕНТОМ ПАНЕЛИ ШЛЕМА (паттерн `StartMenuPass`
+//       распространен на иерархическую панель). Причина «исчез» была в самом устройстве
+//       интерфейса: панель шлема пересобирает содержимое при ЛЮБОМ нажатии (`ClearIcons`),
+//       открытое меню вообще гасит панель у руки (`KvXrStartMenu.Hide`), и пути остальных
+//       элементов перестают существовать до конца обхода. Теперь у элемента, принадлежащего
+//       панели (`PanelBound`), запоминается ЕГО уровень и ЦЕПОЧКА ШТАТНЫХ НАЖАТИЙ от базы
+//       (иконка группы → иконка экрана, `KvUiSweepPanelNav.ChainFor`); когда путь не
+//       находится, обход ПЕРЕД «исчез» возвращает панель на этот экран штатными путями
+//       (`KvXrStartMenu.Show`/`Hide` для меню, `RestoreBase` + `PressIndex` для панели у руки,
+//       `SetArVisible` для погашенного канваса), ждёт кадр пересборки и ищет путь заново —
+//       ровно столько раз, сколько задано `KvUiSweepPanelNav.MaxAttempts`. Если экран так и
+//       не открылся, элемент получает ЯВНУЮ причину `панель не открыта: <экран> — <деталь>`
+//       (считается исключением, а не «исчез» и не «без эффекта»); тихий «исчез» остался
+//       только там, где панели нет вовсе (например, интерфейс AR — там правило не действует);
+//   37) СВОЙ РАЗДЕЛ КНОПКИ МЕНЮ — ЕЁ НОМЕР (`MenuSec_1` → 1), а не раздел, открытый при
+//       сборе: иначе `DifferentSection(0) = 1` совпадал с нажимаемым разделом, нажатие шло на
+//       уже открытый раздел и рабочая кнопка получала «нет изменений» (один из двух
+//       «без эффекта» без причины в шлеме);
+//   38) СТРОКА МЕНЮ С КОМАНДОЙ РЕЕСТРА ПОЛУЧАЕТ ПРИЧИНУ ТОЛЬКО ПО ФАКТУ РЕЕСТРА:
+//       «Сменить робота» вызывает `robot.switch`, у которого `IsEnabled = роботов > 1`; строка
+//       нажимается после удаления последнего робота, команда недоступна — и снимок не видит
+//       ни одного признака (второй из двух «без эффекта» без причины). Причина
+//       `команда … недоступна (состояние реестра)` даётся только когда `KvCommands` так и
+//       отвечает; если команда включена, отсутствие эффекта остаётся настоящей находкой
+//       (`без эффекта`), а не оправданием;
+//   39) БЮДЖЕТЫ ВРЕМЕНИ ВЫШЕ (общий 600 с, второй проход 180 с, проход по меню 180 с): обход
+//       «по одному элементу с восстановлением» дороже прежнего, но ОБХОД НЕ ДОЛЖЕН ОБОРВАТЬСЯ
+//       по бюджету, не дойдя до конца — иначе вернётся молчаливое «не проверено».
+//
 //  ЧЕСТНАЯ ГРАНИЦА. Таймаут на элемент измеряется по ФАКТИЧЕСКОМУ времени: Unity не даёт прервать
 //  вызов, который уже выполняется в главном потоке, поэтому «завис навсегда» виден как обрыв файла
 //  отчёта сразу после строки `press=` (виновник назван), а «завис на 5 секунд» — как `ok=0 timeout`
@@ -1364,6 +1394,153 @@ namespace KazistovVvDiagnostics
         /// <summary>Причина, когда меню не удалось вернуть на экран.</summary>
         public const string RestoreFailedReason =
             "не нажимали — меню не вернулось на экран после предыдущего нажатия";
+
+        /// <summary>
+        /// СВОЙ РАЗДЕЛ ЭЛЕМЕНТА МЕНЮ — ЕГО НОМЕР, а не раздел, открытый при сборе.
+        ///
+        /// ЧТО БЫЛО (шлем, отчёт 11.11.2026: `MenuSec_1«Робот»` — «нет изменений»). У кнопки
+        /// `MenuSec_*` номер есть в ИМЕНИ, но проход по меню записывал для всех пунктов один и
+        /// тот же `owner.StartSection` (раздел, открытый в момент сбора) и перед нажатием ставил
+        /// `DifferentSection(записанный)`. При сборе в разделе 0 это давало `DifferentSection(0)
+        /// = 1` — и кнопка раздела 1 нажималась на УЖЕ ОТКРЫТЫЙ раздел: экран не менялся, и
+        /// рабочая кнопка получала «без эффекта». Теперь у раздела — собственный номер (из
+        /// имени `MenuSec_N`, а у пункта панели — по подписи среди названий разделов), и перед
+        /// нажатием всегда стоит СОСЕДНИЙ раздел.
+        /// </summary>
+        /// <returns>Номер раздела или −1, если элемент разделом не является.</returns>
+        public static int OwnSection(string path, IReadOnlyList<string> sectionTitles)
+        {
+            if (string.IsNullOrEmpty(path)) return -1;
+
+            string last = LastSegment(path);
+            if (last.Length == 0) return -1;
+
+            // КНОПКА uGUI: номер в имени (`MenuSec_2` → 2). Проверка на `MenuSec` обязательна:
+            // без неё подпись «Проект2» получила бы номер из цифр подписи.
+            if (last.IndexOf("MenuSec", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                int byName = KvUiSweepExemptions.TrailingNumber(last);
+                return byName >= 0 ? byName : -1;
+            }
+
+            // ПУНКТ ПАНЕЛИ: имени нет, номер даёт подпись среди названий раскладки.
+            if (sectionTitles != null)
+            {
+                for (int i = 0; i < sectionTitles.Count; i++)
+                    if (string.Equals(last, sectionTitles[i], StringComparison.Ordinal)) return i;
+            }
+            return -1;
+        }
+
+        /// <summary>
+        /// КОМАНДА РЕЕСТРА, КОТОРУЮ ВЫЗЫВАЕТ СТРОКА МЕНЮ (`""` — строка не вызывает команду).
+        ///
+        /// ЗАЧЕМ (второй «без эффекта» без причины в шлеме, отчёт 11.11.2026). «Сменить робота» →
+        /// `InvokeMenuCommand("robot.switch")`, а у команды `IsEnabled = роботов &gt; 1`: строка
+        /// нажимается ПОСЛЕ удаления последнего робота, команда недоступна, обработчик честно
+        /// возвращается — и снимок не видит НИ ОДНОГО признака. Правило узкое: таблица ниже —
+        /// это ПОДПИСИ строк, а команда всё равно сверяется с живым реестром
+        /// (`KvUiSweepExemptions.CommandUnavailableReason`), поэтому выдуманная причина
+        /// невозможна: нет подписи — нет правила, команда включена — нет причины.
+        /// </summary>
+        public static string RowCommandId(string path, string label)
+        {
+            string text = (path ?? "") + " «" + (label ?? "") + "»";
+            for (int i = 0; i < RowCommands.Length; i += 2)
+            {
+                if (text.IndexOf(RowCommands[i], StringComparison.Ordinal) >= 0) return RowCommands[i + 1];
+            }
+            return "";
+        }
+
+        /// <summary>Пары «подпись строки → команда реестра» (плоский массив: подпись, команда, …).</summary>
+        private static readonly string[] RowCommands =
+        {
+            "Сменить робота", "robot.switch"
+        };
+    }
+
+    /// <summary>
+    /// ВОССТАНОВЛЕНИЕ ЭКРАНА ПАНЕЛИ ШЛЕМА ПЕРЕД ПРОВЕРКОЙ ЭЛЕМЕНТА — ЧИСТЫЕ ПРАВИЛА.
+    ///
+    /// ЧТО БЫЛО (шлем, красный гейт UI_SWEEP: из 209 элементов 152 «исчезло»). Панель шлема
+    /// иерархична (раздел → иконка группы → экран) и пересобирает содержимое при ЛЮБОМ нажатии
+    /// (`ClearIcons`), а открытое меню вообще гасит панель у руки. Путь элемента, собранного на
+    /// другом уровне, после пересборки не существует — обход откладывал такой элемент и во
+    /// втором проходе честно писал «исчез». Кнопки при этом рабочие: проверять было нечего
+    /// только потому, что обход не умел вернуть панель на нужный экран.
+    ///
+    /// ЧТО СТАЛО. У элемента панели запоминается ЕГО уровень и ЦЕПОЧКА ШТАТНЫХ НАЖАТИЙ от
+    /// базы (`ChainFor`): базовый уровень — пустая цепочка, веер — подпись группы, экран —
+    /// подпись его иконки. Обход проигрывает эту цепочку настоящими нажатиями панели, ждёт
+    /// кадр пересборки и ищет путь заново; если за `MaxAttempts` экран не открылся — элемент
+    /// получает ЯВНУЮ причину `панель не открыта: <экран> — <деталь>` (`NotOpenReason`), а не
+    /// тихий «исчез». Здесь — только чистые функции: их и проверяет тест без сцены.
+    /// </summary>
+    public static class KvUiSweepPanelNav
+    {
+        /// <summary>
+        /// СКОЛЬКО ПОПЫТОК ВОССТАНОВИТЬ ЭКРАН ОДНОГО ЭЛЕМЕНТА, прежде чем назвать причину.
+        /// «Ограниченное число» обязано быть числом: одна попытка — хлипко, бесконечность —
+        /// это уже не обход, а зависание.
+        /// </summary>
+        public const int MaxAttempts = 3;
+
+        /// <summary>
+        /// ЦЕПОЧКА ШТАТНЫХ НАЖАТИЙ ОТ БАЗЫ ДО УРОВНЯ (подписи иконок: сначала группа, потом
+        /// экран). Пустой массив — уровень базовый, возвращаться не надо. `null` — восстановить
+        /// штатными путями нечем (стартовое меню показывается своим `Show`, окно компьютера —
+        /// своим окном; это решает рантайм, а здесь честно сказано «цепочки нет»).
+        /// </summary>
+        /// <param name="level">Уровень, на котором лежит элемент, в момент сбора.</param>
+        /// <param name="openGroupIndex">Какая группа была раскрыта (для веера), −1 — неизвестно.</param>
+        /// <param name="groupTitles">Подписи иконок групп на базовом уровне (по раскладке).</param>
+        /// <param name="screenTitle">Подпись иконки экрана на базовом уровне («Состояние»…).</param>
+        public static string[] ChainFor(KvXrPanelLevel level, int openGroupIndex,
+            IList<string> groupTitles, string screenTitle)
+        {
+            if (level == KvXrPanelLevel.Groups) return new string[0];
+
+            if (level == KvXrPanelLevel.GroupFan)
+            {
+                if (groupTitles == null || openGroupIndex < 0 || openGroupIndex >= groupTitles.Count)
+                    return null;
+                string group = groupTitles[openGroupIndex];
+                return string.IsNullOrEmpty(group) ? null : new[] { group };
+            }
+
+            // МЕНЮ — НЕ ЦЕПОЧКА: `RestoreBase` его скрывает, а показ возможен только штатным
+            // `KvXrStartMenu.Show` (иначе пункт меню проверялся бы на погашенной панели).
+            if (level == KvXrPanelLevel.StartMenu) return null;
+
+            // ЭКРАН: иконка с подписью экрана есть на базовом уровне у пяти экранов; у остальных
+            // подписи нет — рантайм попробует штатный показ экрана самой панели, а если и это
+            // не выйдет — элемент честно получит «панель не открыта».
+            return string.IsNullOrEmpty(screenTitle) ? null : new[] { screenTitle };
+        }
+
+        /// <summary>ИМЯ УРОВНЯ ДЛЯ ПРИЧИНЫ («иконки групп», «веер», «экран «Состояние»»…).</summary>
+        public static string LevelTitle(KvXrPanelLevel level, string screenTitle)
+        {
+            if (level == KvXrPanelLevel.Groups) return "иконки групп";
+            if (level == KvXrPanelLevel.GroupFan) return "веер";
+            if (level == KvXrPanelLevel.StartMenu) return "стартовое меню";
+            if (!string.IsNullOrEmpty(screenTitle)) return "экран «" + screenTitle + "»";
+            return "уровень " + ((int)level).ToString(CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// ПРИЧИНА «ПАНЕЛЬ НЕ ОТКРЫТА» — ОБЯЗАНА НАЗЫВАТЬ ЭКРАН И ФАКТИЧЕСКУЮ ДЕТАЛЬ. Это
+        /// исключение с проверяемым состоянием (считается `исключением` отчёта), а не «исчез»:
+        /// «исчез» означал бы «путь не найден» и ничего не говорил бы о том, что обход ПЫТАЛСЯ
+        /// вернуть экран и называет, какой именно не открылся.
+        /// </summary>
+        public static string NotOpenReason(string levelTitle, string detail)
+        {
+            string head = "панель не открыта: " +
+                          (string.IsNullOrEmpty(levelTitle) ? "уровень панели" : levelTitle);
+            return string.IsNullOrEmpty(detail) ? head : head + " — " + detail;
+        }
     }
 
     /// <summary>
@@ -2112,6 +2289,36 @@ namespace KazistovVvDiagnostics
         }
 
         /// <summary>
+        /// ПРИЧИНА «КОМАНДА РЕЕСТРА СЕЙЧАС НЕДОСТУПНА» — ТОЛЬКО ПО ФАКТУ РЕЕСТРА.
+        ///
+        /// ОТКУДА (шлем, отчёт 11.11.2026: «Сменить робота» — `ok=0 effect=нет изменений` без
+        /// причины). Строка вызывает `robot.switch`, у которого `IsEnabled = роботов &gt; 1`;
+        /// нажатие идёт после удаления последнего робота, `InvokeMenuCommand` видит
+        /// `Enabled = false` и честно возвращается — снимок не видит НИ ОДНОГО признака, и
+        /// рабочая строка выглядит мёртвой. Правило узкое: причина даётся только когда сам
+        /// реестр отвечает «не найдена»/«недоступна», и в причину идёт ФАКТИЧЕСКОЕ состояние
+        /// (`detail` — например, число роботов в сцене). Команда включена → `""` → отсутствие
+        /// эффекта остаётся настоящей находкой гейта, а не оправданием.
+        /// </summary>
+        /// <param name="commandId">Идентификатор команды (`robot.switch`).</param>
+        /// <param name="registered">Команда есть в реестре (`KvCommands.Get` вернул не null).</param>
+        /// <param name="enabled">Команда включена прямо сейчас (`command.Enabled`).</param>
+        /// <param name="detail">Фактическое состояние для причины («роботов в сцене 0») или `""`.</param>
+        public static string CommandUnavailableReason(string commandId, bool registered, bool enabled,
+            string detail)
+        {
+            if (string.IsNullOrEmpty(commandId)) return "";
+            string tail = string.IsNullOrEmpty(detail) ? "" : " · " + detail;
+            if (!registered)
+                return "команда «" + commandId + "» не найдена в реестре — нажатие не выполняет " +
+                       "работу (проверено реестром" + tail + ")";
+            if (!enabled)
+                return "команда «" + commandId + "» недоступна — нажатие не выполняет работу " +
+                       "(состояние реестра: Enabled=false" + tail + ")";
+            return "";
+        }
+
+        /// <summary>
         /// Причина «закрывать нечего» или `""`. `level` — текущий уровень панели, `groupsLevel` —
         /// уровень «иконки групп» (ничего не открыто).
         /// </summary>
@@ -2500,8 +2707,14 @@ namespace KazistovVvDiagnostics
         /// <summary>Сколько секунд отводится ОДНОМУ элементу (дольше — `ok=0 timeout`).</summary>
         public const float ElementBudgetSeconds = 2f;
 
-        /// <summary>Общий предел прогона: по его истечении прогон завершается с честным отчётом.</summary>
-        public const float TotalBudgetSeconds = 240f;
+        /// <summary>
+        /// Общий предел прогона: по его истечении прогон завершается с честным отчётом.
+        /// ПОДНЯТ С 240 ДО 600 (пункт 39 шапки): обход «по одному элементу с восстановлением
+        /// экрана» дороже прежнего (каждый элемент панели — показ/возврат панели + кадр
+        /// пересборки), а прогон ОБЯЗАН дойти до конца — оборванный по бюджету обход вернул бы
+        /// молчаливое «не проверено» вместо итога.
+        /// </summary>
+        public const float TotalBudgetSeconds = 600f;
 
         /// <summary>Предел числа проверяемых элементов (защита от комбинаторного взрыва уровней панели).</summary>
         public const int MaxElements = 140;
@@ -2534,7 +2747,7 @@ namespace KazistovVvDiagnostics
         private int startMenuIndex;               // сквозной номер нажатия в проходе по меню
         private int startMenuCollectSection = -1; // раздел, который был открыт при СБОРЕ меню
         private int startMenuPlanned;             // сколько пунктов меню запланировано (растёт по ходу)
-        private const int StartMenuPassBudgetSeconds = 90;   // две фазы: пункты сбора + строки разделов
+        private const int StartMenuPassBudgetSeconds = 180;  // две фазы: пункты сбора + строки разделов; поднят с 90 (пункт 39 шапки)
 
         /// <summary>
         /// ПУНКТ СТАРТОВОГО МЕНЮ ВМЕСТЕ С РАЗДЕЛОМ, в котором он был виден при сборе.
@@ -2594,8 +2807,12 @@ namespace KazistovVvDiagnostics
         private readonly Dictionary<string, int> collisions =
             new Dictionary<string, int>(StringComparer.Ordinal);
 
-        /// <summary>Предел второго прохода по отложенным элементам, секунды.</summary>
-        public const float RetryBudgetSeconds = 60f;
+        /// <summary>
+        /// Предел второго прохода по отложенным элементам, секунды. ПОДНЯТ С 60 ДО 180 (пункт 39
+        /// шапки): отложенным элементам панели теперь ВОССТАНАВЛИВАЕТСЯ экран (до `MaxAttempts`
+        /// попыток каждому), и 60 с не хватило бы на полный второй проход в шлеме.
+        /// </summary>
+        public const float RetryBudgetSeconds = 180f;
 
         /// <summary>Элемент, отложенный до второго прохода (в скрытой панели или пока исчез).</summary>
         private class DeferredElement
@@ -2976,14 +3193,35 @@ namespace KazistovVvDiagnostics
 
                 // ПЕРЕПОИСК ПЕРЕД НАЖАТИЕМ: ссылка могла умереть при перестроении интерфейса,
                 // путь — нет. Работаем с НОВОЙ ссылкой.
-                if (!Locate(c))
+                bool found = Locate(c);
+
+                // ВОССТАНОВЛЕНИЕ ЭКРАНА ПАНЕЛИ ШЛЕМА (пункт 36 шапки). Путь элемента панели
+                // существует ТОЛЬКО на его уровне, а панель пересобирается при каждом нажатии
+                // (а открытое меню вообще гасит панель у руки). Поэтому до решения «исчез»
+                // панель возвращается на экран элемента штатными путями — и если путь нашёлся
+                // НЕ на своём экране (`Screen_Close` есть на каждом), тоже восстанавливаем.
+                if (c.PanelBound && (!found || !PanelLevelMatches(c)))
+                {
+                    yield return RestorePanelElement(c);
+                    found = Locate(c) && PanelLevelMatches(c);
+                }
+
+                if (!found)
                 {
                     // НЕ НАЙДЕН — интерфейс мог измениться: пересобираем список и пробуем снова.
                     MergeFreshTargets();
-                    if (!Locate(c))
+                    found = Locate(c);
+                    if (c.PanelBound && (!found || !PanelLevelMatches(c)))
+                    {
+                        yield return RestorePanelElement(c);
+                        found = Locate(c) && PanelLevelMatches(c);
+                    }
+                    if (!found)
                     {
                         // ОТКЛАДЫВАЕМ: путь может снова появиться к концу прогона (AR-интерфейс
-                        // перестраивается). Второй проход проверит его заново или назовёт «исчез».
+                        // перестраивается). Второй проход восстановит экран ЕЩЁ РАЗ и либо
+                        // проверит элемент, либо назовёт «панель не открыта» с именем экрана —
+                        // тихий «исчез» для элементов панели больше невозможен.
                         Defer(c, false, "");
                         queue.Done(key);
                         continue;
@@ -3081,6 +3319,14 @@ namespace KazistovVvDiagnostics
 
             var beforePanels = new List<KvUiSweepPanelState>(4);
             KvUiSweepSnapshot before = Capture(beforePanels);
+
+            // РАЗДЕЛ МЕНЮ ДО НАЖАТИЯ — для правила «раздел уже открыт» (пункт 37 шапки).
+            // Сверять состояние ПОСЛЕ нельзя: после удачного нажатия раздел и так открылся бы
+            // на нужном номере, и правило вычёркивало бы УСПЕШНОЕ нажатие из «сработало».
+            int sectionBefore = -1;
+            KvXrGroupPanel sectionPanel = c.IsPanelIcon ? c.Panel : c.PanelOwner;
+            if (sectionPanel != null) sectionBefore = (int)sectionPanel.StartSection;
+
             float t0 = Time.realtimeSinceStartup;
 
             // ОПАСНЫЕ ЭЛЕМЕНТЫ НЕ НАЖИМАЕМ: «Выход из приложения» завершает прогон раньше
@@ -3158,7 +3404,7 @@ namespace KazistovVvDiagnostics
                 Method = string.IsNullOrEmpty(c.PreparedBy) ? method : method + " · открыто: " + c.PreparedBy,
                 TimedOut = timedOut
             };
-            element.ExemptReason = ExemptReasonFor(c);
+            element.ExemptReason = ExemptReasonFor(c, sectionBefore);
 
             if (timedOut)
             {
@@ -3177,7 +3423,12 @@ namespace KazistovVvDiagnostics
         /// проекта. Порядок важен: «недоступен» — самое точное объяснение, и оно не должно
         /// подменяться общим «системный экран».
         /// </summary>
-        private static string ExemptReasonFor(Candidate c)
+        /// <param name="sectionBefore">
+        /// Открытый раздел стартового меню ДО нажатия (−1 — панель меню не участвует). Сверяется
+        /// состояние ДО: после удачного нажатия раздел и так открылся бы на нужном номере, и
+        /// правило закрывало бы УСПЕШНОЕ нажатие, вычёркивая его из «сработало».
+        /// </param>
+        private static string ExemptReasonFor(Candidate c, int sectionBefore)
         {
             // СИСТЕМНЫЙ ШЛЮЗ — САМОЕ ПЕРВОЕ И САМОЕ ТОЧНОЕ объяснение: это не «недоступен» и не
             // «нужно железо», а «это шлюз, а не интерфейс оператора».
@@ -3218,24 +3469,48 @@ namespace KazistovVvDiagnostics
                     return KvUiSweepExemptions.TreeRowAlreadySelectedReason;
             }
 
-            // 4) РАЗДЕЛ СТАРТОВОГО МЕНЮ, который УЖЕ открыт, и «Закрыть», когда закрывать нечего.
-            //    Проверяется ФАКТИЧЕСКОЕ состояние панели, а не догадка по имени.
-            if (c.IsPanelIcon && c.Panel != null)
+            // 4) РАЗДЕЛ СТАРТОВОГО МЕНЮ, КОТОРЫЙ УЖЕ ОТКРЫТ ДО НАЖАТИЯ — законное «ничего не
+            //    меняет», с проверкой ФАКТИЧЕСКОГО состояния ДО нажатия. Правило работает и для
+            //    кнопки uGUI `MenuSec_*`, и для пункта панели (путь кончается подписью раздела):
+            //    раньше оно смотрело только на `IsPanelIcon` и на имя «MenuSec» в пути, то есть
+            //    не срабатывало ВООБСЕ (пункт 37 шапки). Состояние после нажатия сверять нельзя:
+            //    после удачного нажатия раздел открылся бы на нужном номере, и правило вычёркивало
+            //    бы УСПЕШНОЕ нажатие из «сработало».
+            int elementSection = KvUiSweepStartMenu.IsSection(c.Path, SectionTitles())
+                ? KvUiSweepStartMenu.OwnSection(c.Path, SectionTitles())
+                : -1;
+            if (elementSection >= 0)
             {
-                int elementSection = KvUiSweepExemptions.MenuSectionIndexOfName(LastSegmentOf(c.Path));
-                if (elementSection >= 0)
-                {
-                    string section = KvUiSweepExemptions.StartSectionAlreadyOpenReasonFor(
-                        (int)c.Panel.StartSection, elementSection);
-                    if (section.Length > 0) return section;
-                }
+                string section = KvUiSweepExemptions.StartSectionAlreadyOpenReasonFor(
+                    sectionBefore, elementSection);
+                if (section.Length > 0) return section;
+            }
 
-                if (c.Path.IndexOf("Screen_Close", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    string close = KvUiSweepExemptions.NothingToCloseReasonFor(
-                        (int)c.Panel.Level, (int)KvXrPanelLevel.Groups);
-                    if (close.Length > 0) return close;
-                }
+            // 4b) СТРОКА МЕНЮ, ВЫЗЫВАЮЩАЯ КОМАНДУ РЕЕСТРА: если САМ реестр сейчас отвечает
+            //     «недоступна», нажатие законно ничего не меняет — обработчик честно
+            //     возвращается (пункт 38 шапки: «Сменить робота» → `robot.switch`, у которого
+            //     `Enabled = роботов > 1`, а роботов к тому моменту ноль). Причина обязана
+            //     опираться на ФАКТИЧЕСКОЕ состояние: команда читается из живого реестра здесь же,
+            //     и если она включена — причины НЕТ, отсутствие эффекта остаётся находкой.
+            string commandId = KvUiSweepStartMenu.RowCommandId(c.Path, LabelOf(c));
+            if (commandId.Length > 0)
+            {
+                KvCommand command = KvCommands.Get(commandId);
+                string detail = commandId == "robot.switch"
+                    ? "роботов в сцене " + CountSceneRobots()
+                    : "";
+                string unavailable = KvUiSweepExemptions.CommandUnavailableReason(
+                    commandId, command != null, command != null && command.Enabled, detail);
+                if (unavailable.Length > 0) return unavailable;
+            }
+
+            // «ЗАКРЫТЬ», когда закрывать нечего: экран панели уже закрыт.
+            if (c.IsPanelIcon && c.Panel != null &&
+                c.Path.IndexOf("Screen_Close", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                string close = KvUiSweepExemptions.NothingToCloseReasonFor(
+                    (int)c.Panel.Level, (int)KvXrPanelLevel.Groups);
+                if (close.Length > 0) return close;
             }
 
             // 5) КНОПКА ШАПКИ ПАНЕЛИ, КОТОРАЯ УЖЕ В ЦЕЛЕВОМ СОСТОЯНИИ, И СТРЕЛКА ЛИСТА.
@@ -3278,6 +3553,18 @@ namespace KazistovVvDiagnostics
         }
 
         /// <summary>
+        /// СКОЛЬКО РОБОТОВ В СЦЕНЕ СЕЙЧАС — ФАКТИЧЕСКОЕ СОСТОЯНИЕ для причины про команду
+        /// `robot.switch` (её `Enabled = роботов &gt; 1`). Счётчик менеджера для этого приватный,
+        /// поэтому считаем сами тем же поиском: в причине идёт число, а не «наверное, мало».
+        /// </summary>
+        private static int CountSceneRobots()
+        {
+            RobotController[] robots = UnityEngine.Object.FindObjectsByType<RobotController>(
+                FindObjectsInactive.Include);
+            return robots != null ? robots.Length : 0;
+        }
+
+        /// <summary>
         /// ПРОПУСТИТЬ ЛИ ЭЛЕМЕНТ КАК ПК-ОКНО. Правило ТОЛЬКО для раскладок vr/mr: в шлеме окна
         /// компьютера (`KvWorkbenchWindow`, `KvFeatureWindow`, `KvHintCard`, оболочка ПК) не
         /// показываются, и десятки строк «элемент в скрытой панели» только раздували отчёт.
@@ -3312,15 +3599,26 @@ namespace KazistovVvDiagnostics
             if (!KvUiSweepStartMenu.IsHelmetMenuPath(c.Path) &&
                 !KvUiSweepTiers.IsStartMenuItem(c.Path, LabelOf(c))) return false;
 
-            // РАЗДЕЛ, В КОТОРОМ ПУНКТ ВИДЕН СЕЙЧАС. По нему меню вернётся в то же состояние перед
-            // проверкой — иначе `MenuRow_0` будет означать уже ДРУГОЙ пункт.
             KvXrGroupPanel owner = c.PanelOwner != null ? c.PanelOwner : c.Panel;
-            int section = owner != null ? (int)owner.StartSection : 0;
             bool isSection = KvUiSweepStartMenu.IsSection(c.Path, SectionTitles());
 
             // РАЗДЕЛ, ОТКРЫТЫЙ ПРИ СБОРЕ: его строки проверяются в первой фазе (по путям uGUI),
             // поэтому во второй фазе он пропускается — иначе те же строки нажались бы дважды.
-            if (startMenuCollectSection < 0) startMenuCollectSection = section;
+            // Для САМОГО раздела это НЕ его номер — см. ниже.
+            if (startMenuCollectSection < 0)
+                startMenuCollectSection = owner != null ? (int)owner.StartSection : 0;
+
+            // СВОЙ РАЗДЕЛ ЭЛЕМЕНТА (пункт 37 шапки). У КНОПКИ РАЗДЕЛА — ЕЁ НОМЕР из имени
+            // (`MenuSec_1` → 1): проход перед нажатием ставит `DifferentSection(записанный)`, и
+            // если записан раздел СБОРА (0), а нажимается раздел 1, то `DifferentSection(0) = 1`
+            // — и нажатие идёт на УЖЕ ОТКРЫТЫЙ раздел: экран не меняется, и рабочая кнопка
+            // получает «нет изменений» (ровно так в отчёте 11.11.2026 провалился
+            // `MenuSec_1«Робот»`). У СТРОКИ — раздел, в котором она была видна при сборе.
+            IReadOnlyList<string> titles = SectionTitles();
+            int section = isSection
+                ? KvUiSweepStartMenu.OwnSection(c.Path, titles)
+                : (owner != null ? (int)owner.StartSection : 0);
+            if (section < 0) section = owner != null ? (int)owner.StartSection : 0;
 
             // КЛЮЧ УНИКАЛЬНОСТИ — С РАЗДЕЛОМ: `MenuRow_0` разных разделов это РАЗНЫЕ пункты, и
             // схлопывать их в один (как делает общий список путей) значило бы не проверить часть.
@@ -3492,6 +3790,7 @@ namespace KazistovVvDiagnostics
             float t0 = Time.realtimeSinceStartup;
             int checkedNow = 0;
             int notFound = 0;
+            int notOpen = 0;
             int hiddenNow = 0;
             int stuckBefore = stuckPanels.Count;
 
@@ -3510,17 +3809,39 @@ namespace KazistovVvDiagnostics
                 DeferredElement d = deferred[i];
                 if (d == null || d.Candidate == null) continue;
 
+                Candidate rc = d.Candidate;
+
+                // ВОССТАНОВЛЕНИЕ ЭКРАНА ПАНЕЛИ — ПЕРЕД ЛЮБЫМ ОТКАЗОМ (пункт 36 шапки). Второй
+                // проход — последняя возможность вернуть панель на экран элемента штатными
+                // путями; только ПОСЛЕ неё элемент получает явную причину, а не «исчез».
+                if (rc.PanelBound && (!Locate(rc) || !PanelLevelMatches(rc)))
+                    yield return RestorePanelElement(rc);
+
                 // ПРИЧИНА ПО КАЖДОМУ ЭЛЕМЕНТУ — иначе «обработано 0 из 32» ничего не объясняет.
-                if (!Locate(d.Candidate) && !LocateShortened(d.Candidate))
+                // НАЙДЕН = путь найден И панель на СВОЁМ уровне: путь, нашедшийся на чужом
+                // экране (`Screen_Close`), — это не найденный элемент, а нажатие не туда.
+                bool located = Locate(rc) && PanelLevelMatches(rc);
+                if (!located) located = LocateShortened(rc) && PanelLevelMatches(rc);
+                if (!located)
                 {
+                    // ЭКРАН ПАНЕЛИ НЕ ВОССТАНОВИЛСЯ — ЯВНАЯ ПРИЧИНА с именем экрана и деталью
+                    // попыток. Это исключение (`панель не открыта`), а НЕ тихий «исчез»:
+                    // обход обязан сказать, КАКОЙ именно экран не открылся.
+                    if (rc.PanelBound)
+                    {
+                        notOpen++;
+                        RecordPanelNotOpen(rc);
+                        continue;
+                    }
+
                     notFound++;
-                    Line("[KvUiSweep] ВТОРОЙ ПРОХОД: " + d.Candidate.Path + " — путь не найден");
+                    Line("[KvUiSweep] ВТОРОЙ ПРОХОД: " + rc.Path + " — путь не найден");
                     if (d.Hidden)
                     {
                         Record(new KvUiSweepElement
                         {
-                            Path = d.Candidate.Path,
-                            Kind = d.Candidate.Kind,
+                            Path = rc.Path,
+                            Kind = rc.Kind,
                             Ok = false,
                             Effect = "не нажимали — панель так и не открылась",
                             ExemptReason = KvUiSweepExemptions.HiddenPanelReasonFor(d.PanelPath),
@@ -3530,7 +3851,7 @@ namespace KazistovVvDiagnostics
                     }
                     else
                     {
-                        Record(KvUiSweepElement.Vanished(d.Candidate.Path, d.Candidate.Kind));
+                        Record(KvUiSweepElement.Vanished(rc.Path, rc.Kind));
                     }
                     continue;
                 }
@@ -3556,6 +3877,10 @@ namespace KazistovVvDiagnostics
             inRetryPass = false;
             Line(run.RetrySummaryLine(checkedNow, hiddenNow, notFound,
                 Time.realtimeSinceStartup - t0));
+            if (notOpen > 0)
+                Line("[KvUiSweep] ВТОРОЙ ПРОХОД: панель не открыта " + notOpen +
+                     " — эти элементы получили причину «панель не открыта» с именем экрана " +
+                     "(см. строки element=), а не «исчез»");
             if (stuckPanels.Count > stuckBefore)
                 Line("[KvUiSweep] ВТОРОЙ ПРОХОД: панелей так и не открылось " +
                      (stuckPanels.Count - stuckBefore) + " — см. список ниже");
@@ -4054,17 +4379,26 @@ namespace KazistovVvDiagnostics
                     }
                 }
 
-                RestoreBase(panel);
-                if (c.PathIndices != null)
+                // ПАНЕЛЬ УЖЕ НА ЗАПИСАННОМ УРОВНЕ (экран восстановлен перед проверкой) — `RestoreBase`
+                // НЕ ВЫЗЫВАЕТСЯ: он пересобрал бы содержимое и уничтожил только что найденную
+                // иконку, а нажатие ушло бы в объект, уничтожаемый в конце кадра. И цепочка
+                // `PathIndices` тоже НЕ нажимается: её номера — это номера на БАЗОВОМ уровне, и
+                // на уже открытом уровне они указывали бы на чужие иконки.
+                bool levelKnown = c.PanelBound && (int)panel.Level == c.ExpectedLevel;
+                if (!levelKnown)
                 {
-                    for (int i = 0; i < c.PathIndices.Length; i++)
+                    RestoreBase(panel);
+                    if (c.PathIndices != null)
                     {
-                        if (c.PathIndices[i] >= panel.IconCount)
+                        for (int i = 0; i < c.PathIndices.Length; i++)
                         {
-                            detail = "уровень панели не восстановлен (нет иконки " + c.PathIndices[i] + ")";
-                            return PrepResult.Failed;
+                            if (c.PathIndices[i] >= panel.IconCount)
+                            {
+                                detail = "уровень панели не восстановлен (нет иконки " + c.PathIndices[i] + ")";
+                                return PrepResult.Failed;
+                            }
+                            panel.PressIndex(c.PathIndices[i]);
                         }
-                        panel.PressIndex(c.PathIndices[i]);
                     }
                 }
                 if ((int)panel.Level != c.ExpectedLevel)
@@ -4122,10 +4456,16 @@ namespace KazistovVvDiagnostics
             if (c.PanelOwner != null)
             {
                 KvXrGroupPanel owner = c.PanelOwner;
-                owner.Rebuild(true);
+
+                // ЭЛЕМЕНТ УЖЕ НА СВОЁМ УРОВНЕ (экран восстановлен перед проверкой) — ЛИШНЯЯ
+                // ПЕРЕСБОРКА РАЗРУШИЛА БЫ только что найденный объект: `ClearIcons` уничтожает
+                // иконки, и нажатие ушло бы в объект, уничтожаемый в конце кадра. Пересбираем
+                // только когда уровень НЕ совпал — тогда содержимое действительно надо собрать.
+                bool levelKnown = c.PanelBound && (int)owner.Level == c.ExpectedLevel;
+                if (!levelKnown) owner.Rebuild(true);
                 if (TopInactiveAncestor(target.gameObject) == null)
                 {
-                    c.PreparedBy = "пересборка панели";
+                    if (!levelKnown) c.PreparedBy = "пересборка панели";
                     return PrepResult.Ready;
                 }
 
@@ -4596,7 +4936,7 @@ namespace KazistovVvDiagnostics
                     if (string.IsNullOrEmpty(key)) continue;
 
                     string label = LabelOf(s.gameObject);
-                    into.Add(new Candidate
+                    var candidate = new Candidate
                     {
                         Path = path,
                         Key = key,
@@ -4607,7 +4947,9 @@ namespace KazistovVvDiagnostics
                         OpensPanel = KvUiSweepTiers.OpensPanel(path, label),
                         SystemGate = KvUiSweepExemptions.IsGatePath(path),
                         PanelOwner = s.GetComponentInParent<KvXrGroupPanel>()
-                    });
+                    };
+                    RecordPanelRoute(candidate);
+                    into.Add(candidate);
                     if (into.Count >= MaxElements) return;
                 }
             }
@@ -4641,20 +4983,292 @@ namespace KazistovVvDiagnostics
                 {
                     if (into.Count >= MaxElements) return;
                     string path = PanelPath(level, panel.TitleAt(k));
-                    into.Add(new Candidate
+                    var icon = new Candidate
                     {
                         Path = path,
                         Key = KvUiSweepNames.KeyOf(path),
                         Kind = KvUiSweepKind.PanelIcon,
                         Panel = panel,
+                        PanelOwner = panel,
                         Index = k,
                         PathIndices = new int[0],
                         ExpectedLevel = level,
                         Depth = 0
-                    });
+                    };
+                    RecordPanelRoute(icon);
+                    into.Add(icon);
                 }
             }
         }
+
+        /// <summary>
+        /// ЦЕПОЧКА ОТ БАЗЫ ДЛЯ ЭЛЕМЕНТА, РАСКРЫТОГО ИЗ УЖЕ ОТКРЫТОГО УРОВНЯ. Панель в момент
+        /// раскрытия стоит на БАЗОВОМ уровне (`RestoreBase` отработал в `CheckOne`), поэтому
+        /// первый шаг цепочки — подпись иконки, которой панель на этот уровень попала: для веера
+        /// это иконка группы, для экрана — иконка его самого (экраны достижимы от базы напрямую,
+        /// минуя веер). Если подпись прочитать не удалось — откат к раскладке (`ChainFor`),
+        /// а если и она не знает уровня — `null`, и элемент честно получит «панель не открыта».
+        /// </summary>
+        private static string[] BuildBaseChain(KvXrGroupPanel panel, int[] path, int level)
+        {
+            KvXrPanelLevel lvl = (KvXrPanelLevel)level;
+            if (panel != null && path != null && path.Length >= 1)
+            {
+                string first = panel.TitleAt(path[0]);
+                if (!string.IsNullOrEmpty(first)) return new[] { first };
+            }
+            return KvUiSweepPanelNav.ChainFor(lvl, -1, null, KvXrGroupPanel.ScreenTitle(lvl));
+        }
+
+        /// <summary>
+        /// ЗАПИСАТЬ МАРШРУТ ЭЛЕМЕНТА ПАНЕЛИ ШЛЕМА: ЕГО уровень в момент сбора, цепочка штатных
+        /// нажатий от базы до этого уровня и имя уровня для причины «панель не открыта».
+        ///
+        /// ЗАЧЕМ ЗДЕСЬ, А НЕ ПРИ ПРОВЕРКЕ. Путь элемента панели существует ТОЛЬКО на своём
+        /// уровне (`ClearIcons` уничтожает содержимое другого уровня), а к моменту проверки
+        /// панель уже перестроилась десятки раз. Единственное место, где уровень ещё честно
+        /// известен, — момент сбора: элемент физически лежит на этом уровне. Уровень окна
+        /// компьютера получает цепочку по подписи экрана — рантайм попробует и без неё и в
+        /// конце даст честную причину.
+        /// </summary>
+        private void RecordPanelRoute(Candidate c)
+        {
+            if (c == null) return;
+            KvXrGroupPanel owner = c.PanelOwner != null ? c.PanelOwner : c.Panel;
+            if (owner == null) return;
+
+            c.PanelBound = true;
+            c.ExpectedLevel = (int)owner.Level;
+            KvXrPanelLevel screenLevel = owner.isWindow ? owner.WindowScreen : owner.Level;
+            string screenTitle = KvXrGroupPanel.ScreenTitle(screenLevel);
+            c.RestoreScreenTitle = KvUiSweepPanelNav.LevelTitle(owner.Level, screenTitle);
+            c.RestoreChain = KvUiSweepPanelNav.ChainFor(owner.Level, owner.OpenGroupIndex,
+                GroupTitles(), screenTitle);
+        }
+
+        /// <summary>
+        /// ПОДПИСИ ГРУПП НА БАЗОВОМ УРОВНЕ — ИЗ РАСКЛАДКИ ТУЛБАРА, а не с живой панели: к
+        /// моменту восстановления панель перестроена, а раскладка (`KvToolbarGroups`) константна
+        /// и совпадает с тем, что панель рисует на базовом уровне.
+        /// </summary>
+        private static List<string> GroupTitles()
+        {
+            KvToolbarGroup[] groups = KvToolbarGroups.All;
+            var titles = new List<string>(groups != null ? groups.Length : 0);
+            if (groups == null) return titles;
+            for (int i = 0; i < groups.Length; i++)
+                titles.Add(groups[i] != null ? (groups[i].Title ?? "") : "");
+            return titles;
+        }
+
+        /// <summary>
+        /// УРОВЕНЬ ПАНЕЛИ СОВПАДАЕТ С ЗАПИСАННЫМ — ЭЛЕМЕНТ НАХОДИТСЯ НА СВОЁМ ЭКРАНЕ.
+        ///
+        /// ЗАЧЕМ ОТДЕЛЬНАЯ ПРОВЕРКА, ЕСЛИ ПУТЬ НАЙДЕН. Часть путей существует на НЕСКОЛЬКИХ
+        /// уровнях (`Screen_Close` есть на каждом экране): путь нашёлся бы на ЧУЖОМ экране, и
+        /// нажатие ушло бы не туда — эффект оказался бы у невиновной кнопки. Для элемента,
+        /// который НЕ принадлежит панели (AR, док-панели), проверка всегда проходит — правило
+        /// действует только в шлеме.
+        /// </summary>
+        private static bool PanelLevelMatches(Candidate c)
+        {
+            if (c == null || !c.PanelBound) return true;
+
+            KvXrGroupPanel panel = c.IsPanelIcon ? c.Panel : c.PanelOwner;
+            if (panel == null || !panel.isActiveAndEnabled) return false;
+            if ((int)panel.Level != c.ExpectedLevel) return false;
+
+            // МЕНЮ: уровень может совпасть, а само меню — быть закрытым; тогда пунктов меню нет.
+            if (c.ExpectedLevel == (int)KvXrPanelLevel.StartMenu)
+            {
+                KvXrStartMenu menu = KvXrStartMenu.Active;
+                if (menu == null || !menu.Visible || menu.Panel != panel) return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// ВЕРНУТЬ ПАНЕЛЬ НА ЭКРАН ЭЛЕМЕНТА — ШТАТНЫМИ ПУТЯМИ. Возвращает `""` или деталь
+        /// неудачи (её потом видно в причине «панель не открыта»).
+        ///
+        /// ПОРЯДОК ШАГОВ ВЫБРАН ПО УСТРОЙСТВУ ИНТЕРФЕЙСА (найдено разбором отчёта 11.11.2026):
+        ///   1) стартовое меню показывается ТОЛЬКО своим `KvXrStartMenu.Show` (он же гасит
+        ///      панель у руки) — `RestoreBase` меню, наоборот, СКРЫВАЕТ, поэтому для уровня
+        ///      `StartMenu` цепочки нет вообще;
+        ///   2) окно компьютера открывается той же командой/хостом, что и обычно;
+        ///   3) панель у руки: открытое меню её гасит — закрывается меню штатным `Hide` (он же
+        ///      возвращает панель у руки), затем показывается погашенный канвас `SetArVisible`;
+        ///   4) возврат на базу `RestoreBase` и нажатия по цепочке «иконка группы → иконка
+        ///      экрана» настоящим `PressIndex`; если иконка экрана открыла окно компьютера
+        ///      (`OpenWindow`), сама панель открывает экран тем же `OpenScreen`, которым
+        ///      открывается её иконка;
+        ///   5) каждый шаг ПРОВЕРЯЕТСЯ фактическим уровнем — «нажали и надеемся» не считается.
+        /// </summary>
+        private string NavigatePanel(Candidate c)
+        {
+            KvXrGroupPanel panel = c.IsPanelIcon ? c.Panel : c.PanelOwner;
+            if (panel == null && c.IsPanelIcon)
+            {
+                panel = ActivePanel();                 // панель пересоздали — берём живую
+                if (panel != null) c.Panel = panel;
+            }
+            if (panel == null) return "панель шлема в сцене не найдена";
+
+            KvXrStartMenu menu = KvXrStartMenu.Active;
+            bool isMenuPanel = menu != null && menu.Panel == panel;
+
+            // 1) СТАРТОВОЕ МЕНЮ — СВОИМ ШТАТНЫМ ПУТЁМ.
+            if (c.ExpectedLevel == (int)KvXrPanelLevel.StartMenu)
+            {
+                if (menu == null) return "объекта стартового меню в сцене нет";
+                if (!menu.Visible) menu.Show();
+                if (!menu.Visible || !panel.isActiveAndEnabled)
+                    return "меню не показалось (видимость=" + (menu.Visible ? "1" : "0") + ")";
+                return "";
+            }
+
+            // 2) ОКНО КОМПЬЮТЕРА — СВОИМ ОКНОМ (командой, которой оно и открывалось).
+            if (panel.isWindow)
+            {
+                if (!string.IsNullOrEmpty(panel.WindowCommandId) &&
+                    panel.OpenDesktopWindow(panel.WindowCommandId)) return "";
+                KvXrWindowHost host = KvXrWindowHost.Active;
+                if (host != null && panel.WindowScreen != KvXrPanelLevel.Groups &&
+                    host.Open(panel.WindowScreen, KvXrGroupPanel.ScreenTitle(panel.WindowScreen)) != null)
+                    return "";
+                return "окно компьютера не открывается: команды окна нет";
+            }
+
+            // 3) ПАНЕЛЬ У РУКИ: открытое меню её гасит — закрываем меню штатным путём.
+            if (menu != null && menu.Visible && !isMenuPanel) menu.Hide();
+
+            if (isMenuPanel)
+            {
+                // У ПАНЕЛИ МЕНЮ УРОВНЯ «ИКОНКИ ГРУПП» ШТАТНОГО ПОКАЗА НЕТ: `Show` ведёт только
+                // на уровень меню, а `RestoreBase` его скрывает. Поэтому: возврат на базу
+                // (`RestoreBase` у меню побочно гасит его — это его штатное поведение), затем
+                // включение объекта панели и ПЕРЕСБОРКА — тот же принцип «показ + пересборка»,
+                // что `SetArVisible` + `Rebuild` в подготовке элемента (включённая силой панель
+                // без пересборки проверять нельзя — правило пункта 13 шапки).
+                RestoreBase(panel);
+                if (!panel.isActiveAndEnabled)
+                {
+                    panel.gameObject.SetActive(true);
+                    panel.Rebuild(true);
+                }
+                if (!panel.isActiveAndEnabled) return "канвас панели меню не активен";
+            }
+            else
+            {
+                RestoreBase(panel);
+                if ((int)panel.Level != (int)KvXrPanelLevel.Groups)
+                    return "панель не вернулась на иконки групп (уровень " + panel.Level + ")";
+                if (!panel.IsCanvasVisible) panel.SetArVisible(true);
+                if (!panel.isActiveAndEnabled)
+                {
+                    // Корень панели погашен не `SetArVisible` (например, скрыт сам объект) —
+                    // включаем объект и перестраиваем, чтобы содержимое было собрано заново.
+                    panel.gameObject.SetActive(true);
+                    panel.Rebuild(true);
+                }
+                if (!panel.isActiveAndEnabled) return "канвас панели не активен";
+
+                // 4) ЦЕПОЧКА ШТАТНЫХ НАЖАТИЙ: иконка группы → иконка экрана.
+                string[] chain = c.RestoreChain;
+                if (chain != null)
+                {
+                    for (int i = 0; i < chain.Length; i++)
+                    {
+                        int index = IconIndexOfTitle(panel, chain[i]);
+                        if (index < 0)
+                            return "на иконках групп нет иконки «" + chain[i] + "»";
+                        panel.PressIndex(index);
+                        // УРОВЕНЬ НЕ ПРОВЕРЯЕТСЯ ЗДЕСЬ: иконка экрана при живом хосте окон
+                        // открывает ОКНО, а не экран панели, — тогда ниже сработает запасной
+                        // штатный путь (`OpenScreen`), а не отказ. Факт сверяется в конце.
+                    }
+                }
+
+                // ЗАПАСНОЙ ШТАТНЫЙ ПУТЬ ДЛЯ ЭКРАНА: иконка экрана могла открыть окно компьютера
+                // (`OpenWindow`), а не экран панели — тогда сама панель открывает экран тем же
+                // `OpenScreen`, которым открывается её иконка, когда окон в сцене нет.
+                if ((int)panel.Level != c.ExpectedLevel &&
+                    c.ExpectedLevel >= (int)KvXrPanelLevel.StatusScreen)
+                    panel.OpenScreen((KvXrPanelLevel)c.ExpectedLevel);
+            }
+
+            // 5) ПРОВЕРКА ФАКТА: «нажали и надеемся» не считается восстановлением.
+            if ((int)panel.Level != c.ExpectedLevel)
+                return "уровень " + panel.Level + " вместо " + (KvXrPanelLevel)c.ExpectedLevel;
+            return "";
+        }
+
+        /// <summary>
+        /// ВОССТАНОВИТЬ ЭКРАН ЭЛЕМЕНТА И НАЙТИ ПУТЬ ЗАНОВО — ДО `MaxAttempts` ПОПЫТОК.
+        ///
+        /// ЧТО БЫЛО. Путь не находился → элемент откладывался → во втором проходе записывался
+        /// «исчез». Для панели шлема это была массовая потеря (152 из 209): исчезал не элемент,
+        /// а ЭКРАН, на котором он лежит.
+        /// ЧТО СТАЛО. Каждая попытка: показать/вернуть панель штатным путём → нажать цепочку →
+        /// ЖДЁМ КАДР (старые объекты уничтожаются в конце кадра, и без ожидания индекс путей
+        /// нашёл бы уничтожаемый объект — урок `StartMenuPass`) → пересобрать индекс → найти
+        /// путь заново. Успех — элемент проверяется обычным порядком; неудача — `RestoreFail`
+        /// с деталью, и обход пишет причину «панель не открыта», а НЕ «исчез».
+        /// </summary>
+        private IEnumerator RestorePanelElement(Candidate c)
+        {
+            if (c == null || !c.PanelBound) yield break;
+            c.RestoreFail = "";
+
+            for (int attempt = 0; attempt < KvUiSweepPanelNav.MaxAttempts; attempt++)
+            {
+                if (finished) yield break;
+                if (Locate(c) && PanelLevelMatches(c)) { c.RestoreFail = ""; yield break; }
+
+                string detail = NavigatePanel(c);
+                yield return null;                     // пересборка заканчивается в конце кадра
+                RebuildUiIndex();
+                c.Target = null;                       // путь — устойчивый ключ, ссылка — нет
+                if (Locate(c) && PanelLevelMatches(c)) { c.RestoreFail = ""; yield break; }
+                c.RestoreFail = detail.Length > 0
+                    ? detail
+                    : "путь не найден на восстановленном уровне";
+            }
+
+            if (Locate(c) && PanelLevelMatches(c)) { c.RestoreFail = ""; yield break; }
+            if (c.RestoreFail.Length == 0)
+                c.RestoreFail = "путь не найден после " + KvUiSweepPanelNav.MaxAttempts +
+                                " попыток восстановления";
+        }
+
+        /// <summary>
+        /// ЗАПИСАТЬ ЭЛЕМЕНТ С ПРИЧИНОЙ «ПАНЕЛЬ НЕ ОТКРЫТА» — ЭТО ИСКЛЮЧЕНИЕ С ПРОВЕРЯЕМЫМ
+        /// СОСТОЯНИЕМ, а не «исчез» и не «без эффекта»: назван экран (`RestoreScreenTitle`) и
+        /// фактическая деталь неудачи (`RestoreFail`), видно, сколько попыток было сделано.
+        /// </summary>
+        private void RecordPanelNotOpen(Candidate c)
+        {
+            string detail = c.RestoreFail;
+            if (detail.Length == 0)
+                detail = "путь не найден после " + KvUiSweepPanelNav.MaxAttempts + " попыток";
+            string reason = KvUiSweepPanelNav.NotOpenReason(c.RestoreScreenTitle, detail);
+
+            panelNotOpen++;
+            if (panelNotOpen <= 20)
+                Line("[KvUiSweep] ВОССТАНОВЛЕНИЕ ПАНЕЛИ: " + c.Path + " — " + reason);
+            Record(new KvUiSweepElement
+            {
+                Path = c.Path,
+                Kind = c.Kind,
+                Ok = false,
+                Effect = "не нажимали — " + reason,
+                ExemptReason = reason,
+                Method = "пропущен"
+            });
+        }
+
+        /// <summary>Сколько элементов получили причину «панель не открыта» (для отчёта).</summary>
+        private int panelNotOpen;
 
         /// <summary>
         /// РАСКРЫТИЕ СЛЕДУЮЩЕГО УРОВНЯ ПАНЕЛИ. Нажатие иконки группы раскрывает веер команд, а
@@ -4697,19 +5311,29 @@ namespace KazistovVvDiagnostics
                 string key = KvUiSweepNames.KeyOf(pathText);
                 if (string.IsNullOrEmpty(key) || byKey.ContainsKey(key)) continue;
 
-                byKey[key] = new Candidate
+                var icon = new Candidate
                 {
                     Path = pathText,
                     Key = key,
                     Label = title ?? "",
                     Kind = KvUiSweepKind.PanelIcon,
                     Panel = c.Panel,
+                    PanelOwner = c.Panel,
                     Index = k,
                     PathIndices = path,
                     ExpectedLevel = level,
                     Depth = c.Depth + 1,
                     OpensPanel = KvUiSweepTiers.OpensPanel(pathText, title ?? "")
                 };
+                // ЭЛЕМЕНТ СЛЕДУЮЩЕГО УРОВНЯ ТОЖЕ ПРИНАДЛЕЖИТ ПАНЕЛИ (пункт 36 шапки): его путь
+                // существует только на своём уровне. Цепочка от базы строится ЗДЕСЬ, а не при
+                // сборе: панель сейчас на БАЗОВОМ уровне (после `RestoreBase`), поэтому подпись
+                // первого шага читается прямо по номеру иконки.
+                icon.PanelBound = true;
+                icon.RestoreScreenTitle = KvUiSweepPanelNav.LevelTitle((KvXrPanelLevel)level,
+                    KvXrGroupPanel.ScreenTitle((KvXrPanelLevel)level));
+                icon.RestoreChain = BuildBaseChain(c.Panel, path, level);
+                byKey[key] = icon;
                 added += queue.Merge(key,
                     (int)KvUiSweepTiers.TierOf(pathText, title ?? "", byKey[key].OpensPanel));
             }
@@ -5717,6 +6341,24 @@ namespace KazistovVvDiagnostics
             public bool ShowedStartMenu;
             /// <summary>КАК элемент пришлось открыть (`ShowPanel(settings)`, `SetActive`…).</summary>
             public string PreparedBy = "";
+            /// <summary>
+            /// ЭЛЕМЕНТ ПРИНАДЛЕЖИТ ПАНЕЛИ ШЛЕМА (uGUI внутри её дерева или иконка самой панели).
+            /// Для таких элементов путь существует ТОЛЬКО на своём уровне панели, поэтому перед
+            /// проверкой (и перед «исчез») обход возвращает панель на этот уровень штатными
+            /// путями — см. `KvUiSweepPanelNav`. В AR/ПК таких элементов нет, и правило там не
+            /// действует.
+            /// </summary>
+            public bool PanelBound;
+            /// <summary>
+            /// ЦЕПОЧКА ШТАТНЫХ НАЖАТИЙ ОТ БАЗЫ ДО УРОВНЯ ЭЛЕМЕНТА (подписи иконок). `null` —
+            /// цепочки нет: стартовое меню показывается своим `Show`, окно компьютера — своим
+            /// окном (это решает рантайм при восстановлении).
+            /// </summary>
+            public string[] RestoreChain;
+            /// <summary>ИМЯ УРОВНЯ для причины «панель не открыта» («экран «Состояние»»…).</summary>
+            public string RestoreScreenTitle = "";
+            /// <summary>ПОЧЕМУ ЭКРАН НЕ ВОССТАНОВИЛСЯ (`""` — нечего восстанавливать/восстановилось).</summary>
+            public string RestoreFail = "";
 
             public bool IsPanelIcon { get { return Kind == KvUiSweepKind.PanelIcon; } }
         }

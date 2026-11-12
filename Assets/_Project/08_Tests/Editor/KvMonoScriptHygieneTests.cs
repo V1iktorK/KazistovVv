@@ -35,8 +35,20 @@ using UnityEngine;
 namespace KazistovVvTests
 {
     /// <summary>Гигиена сериализации: `m_Script` каждой компоненты сцен ведёт на свой класс.</summary>
+        [Category(KvTestCategories.Slow)]
     public class KvMonoScriptHygieneTests
     {
+        /// <summary>
+        /// ЧИСТАЯ СЦЕНА ПОСЛЕ ПРОГОНА. Фикстура открывает основные сцены (Single) и обязана
+        /// вернуть редактор в пустую сцену: иначе следующие фикстуры (например P1-21,
+        /// «стол найден в пустой сцене») находят объекты ЧУЖОЙ сцены и падают не по своей вине
+        /// (найдено 12.11.2026 — кросс-загрязнение тестов).
+        /// </summary>
+        [TearDown]
+        public void LeaveEmptyScene()
+        {
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        }
         /// <summary>Сцены, которые уезжают в сборку и в которых живут сериализованные компоненты.</summary>
         private static readonly string[] Scenes =
         {

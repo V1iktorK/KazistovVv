@@ -523,14 +523,21 @@ namespace KazistovVvTests
         /// позиции роботов `±3,2 → ±3,44`. Правка проверена формулами из `StandBuilder`
         /// и прогоном проекта. `MainScene` при этом НЕ менялась.
         ///
+        /// ОБНОВЛЕНО 12.11.2026 (MiMo): изменены ОБЕ сцены НАМЕРЕННО — фикс дефекта «Missing script»
+        /// (§3.7 передачи DSH): компоненты `RegisteredObject` на `Стенд_1_Стол`/`Стенд_2_Стол` висели
+        /// битой сериализацией `m_Script: {fileID: 413221061}` без guid (на устройствах Android —
+        /// «referenced script is missing!», компоненты мертвы). Класс перенесён в `RegisteredObject.cs`,
+        /// ссылки в XrMain/ArMain/MainScene исправлены построчно на настоящий guid. Контроль:
+        /// тест `KvMonoScriptHygieneTests` (RED на старых сценах → GREEN на новых).
+        ///
         /// ВАЖНО: хеш — не «красивое число», а сторож. Если он снова не совпадёт, сначала
         /// выясните, КТО и ЗАЧЕМ изменил сцену, и только потом обновляйте эталон.
         /// </summary>
         [Test]
         public void Scenes_UntouchedByThisWave()
         {
-            const string mainSceneSha = "22AA6D2299161F0D6B0DE404F4571438D63323E2D428CE222F72FD815185B02C";
-            const string xrMainSha = "4B3194F1B6A3215B908202AA657601DA4F7C3E5E00F047C59575971321729471";
+            const string mainSceneSha = "7F9A4D0790A49DCBB3174DF07CCD01B6D4D5C0D8AFD4F46789FAF05C506F86E1";
+            const string xrMainSha = "E767B14E57BC0FC829EEBA04567AB792FD01E3232CEF09D193EC707ABA347CC6";
 
             Assert.AreEqual(mainSceneSha, Sha256Of("Assets/_Project/00_Scenes/MainScene.unity"),
                 "MainScene не меняется этой волной");
