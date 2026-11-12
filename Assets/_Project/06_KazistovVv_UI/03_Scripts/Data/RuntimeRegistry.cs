@@ -154,22 +154,4 @@ namespace KazistovVvUI
         }
     }
 
-    /// <summary>
-    /// Маркер на произвольных объектах сцены (столы и т.п.), чтобы реестр
-    /// мог их найти и показать в дереве. Вешается автоматически при спавне.
-    /// </summary>
-    public class RegisteredObject : MonoBehaviour
-    {
-        // Runtime-only cache: заполняется при спавне (KvRobotImport/ObjectSpawner/StandBuilder)
-        // и пересобирается RuntimeRegistry.RebuildFromScene(), поэтому сериализация ему НЕ нужна.
-        // UAC1001 («Public field skipped by serialization…») гасится документированным способом —
-        // [System.NonSerialized] (Unity Manual: Serialization rules analyzer reference, UAC1001).
-        // Ставить сюда [System.Serializable] НЕЛЬЗЯ: ProjectNode держит рекурсивное поле
-        // List<ProjectNode> Children (это deep self-reference cycle -> UAC1007/UAC1008),
-        // нетипизируемый object Tag и bool? canHide (Unity их не сериализует), а также
-        // не имеет конструктора без параметров. Это дало бы новые предупреждения и
-        // раздуло бы сцену сериализованной копией дерева на каждом маркере.
-        [System.NonSerialized, HideInInspector] public ProjectNode Node;
-        public string DisplayName = "Объект";
-    }
 }
