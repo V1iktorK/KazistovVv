@@ -293,6 +293,28 @@
 //       600 с только до 313-го. Бюджет ОДНОГО элемента (2 с) не трогался: граница у прогона
 //       одна — время, и её конец по-прежнему печатается строкой «ПРЕДЕЛ: …».
 //
+//  ДОРАБОТКА ПО ЗАКАЗУ A–D (отчёт планшета 13.11.2026, чистое состояние, 1582 элемента):
+//   50) ХОЛСТ ПАНЕЛИ ПЕРЕИСПОЛЬЗУЕТСЯ (заказ A). `Rebuild(true)` (его зовёт КАЖДОЕ
+//       `OpenScreen`, а кнопка `Set_Enter«123»` зовёт `OpenScreen`) создавал НОВЫЙ
+//       `KvXrGroupCanvas` с новой подписью и прежний не уничтожал: под окном копились
+//       экземпляры `#1…#151`, каждое нажатие прибавляло +14 объектов сцены (1803→1817), а
+//       инвентарь обхода проверял одни и те же кнопки сотнями. Лечено переиспользованием
+//       (`KvXrGroupPanel.CreateCanvas`); плюс СТРАХОВКА инвентаря: повтор того же пути+вида
+//       не включается (`KvUiSweepInventory.FirstOccurrences`), число отбрасываемых печатается;
+//   51) МАКЕТ AR (заказ B). 390 элементов панели шлема (`KvXrWindow_*`, `XrRig/*`,
+//       `ПанельШлема/*`) получали «панель не открыта» и «окно компьютера не открывается» —
+//       обход ломался о панель, которой в этом макете для оператора нет. Теперь это
+//       исключение с причиной «элемент шлем-панели, в макете ar не проверяется»
+//       (`KvUiSweepLayout.HelmetPanelReason`), нажатие запрещено; в vr/mr и pc — как раньше;
+//   52) ГЛАЗИК СТРОКИ ДЕРЕВА (заказ C). `KvTreeView.SetObjectVisible` рендереры переключает
+//       (закреплено тестом), а вердикт обхода строился по агрегату снимка `TreeHidden` —
+//       числу скрытых узлов ПО ВСЕМУ дереву, которое в прогоне не меняется ни разу.
+//       Теперь видимость меряется по узлу ТОЙ строки, которую нажимали, до и после: смена
+//       даёт честный эффект «показан/скрыт», отсутствие рендереров — прежнее исключение;
+//   53) КЛАВИШИ «ВВОД» И «ОТМЕНА» ЭКРАНА ВВОДА (заказ D). Панель записывает ФАКТ нажатия
+//       (`KvXrGroupPanel.InputKeyNote` + счётчик `InputKeySeq`), обход выдаёт его вместо
+//       «нет изменений»: пустой ввод, отказ по границам, отмена названы своими словами;
+//
 //  ЧЕСТНАЯ ГРАНИЦА. Таймаут на элемент измеряется по ФАКТИЧЕСКОМУ времени: Unity не даёт прервать
 //  вызов, который уже выполняется в главном потоке, поэтому «завис навсегда» виден как обрыв файла
 //  отчёта сразу после строки `press=` (виновник назван), а «завис на 5 секунд» — как `ok=0 timeout`
@@ -2341,6 +2363,60 @@ namespace KazistovVvDiagnostics
         }
 
         /// <summary>
+        /// ЭФФЕКТ ГЛАЗИКА ПО ФАКТУ ПЕРЕКЛЮЧЕНИЯ ВИДИМОСТИ (заказ C; отчёт планшета 13.11.2026).
+        ///
+        /// ОТКУДА. Пять строк `Row_Robot`/`Row_Ось 1…3`/`Row_TCP` получили
+        /// `глазик не изменил видимость объекта — рендереры не переключились`, хотя причины
+        /// «скрывать нечего» у них НЕ было (рендереры есть) — вердикт строился по агрегату
+        /// снимка `TreeHidden` (число скрытых узлов ПО ВСЕМУ дереву), который в прогоне не
+        /// меняется ни разу. Теперь видимость меряется по узлу ТОЙ строки, которую нажимали,
+        /// и переключение даёт честный эффект «сработало», а не «нет изменений».
+        ///
+        /// Пустая строка — видимость не изменилась: выдумывать эффект нельзя.
+        /// </summary>
+        public static string EyeVisibilityEffectFor(bool visibleBefore, bool visibleAfter)
+        {
+            if (visibleBefore == visibleAfter) return "";
+            return visibleAfter
+                ? "видимость изменена: объект показан — рендереры включены"
+                : "видимость изменена: объект скрыт — рендереры выключены";
+        }
+
+        /// <summary>
+        /// ПУТЬ — КЛАВИША «ВВОД» ИЛИ «ОТМЕНА» ЭКРАНА ВВОДА ПАНЕЛИ (`Key_50«ввод»`,
+        /// `Key_51«отмена»`). Правило узкое: и сегмент `Key_*`, и подпись — иначе любая
+        /// кнопка с текстом «ввод» в подписи получила бы чужую причину.
+        /// </summary>
+        public static bool IsInputKeyPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+
+            int quote = path.IndexOf('«');
+            int close = path.IndexOf('»');
+            if (quote < 0 || close < quote) return false;
+
+            string label = path.Substring(quote + 1, close - quote - 1);
+            if (label != "ввод" && label != "отмена") return false;
+
+            string head = path.Substring(0, quote);
+            int slash = head.LastIndexOf('/');
+            string segment = slash >= 0 ? head.Substring(slash + 1) : head;
+            return segment.StartsWith("Key_", StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// ЧЕСТНЫЙ ЭФФЕКТ КЛАВИШИ ЭКРАНА ВВОДА ПО ФАКТУ ОТ ПАНЕЛИ (`""` — факта нет или
+        /// правило не про эту клавишу). Факт — это то, что панель записала ПРИ нажатии
+        /// (`KvXrGroupPanel.InputKeyNote`): пустой ввод, отказ по границам, отмена.
+        /// </summary>
+        public static string InputKeyEffectFor(string path, string note)
+        {
+            if (!IsInputKeyPath(path)) return "";
+            if (string.IsNullOrEmpty(note)) return "";
+            return note;
+        }
+
+        /// <summary>
         /// ПРИЧИНА ДЛЯ ЭЛЕМЕНТОВ СИСТЕМНОГО ШЛЮЗА (предполётной заглушки).
         ///
         /// ЧТО БЫЛО (планшет, сборка 10:45). Первым же элементом прогон нажал
@@ -3051,6 +3127,82 @@ namespace KazistovVvDiagnostics
             if (index == KvXrSettings.ModeMr) return "mr";
             return "не трогали";
         }
+
+        /// <summary>
+        /// ПРИЧИНА ДЛЯ ЭЛЕМЕНТОВ ПАНЕЛИ ШЛЕМА В МАКЕТЕ AR (заказ B; отчёт планшета 13.11.2026).
+        ///
+        /// ОТКУДА. В прогоне ar 390 элементов окна шлема (`KvXrWindow_3/KvXrGroupCanvas#N/…`,
+        /// `XrRig/XrQuickPanel/…`, `ПанельШлема/…`) получали `панель не открыта: …` и
+        /// `окно компьютера не открывается: команды окна нет`: обход пытается ОТКРЫТЬ панель
+        /// шлема, которой в этом макете для оператора нет. Это граница макета, а не дефект
+        /// кнопки, поэтому элемент обязан получить исключение с этой причиной — НЕ «панель не
+        /// открыта» и НЕ «исчез». В vr/mr и pc панель проверяется как раньше.
+        /// </summary>
+        public const string HelmetPanelReason =
+            "элемент шлем-панели, в макете ar не проверяется";
+
+        /// <summary>В ЭТОЙ РАСКЛАДКЕ ПАНЕЛЬ ШЛЕМА НЕ ПРОВЕРЯЕТСЯ (только `ar`).</summary>
+        public static bool HelmetPanelSkippedInLayout(string layout)
+        {
+            return string.Equals(layout, "ar", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// ПУТЬ ВЕДЁТ В ПАНЕЛЬ ШЛЕМА? Признак — КОРЕНЬ пути, а не подпись: окна (`KvXrWindow_*`),
+        /// панель у рига (`XrRig/…`) и пункты, собранные самой панелью (`ПанельШлема/…`).
+        /// Стартовое меню (`KvXrStartMenu/…`) и оболочка компьютера сюда НЕ входят: у них свои
+        /// правила, и трогать их этим исключением нельзя.
+        /// </summary>
+        public static bool IsHelmetPanelPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            string root = KvUiSweepPcWindows.RootSegmentOf(path);
+            if (string.IsNullOrEmpty(root)) return false;
+            if (root.StartsWith("KvXrWindow_", StringComparison.Ordinal)) return true;
+            if (string.Equals(root, "XrRig", StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(root, "ПанельШлема", StringComparison.Ordinal)) return true;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// ИНВЕНТАРЬ САМОПРОГОНА: ОДИН ПУТЬ + ОДИН ВИД = ОДИН ЭЛЕМЕНТ (страховка заказа A).
+    ///
+    /// ЗАЧЕМ. Из-за утечки холстов (`KvXrGroupCanvas#3`, `#4`, …) один и тот же кнопки
+    /// попадали в инвентарь десятками: обход нажимал одни и те же кнопки снова и снова,
+    /// а счётчик элементов рос в разы. Утечка чинится в `KvXrGroupPanel` (холст
+    /// переиспользуется), а ЭТО правило — страховка: даже если интерфейс породит два
+    /// объекта с одним путём, в обход войдёт только ПЕРВЫЙ.
+    ///
+    /// ВАЖНО: `#N` у одноимённых соседей — часть пути (её даёт `KvUiSweepNames.Segment`),
+    /// поэтому два РАЗНЫХ объекта с одним именем не склеиваются — они дают разные ключи.
+    /// Склеивается только точное совпадение пути и вида.
+    /// </summary>
+    public static class KvUiSweepInventory
+    {
+        /// <summary>КЛЮЧ ЭЛЕМЕНТА ИНВЕНТАРЯ: путь без подписи + вид (`type=` в отчёте).</summary>
+        public static string KeyOf(string path, KvUiSweepKind kind)
+        {
+            return KvUiSweepNames.KeyOf(path) + "|" + KvUiSweepNames.Kind(kind);
+        }
+
+        /// <summary>
+        /// ИНДЕКСЫ ПЕРВЫХ ЭКЗЕМПЛЯРОВ: повтор не включается, порядок сохраняется.
+        /// Возвращает список индексов, которые остаются в инвентаре.
+        /// </summary>
+        public static List<int> FirstOccurrences(IList<string> keys)
+        {
+            var keep = new List<int>(keys != null ? keys.Count : 0);
+            if (keys == null) return keep;
+
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = 0; i < keys.Count; i++)
+            {
+                string key = keys[i] ?? "";
+                if (seen.Add(key)) keep.Add(i);
+            }
+            return keep;
+        }
     }
 
     // ============================================================================================
@@ -3727,13 +3879,27 @@ namespace KazistovVvDiagnostics
             // успешное нажатие. Плюс выбор живёт в двух трекерах — проверяются оба.
             bool treeRowSelectedBefore = TreeRowAlreadySelected(c);
 
+            // МАКЕТ AR — ЭЛЕМЕНТЫ ПАНЕЛИ ШЛЕМА НЕ ПРОВЕРЯЮТСЯ (заказ B). Причина чистая:
+            // путь + макет, считается ДО нажатия и ею же запрещается нажатие — иначе обход
+            // ломался бы об «панель не открыта» на панели, которой в этом макете нет.
+            string helmetReason = HelmetReasonFor(c);
+
+            // ГЛАЗИК СТРОКИ ДЕРЕВА (заказ C): видимость узла ЭТОЙ строки — ДО нажатия.
+            bool? eyeVisibleBefore = EyeVisibleOf(c);
+
+            // КЛАВИШИ «ВВОД»/«ОТМЕНА» ЭКРАНА ВВОДА (заказ D): счётчик нажатий панели ДО.
+            // Проверка пути ОДИН раз: за кандидатом не нужен ни один поиск панели.
+            bool inputKeyCandidate = KvUiSweepExemptions.IsInputKeyPath(c.Path);
+            int inputKeyBefore = inputKeyCandidate ? InputKeySeqOf(c) : 0;
+
             float t0 = Time.realtimeSinceStartup;
 
             // ОПАСНЫЕ ЭЛЕМЕНТЫ НЕ НАЖИМАЕМ: «Выход из приложения» завершает прогон раньше
             // итоговой строки, а пункт, ведущий в настройки Android, уводит приложение в фон и
             // останавливает кадры. Признак «свой/чужой» берётся из принадлежности панелям проекта,
             // поэтому штатная кнопка «Настройки» самого приложения остаётся нажимаемой.
-            bool mayPress = KvUiSweepExemptions.ShouldPress(c.Path, c.ProjectOwned);
+            bool mayPress = KvUiSweepExemptions.ShouldPress(c.Path, c.ProjectOwned) &&
+                            helmetReason.Length == 0;
             if (!mayPress) notPressed++;
 
             string method = mayPress ? "" : "не нажимали";
@@ -3764,6 +3930,13 @@ namespace KazistovVvDiagnostics
             var afterPanels = new List<KvUiSweepPanelState>(4);
             KvUiSweepSnapshot after = Capture(afterPanels);
 
+            // ГЛАЗИК И КЛАВИШИ ВВОДА — ФАКТ ПОСЛЕ НАЖАТИЯ (заказы C и D). Агрегат снимка
+            // (`TreeHidden`) меряет ВСЁ дерево и в прогоне не меняется, поэтому видимость
+            // меряется по узлу ЭТОЙ строки; клавиша ввода — по счётчику нажатий панели.
+            bool? eyeVisibleAfter = EyeVisibleOf(c);
+            int inputKeyAfter = inputKeyCandidate ? InputKeySeqOf(c) : 0;
+            string inputKeyNote = inputKeyCandidate ? InputNoteOf(c) : "";
+
             // ЭФФЕКТ СОБИРАЕТСЯ ИЗ ДВУХ ИСТОЧНИКОВ: общий отпечаток состояния (числа) и подробная
             // расшифровка изменений панелей («панель tree: свёрнута 0→1»). Одного отпечатка мало —
             // по нему не понять, ЧТО изменилось; одной расшифровки мало — если панель изменила
@@ -3783,6 +3956,17 @@ namespace KazistovVvDiagnostics
                     effect = (effect.Length > 0 ? effect + "; " : "") + "статус изменён: «" + preview + "»";
             }
 
+            // ГЛАЗИК СТРОКИ ДЕРЕВА (заказ C): вердикт по узлу ЭТОЙ строки, а не по агрегату
+            // снимка (`TreeHidden` — число скрытых узлов ПО ВСЕМУ дереву, в прогоне оно не
+            // меняется). Переключение видимости — настоящий эффект, а не «нет изменений».
+            if (eyeVisibleBefore.HasValue && eyeVisibleAfter.HasValue)
+            {
+                string eye = KvUiSweepExemptions.EyeVisibilityEffectFor(
+                    eyeVisibleBefore.Value, eyeVisibleAfter.Value);
+                if (eye.Length > 0)
+                    effect = effect.Length > 0 ? effect + "; " + eye : eye;
+            }
+
             // ЧТО ИЗМЕНИЛОСЬ НА ПАНЕЛИ ШЛЕМА — запоминаем ДО возврата состояния: после `Restore`
             // панель уже на базовом уровне, и раскрывать следующий уровень было бы не из чего.
             if (c.IsPanelIcon && c.Panel != null)
@@ -3800,11 +3984,16 @@ namespace KazistovVvDiagnostics
                 Path = c.Path,
                 Kind = c.Kind,
                 Ok = effect.Length > 0,
-                Effect = mayPress ? effect : "не нажимали — правило запрещает (опасно для прогона)",
+                Effect = mayPress
+                    ? effect
+                    : (helmetReason.Length > 0
+                        ? "не нажимали — " + helmetReason
+                        : "не нажимали — правило запрещает (опасно для прогона)"),
                 Method = string.IsNullOrEmpty(c.PreparedBy) ? method : method + " · открыто: " + c.PreparedBy,
                 TimedOut = timedOut
             };
-            element.ExemptReason = ExemptReasonFor(c, sectionBefore, treeRowSelectedBefore);
+            element.ExemptReason = ExemptReasonFor(c, sectionBefore, treeRowSelectedBefore,
+                helmetReason);
             // НЕНАЖАТЫЙ ЭЛЕМЕНТ ОБЯЗАН БЫТЬ С ПРИЧИНОЙ (дефект D3, 13.11.2026). `mayPress == false`
             // — решение САМОГО прогона: он сознательно не трогает такой элемент (системный шлюз,
             // системный экран, выход). Без причины этот элемент считался «без эффекта», то есть
@@ -3823,6 +4012,10 @@ namespace KazistovVvDiagnostics
                 string honest = KvUiSweepExemptions.NotPressedEffectFor(element.ExemptReason);
                 if (honest.Length == 0 && string.IsNullOrEmpty(element.ExemptReason))
                     honest = TreeNoChangeEffectFor(c);
+                // КЛАВИШИ «ВВОД»/«ОТМЕНА» (заказ D): панель записала факт ПРИ нажатии —
+                // пустой ввод, отказ по границам, отмена. Причина по факту, а не «нет изменений».
+                if (honest.Length == 0 && inputKeyAfter > inputKeyBefore)
+                    honest = KvUiSweepExemptions.InputKeyEffectFor(c.Path, inputKeyNote);
                 if (honest.Length > 0) element.Effect = honest;
             }
 
@@ -3853,8 +4046,14 @@ namespace KazistovVvDiagnostics
         /// нажатия сверять нельзя: после удачного нажатия выбрана любая строка, и правило
         /// вычёркивало бы успешное нажатие (дефект B3).
         /// </param>
-        private static string ExemptReasonFor(Candidate c, int sectionBefore, bool treeRowSelectedBefore)
+        private static string ExemptReasonFor(Candidate c, int sectionBefore, bool treeRowSelectedBefore,
+            string helmetReason)
         {
+            // МАКЕТ AR: ЭЛЕМЕНТ ПАНЕЛИ ШЛЕМА — ГРАНИЦА МАКЕТА, А НЕ «ПАНЕЛЬ НЕ ОТКРЫТА» (заказ B).
+            // Причина посчитана в `CheckOne` по пути и макету; здесь она только возвращается,
+            // чтобы правило жило в одном месте и не расходилось с запретом нажатия.
+            if (helmetReason.Length > 0) return helmetReason;
+
             // СИСТЕМНЫЙ ШЛЮЗ — САМОЕ ПЕРВОЕ И САМОЕ ТОЧНОЕ объяснение: это не «недоступен» и не
             // «нужно железо», а «это шлюз, а не интерфейс оператора». ФЛАГ ПРОВЕРЯЕТСЯ ВМЕСТЕ С
             // ПУТЁМ (дефект D3): решение «не нажимать» принимается по пути, поэтому и причина
@@ -3997,6 +4196,61 @@ namespace KazistovVvDiagnostics
             string reason = KvUiSweepExemptions.ReasonFor(c.Path);
             if (reason.Length > 0) return reason;
             return KvUiSweepExemptions.SystemScreenReason(c.Path, c.ProjectOwned);
+        }
+
+        /// <summary>
+        /// ПРИЧИНА «ЭЛЕМЕНТ ШЛЕМ-ПАНЕЛИ, В МАКЕТЕ AR НЕ ПРОВЕРЯЕТСЯ» (заказ B).
+        /// `""` — вне макета ar или путь к панели шлема не относится. Считается по пути и
+        /// макету, без сцены: то же правило запрещает нажатие в `CheckOne`.
+        /// </summary>
+        private string HelmetReasonFor(Candidate c)
+        {
+            if (c == null || run == null) return "";
+            if (!KvUiSweepLayout.HelmetPanelSkippedInLayout(run.Layout)) return "";
+            return KvUiSweepLayout.IsHelmetPanelPath(c.Path)
+                ? KvUiSweepLayout.HelmetPanelReason
+                : "";
+        }
+
+        /// <summary>
+        /// ВИДИМОСТЬ ОБЪЕКТА УЗЛА СТРОКИ, КОТОРУЮ НАЖИМАЮТ (`…/Row_TCP/Eye`) — ДО и ПОСЛЕ
+        /// нажатия (заказ C). Меряется ПО ЭТОМУ узлу, а не агрегатом снимка `TreeHidden`:
+        /// тот считает скрытые узлы ПО ВСЕМУ дереву и в прогоне 13.11.2026 не меняется ни
+        /// разу — вердикт строился на мёртвом счётчике. `null` — не глазик или объект погиб
+        /// при перестройке: тогда остаётся прежняя честная строка, а не выдуманный эффект.
+        /// </summary>
+        private static bool? EyeVisibleOf(Candidate c)
+        {
+            if (c == null || c.IsPanelIcon || !KvUiSweepExemptions.IsEyePath(c.Path)) return null;
+            if (c.Target == null) return null;
+            KvTreeRow row = c.Target.GetComponentInParent<KvTreeRow>();
+            ProjectNode node = row != null ? row.Node : null;
+            if (node == null) return null;
+            return KvTreeView.IsObjectVisible(node);
+        }
+
+        /// <summary>СЧЁТЧИК НАЖАТИЙ «ВВОД»/«ОТМЕНА» У ПАНЕЛИ ЭТОГО ЭЛЕМЕНТА (нет панели — 0).</summary>
+        private static int InputKeySeqOf(Candidate c)
+        {
+            KvXrGroupPanel panel = PanelOf(c);
+            return panel != null ? panel.InputKeySeq : 0;
+        }
+
+        /// <summary>ФАКТ ПОСЛЕДНЕГО НАЖАТИЯ КЛАВИШИ ВВОДА У ПАНЕЛИ ЭТОГО ЭЛЕМЕНТА.</summary>
+        private static string InputNoteOf(Candidate c)
+        {
+            KvXrGroupPanel panel = PanelOf(c);
+            return panel != null ? panel.InputKeyNote : "";
+        }
+
+        /// <summary>Панель шлема, которой принадлежит элемент (окно в мире или панель у руки).</summary>
+        private static KvXrGroupPanel PanelOf(Candidate c)
+        {
+            if (c == null) return null;
+            if (c.PanelOwner != null) return c.PanelOwner;
+            if (c.Panel != null) return c.Panel;
+            if (c.Target == null) return null;
+            return c.Target.GetComponentInParent<KvXrGroupPanel>();
         }
 
         /// <summary>
@@ -5535,8 +5789,46 @@ namespace KazistovVvDiagnostics
             RebuildUiIndex();
             CollectUgui(into);
             CollectPanelIcons(into);
+            int duplicates = DropDuplicateInventory(into);
+            if (duplicates > 0)
+            {
+                inventoryDuplicates += duplicates;
+                Line("[KvUiSweep] ИНВЕНТАРЬ: повторных путей отброшено " + duplicates +
+                     " (путь + вид) — всего с начала прогона " + inventoryDuplicates);
+            }
             ReorderDestructiveLast(into);
         }
+
+        /// <summary>
+        /// СТРАХОВКА ИНВЕНТАРЯ (заказ A): ВТОРОЙ ЭКЗЕМПЛЯР ТОГО ЖЕ ПУТИ + ВИДА НЕ ВКЛЮЧАЕТСЯ.
+        ///
+        /// ЗАЧЕМ ПРИ СУЩЕСТВУЮЩЕМ `duplicatePaths`. Тот счётчик считает совпадения при СБОРЕ
+        /// (один объект — один раз), но в список кандидатов попадали и элементы, собранные
+        /// разными способами (`CollectUgui` и `CollectPanelIcon`s), и повторы после пересборки:
+        /// обход нажимал одни и те же кнопки дважды. Теперь повтор отбрасывается ЗДЕСЬ, в одном
+        /// месте, а число отбрасываемых печатается в журнале — молчаливую потерю проверок
+        /// проект не терпит.
+        /// </summary>
+        private static int DropDuplicateInventory(List<Candidate> into)
+        {
+            if (into == null || into.Count < 2) return 0;
+
+            var keys = new List<string>(into.Count);
+            for (int i = 0; i < into.Count; i++)
+                keys.Add(KvUiSweepInventory.KeyOf(into[i].Path, into[i].Kind));
+
+            List<int> keep = KvUiSweepInventory.FirstOccurrences(keys);
+            if (keep.Count == into.Count) return 0;
+
+            var kept = new List<Candidate>(keep.Count);
+            for (int i = 0; i < keep.Count; i++) kept.Add(into[keep[i]]);
+            into.Clear();
+            into.AddRange(kept);
+            return keys.Count - keep.Count;
+        }
+
+        /// <summary>Сколько повторов путей отброшено за прогон (для отчёта).</summary>
+        private int inventoryDuplicates;
 
         /// <summary>
         /// <summary>
@@ -5935,9 +6227,22 @@ namespace KazistovVvDiagnostics
                 detail = "путь не найден после " + KvUiSweepPanelNav.MaxAttempts + " попыток";
             string reason = KvUiSweepPanelNav.NotOpenReason(c.RestoreScreenTitle, detail);
 
-            panelNotOpen++;
-            if (panelNotOpen <= 20)
-                Line("[KvUiSweep] ВОССТАНОВЛЕНИЕ ПАНЕЛИ: " + c.Path + " — " + reason);
+            // МАКЕТ AR (заказ B): панель шлема в ЭТОМ макете для оператора не проверяется —
+            // «панель не открыта» здесь врала бы об интерфейсе. Причина макета вместо неё.
+            string helmet = HelmetReasonFor(c);
+            bool layoutBound = helmet.Length > 0;
+            if (layoutBound)
+            {
+                reason = helmet;
+                helmetSkipped++;
+            }
+            else
+            {
+                panelNotOpen++;
+                if (panelNotOpen <= 20)
+                    Line("[KvUiSweep] ВОССТАНОВЛЕНИЕ ПАНЕЛИ: " + c.Path + " — " + reason);
+            }
+
             Record(new KvUiSweepElement
             {
                 Path = c.Path,
@@ -5951,6 +6256,9 @@ namespace KazistovVvDiagnostics
 
         /// <summary>Сколько элементов получили причину «панель не открыта» (для отчёта).</summary>
         private int panelNotOpen;
+
+        /// <summary>Сколько элементов пропущено как «панель шлема в макете ar» (заказ B).</summary>
+        private int helmetSkipped;
 
         /// <summary>
         /// РАСКРЫТИЕ СЛЕДУЮЩЕГО УРОВНЯ ПАНЕЛИ. Нажатие иконки группы раскрывает веер команд, а
@@ -6955,6 +7263,14 @@ namespace KazistovVvDiagnostics
                  " · контекст (меню/панель) восстановлен " + contextRestores + " раз");
             if (notPressed > 0)
                 Line("[KvUiSweep] не нажимались (запрещено правилом): " + notPressed);
+            // ЗАКАЗ B: граница макета обязана быть видна числом, а не только построчно.
+            if (helmetSkipped > 0)
+                Line("[KvUiSweep] ПАНЕЛЬ ШЛЕМА В МАКЕТЕ AR: элементов не проверено " +
+                     helmetSkipped + " — «" + KvUiSweepLayout.HelmetPanelReason + "»");
+            // ЗАКАЗ A: сколько повторов пути снято со входа в очередь (страховка инвентаря).
+            if (inventoryDuplicates > 0)
+                Line("[KvUiSweep] ИНВЕНТАРЬ: повторных путей отброшено за прогон " +
+                     inventoryDuplicates);
 
             WriteReport();
             yield return null;

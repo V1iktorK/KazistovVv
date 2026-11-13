@@ -1737,6 +1737,7 @@ Debug.Log(input.Numeric                ? "[KvXr] ВВОД: отменён — з
             input.End();
 level = returnLevel;
             Rebuild();
+            NoteInputKey("отмена ввода: значение не изменено — экран ввода закрыт");
 }
 
 /// <summary>
@@ -1747,6 +1748,7 @@ level = returnLevel;
 public void CommitInput()
 {
             if (!input.IsActive) return;
+            InputKeySeq++;
 if (input.Numeric)
 {
                 KvXrCommitOutcome outcome = KvXrValueInput.Commit(                    input.FieldIndex, input.Text, KvXrInputMethodSetting.Get());
@@ -1754,12 +1756,36 @@ Debug.Log(outcome.LogLine);
 if (!outcome.Saved)
 {
                     if (inputHint != null) inputHint.text = "отказ: " + outcome.Reason;
+                    InputKeyNote = "ввод не принят (" + outcome.Reason + ") — значение не изменено";
                     return;
 }                input.End();
 level = returnLevel;
                 Rebuild();
+                InputKeyNote = "значение сохранено — экран ввода закрыт";
                 return;
 }            CommitText();
+}
+
+/// <summary>
+/// СКОЛЬКО РАЗ НАЖАЛИ «ВВОД» ИЛИ «ОТМЕНУ» НА ЭКРАНЕ ВВОДА (заказ D).
+///
+/// ЗАЧЕМ СЧЁТЧИК, А НЕ ТОЛЬКО ТЕКСТ. Самопрогон пишет причину «нет изменений» только если
+/// нажатие ДОЙДОЛО: клавиша могла не сработать вовсе, и тогда старый текст выдал бы
+/// «штатное поведение» за работоспособность. Факт считается здесь же, где он происходит.
+/// </summary>
+public int InputKeySeq { get; private set; }
+
+/// <summary>
+/// ФАКТ ПОСЛЕДНЕГО НАЖАТИЯ «ВВОД»/«ОТМЕНА» — честная причина вместо «нет изменений»
+/// (пустой ввод, отказ по границам, отмена: значение не изменено).
+/// </summary>
+public string InputKeyNote { get; private set; } = "";
+
+/// <summary>Запомнить факт нажатия клавиши экрана ввода.</summary>
+private void NoteInputKey(string note)
+{
+            InputKeySeq++;
+            InputKeyNote = note ?? "";
 }
 
 /// <summary>Сохранение НЕ числа: строка поиска или имя объекта.</summary>
@@ -1776,17 +1802,21 @@ Debug.Log(KvCommandSearch.SearchLogLine(searchQuery, searchResults.Count));
                 input.End();
 level = KvXrPanelLevel.SearchScreen;
                 Rebuild();
+                InputKeyNote = "поиск принят: найдено команд " + searchResults.Count;
                 return;
 }            Transform target = SelectedObject();
 if (target == null)
 {
 Debug.Log("[KvXr] ОБЪЕКТ: имя не изменено — объект не выбран");
+                InputKeyNote = "объект не выбран — имя не изменено";
                 return;
 }            if (!KvXrTextRules.IsAcceptableName(text))
 {
 Debug.Log("[KvXr] ОБЪЕКТ: имя «" + text + "» отклонено — пустое, длиннее " +                          KvXrTextRules.MaxNameLength + " символов или с управляющими символами");
+                InputKeyNote = "имя отклонено — значение не изменено";
                 return;
 }            RenameObject(target, text);
+            InputKeyNote = "имя изменено";
 }
 
 /// <summary>
@@ -2975,8 +3005,34 @@ return angle <= Mathf.Clamp(reanchorAngleDegrees, 20f, 120f);
 }
 
 // ==================================================== ПОСТРОЕНИЕ ОБЪЕКТОВ
+/// <summary>
+/// СОЗДАТЬ ХОЛСТ ПАНЕЛИ — ОДИН РАЗ НА ПАНЕЛЬ И БОЛЬШЕ НИКОГДА (заказ A).
+///
+/// ОТКУДА (планшет, самопрогон 13.11.2026, чистое состояние): `Rebuild(true)` зовёт КАЖДОЕ
+/// `OpenScreen`, а кнопка `Set_Enter«123»` (экран ввода значений) зовёт `OpenScreen` — и
+/// раньше КАЖДЫЙ вызов создавал НОВЫЙ `KvXrGroupCanvas` с новой подписью `PanelLabel`,
+/// прежний же никто не уничтожал: `ClearIcons` чистит только `icons`/`rows`, то есть
+/// содержимое холста, но не сам холст. Под окном копились экземпляры `#1 … #151`, каждое
+/// нажатие прибавляло объекты сцены (1803→1817), а инвентарь обхода проверял одни и те же
+/// кнопки сотнями.
+///
+/// ТЕПЕРЬ холст ПЕРЕИСПОЛЬЗУЕТСЯ: содержимое сбрасывается, подпись та же, размеры и порядок
+/// сортировки выставляются заново под текущий уровень. Функционал не убран — пересборка
+/// делает ровно то же, только без нового экземпляра.
+/// </summary>
 private void CreateCanvas()
 {
+            if (canvas != null && canvasRect != null)
+{
+                DropCanvasContents();
+                canvas.sortingOrder = sortingOrder;
+                canvasRect.sizeDelta = new Vector2(canvasSize, canvasSize);
+float reuseScale = Mathf.Max(0.0001f, metersPerCanvasUnit);
+                canvasRect.localScale = new Vector3(reuseScale, reuseScale, reuseScale);
+                if (label == null) label = CreatePanelLabel();
+                return;
+}
+
 var canvasGo = new GameObject(KvXrOverlayPolicy.VrGroupCanvasName, typeof(Canvas),                typeof(CanvasScaler), typeof(GraphicRaycaster));
             canvasGo.transform.SetParent(transform, false);
             canvas = canvasGo.GetComponent<Canvas>();
@@ -2990,9 +3046,31 @@ float scale = Mathf.Max(0.0001f, metersPerCanvasUnit);
             canvasRect.localScale = new Vector3(scale, scale, scale);
 
 // Подпись — одна на всю панель, показывается по удержанию.
-// ЗАДАЧА 6: размер подписи тоже идёт через коэффициент текста (было 30 px — это 7,5 см буквы).
-label = KvTheme.CreateText(canvasRect, "PanelLabel", "", KvTheme.ScaledText(30),                TextAnchor.MiddleCenter, KvTheme.TextMain);
-            RectTransform lr = label.rectTransform;
+label = CreatePanelLabel();
+}
+
+/// <summary>
+/// УНИЧТОЖИТЬ ВСЁ СОДЕРЖИМОЕ ХОЛСТА, КРОМЕ ПОДПИСИ. Нужно при переиспользовании: если бы
+/// остался хоть один незарегистрированный ребёнок, он пережил бы пересборку и копился бы
+/// с каждым открытием экрана — ровно тот дефект, что чинится здесь.
+/// </summary>
+private void DropCanvasContents()
+{
+            for (int i = canvasRect.childCount - 1; i >= 0; i--)
+{
+                Transform child = canvasRect.GetChild(i);
+                if (label != null && child == label.transform) continue;
+if (Application.isPlaying) Destroy(child.gameObject);
+                else DestroyImmediate(child.gameObject);
+}
+}
+
+/// <summary>ПОДПИСЬ ПАНЕЛИ: одна на холст, показывается по удержанию иконки.</summary>
+private Text CreatePanelLabel()
+{
+// ЗАДАЧА 6: размер подписи идёт через коэффициент текста (было 30 px — это 7,5 см буквы).
+Text text = KvTheme.CreateText(canvasRect, "PanelLabel", "", KvTheme.ScaledText(30),                TextAnchor.MiddleCenter, KvTheme.TextMain);
+            RectTransform lr = text.rectTransform;
             lr.anchorMin = new Vector2(0.5f, 0.5f);
             lr.anchorMax = new Vector2(0.5f, 0.5f);
             lr.pivot = new Vector2(0.5f, 0.5f);
@@ -3000,7 +3078,8 @@ label = KvTheme.CreateText(canvasRect, "PanelLabel", "", KvTheme.ScaledText(30),
 
 // Выше дуги: середина дуги — сверху, значит подпись уходит ещё выше иконок.
 lr.anchoredPosition = new Vector2(0f, canvasSize * 0.5f - 30f);
-            label.gameObject.SetActive(false);
+            text.gameObject.SetActive(false);
+            return text;
 }
 
 /// <summary>

@@ -2522,5 +2522,190 @@ namespace KazistovVvTests
                 "нажатие строки, до которой клик не дошёл, обязано называться конкретно, " +
                 "а не общим «нет изменений»");
         }
+
+        // ============================================== МАКЕТ AR: ПАНЕЛЬ ШЛЕМА (заказ B)
+
+        /// <summary>
+        /// В МАКЕТЕ AR ЭЛЕМЕНТЫ ПАНЕЛИ ШЛЕМА — ЧЕСТНОЕ ИСКЛЮЧЕНИЕ, А НЕ «ПАНЕЛЬ НЕ ОТКРЫТА».
+        ///
+        /// ОТКУДА (планшет, самопрогон 13.11.2026, макет ar): 390 элементов окна шлема
+        /// (`KvXrWindow_3/KvXrGroupCanvas#N/Set_*`, `Interface_*`, `Obj_*`, `Key_*`) получили
+        /// `панель не открыта: …` и `окно компьютера не открывается: команды окна нет` — обход
+        /// пытается открыть панель шлема, которой в прогоне ar нет. Это НЕ дефект интерфейса,
+        /// а граница макета: в ar элемент обязан получить причину «в макете ar не проверяется».
+        /// В vr/mr и pc правило НЕ действует — там панель проверяется как раньше.
+        /// </summary>
+        [Test]
+        public void HelmetPanelElements_InArLayout_AreHonestExemption()
+        {
+            Assert.IsTrue(KvUiSweepLayout.IsHelmetPanelPath(
+                    "KvXrWindow_3/KvXrGroupCanvas#3/Set_Enter«123»"),
+                "окно панели шлема обязано распознаваться по пути");
+            Assert.IsTrue(KvUiSweepLayout.IsHelmetPanelPath(
+                    "XrRig/XrQuickPanel/KvXrGroupCanvas#3/Group_robot"),
+                "панель у рига — это панель шлема");
+            Assert.IsTrue(KvUiSweepLayout.IsHelmetPanelPath(
+                    "ПанельШлема/Настройки/Set_Enter"),
+                "пункт, собранный кодом панели, — тоже панель шлема");
+
+            Assert.IsFalse(KvUiSweepLayout.IsHelmetPanelPath(
+                    "KvXrStartMenu/KvXrStartMenuPanel/KvXrGroupCanvas#3/MenuSec_0«Стол»"),
+                "стартовое меню шлема — НЕ панель: его правила свои, трогать их нельзя");
+            Assert.IsFalse(KvUiSweepLayout.IsHelmetPanelPath(
+                    "KazistovVv_UI/KazistovVvDockCanvas/Dock_Настройки/Body/Scroll/Content/Switch_X"),
+                "оболочка компьютера к панели шлема не относится");
+
+            Assert.IsTrue(KvUiSweepLayout.HelmetPanelSkippedInLayout("ar"),
+                "в макете ar панель шлема не проверяется — обход обязан честно это сказать");
+            Assert.IsFalse(KvUiSweepLayout.HelmetPanelSkippedInLayout("vr"),
+                "в vr панель шлема проверяется как раньше");
+            Assert.IsFalse(KvUiSweepLayout.HelmetPanelSkippedInLayout("mr"),
+                "в mr панель шлема проверяется как раньше");
+            Assert.IsFalse(KvUiSweepLayout.HelmetPanelSkippedInLayout("pc"),
+                "в pc панель шлема проверяется как раньше");
+
+            string reason = KvUiSweepLayout.HelmetPanelReason;
+            StringAssert.Contains("ar", reason, "причина обязана называть макет: " + reason);
+            StringAssert.Contains("не проверяется", reason,
+                "причина — исключение, а не обвинение «панель не открыта»: " + reason);
+            Assert.IsFalse(reason.Contains("панель не открыта"),
+                "в ar это граница макета, а не «панель не открыта»: " + reason);
+        }
+
+        // ============================================ ГЛАЗИК ВИДИМОСТИ ДЕРЕВА (заказ C)
+
+        /// <summary>
+        /// `KvTreeView.SetObjectVisible` ПЕРЕКЛЮЧАЕТ `Renderer.enabled` — и обход обязан судить
+        /// глазик по ЭТОМУ узлу, а не по агрегату снимка.
+        ///
+        /// ОТКУДА (планшет, отчёт 13.11.2026): 5 строк `Row_Robot`/`Row_Ось 1…3`/`Row_TCP` с
+        /// `глазик не изменил видимость объекта — рендереры не переключились` при ФАКТИЧЕСКИ
+        /// наличии рендереров (иначе сработало бы исключение «скрывать нечего»). Сам код
+        /// `SetObjectVisible` рендереры переключает (проверяется здесь), а признак в снимке —
+        /// агрегат `TreeHidden` по ВСЕМ строкам дерева — в прогоне не меняется ни разу, то есть
+        /// вердикт строился на мёртвом счётчике. Теперь глазик измеряется по узлу СТРОКИ,
+        /// которую нажимали.
+        /// </summary>
+        [Test]
+        public void EyeToggle_SwitchesRenderers_AndEffectNamesTheFact()
+        {
+            var host = new GameObject("KvEyeToggleTest");
+            KazistovVvUI.KvTreeView tree = host.AddComponent<KazistovVvUI.KvTreeView>();
+            var target = new GameObject("EyeTarget");
+            var renderer = target.AddComponent<MeshRenderer>();
+            try
+            {
+                var node = new KazistovVvUI.ProjectNode("robot:eye", "Робот",
+                    KazistovVvUI.ProjectNodeKind.Robot, target.transform, null);
+
+                tree.SetObjectVisible(node, false);
+                Assert.IsFalse(renderer.enabled,
+                    "SetObjectVisible(false) обязан выключить Renderer.enabled объекта узла");
+                Assert.IsFalse(KazistovVvUI.KvTreeView.IsObjectVisible(node),
+                    "снимок видимости обязан видеть выключенный рендерер");
+
+                tree.SetObjectVisible(node, true);
+                Assert.IsTrue(renderer.enabled,
+                    "SetObjectVisible(true) обязан включить Renderer.enabled обратно");
+                Assert.IsTrue(KazistovVvUI.KvTreeView.IsObjectVisible(node),
+                    "после показа узел обязан читаться видимым");
+            }
+            finally
+            {
+                Object.DestroyImmediate(target);
+                Object.DestroyImmediate(host);
+            }
+
+            // ЭФФЕКТ ОБХОДА ПО ФАКТУ: переключение видимости — это «сработало», а не «нет изменений».
+            // Аргументы: видимость ДО → видимость ПОСЛЕ.
+            string hidden = KvUiSweepExemptions.EyeVisibilityEffectFor(true, false);
+            StringAssert.Contains("скрыт", hidden,
+                "глазик скрыл объект — эффект обязан называть факт: " + hidden);
+            string shown = KvUiSweepExemptions.EyeVisibilityEffectFor(false, true);
+            StringAssert.Contains("показан", shown,
+                "глазик показал объект — эффект обязан называть факт: " + shown);
+            Assert.AreEqual("", KvUiSweepExemptions.EyeVisibilityEffectFor(true, true),
+                "видимость не изменилась — выдуманного эффекта быть не должно");
+            Assert.AreEqual("", KvUiSweepExemptions.EyeVisibilityEffectFor(false, false),
+                "видимость не изменилась — выдуманного эффекта быть не должно");
+        }
+
+        // ================================= КЛАВИШИ «ВВОД» И «ОТМЕНА» ЭКРАНА ВВОДА (заказ D)
+
+        /// <summary>
+        /// `Key_50«ввод»` И `Key_51«отмена»` ПОЛУЧАЮТ ЧЕСТНУЮ ПРИЧИНУ ПО ФАКТУ, А НЕ «нет изменений».
+        ///
+        /// ОТКУДА (планшет, отчёт 13.11.2026): обе клавиши экрана ввода в окне шлема дали
+        /// `ok=0 effect=нет изменений exempt=-` — «нажал и ничего не изменилось», хотя это
+        /// ШТАТНОЕ поведение: «ввод» не принимает пустой/непригодный буфер (значение не
+        /// изменено — так решает `KvXrValueInput.Commit`), а «отмена» значение и не должна
+        /// менять. Причина берётся у панели, которая клавишу нажала, и только если нажатие
+        /// действительно дошло (счётчик нажатий вырос).
+        /// </summary>
+        [Test]
+        public void InputKeys_EnterAndCancel_GetHonestReasonFromFact()
+        {
+            const string enter = "KvXrWindow_3/KvXrGroupCanvas#3/Key_50«ввод»";
+            const string cancel = "KvXrWindow_3/KvXrGroupCanvas#3/Key_51«отмена»";
+            const string letter = "KvXrWindow_3/KvXrGroupCanvas#3/Key_0«а»";
+
+            Assert.IsTrue(KvUiSweepExemptions.IsInputKeyPath(enter),
+                "клавиша «ввод» обязана распознаваться по пути");
+            Assert.IsTrue(KvUiSweepExemptions.IsInputKeyPath(cancel),
+                "клавиша «отмена» обязана распознаваться по пути");
+            Assert.IsFalse(KvUiSweepExemptions.IsInputKeyPath(letter),
+                "буква экрана ввода — не «ввод» и не «отмена»: правило узкое");
+            Assert.IsFalse(KvUiSweepExemptions.IsInputKeyPath(
+                    "KazistovVv_UI/KazistovVvDockCanvas/Dock_Настройки/Body/Scroll/Content/Switch_Ввод"),
+                "правило работает только для клавиш экрана ввода панели");
+
+            string refused = KvUiSweepExemptions.InputKeyEffectFor(enter,
+                "ввод не принят (не число) — значение не изменено");
+            StringAssert.Contains("значение не изменено", refused,
+                "отказ при вводе — честная причина: " + refused);
+
+            string cancelled = KvUiSweepExemptions.InputKeyEffectFor(cancel,
+                "отмена ввода: значение не изменено — экран ввода закрыт");
+            StringAssert.Contains("отмена", cancelled,
+                "отмена ввода обязана называться своими словами: " + cancelled);
+
+            Assert.AreEqual("", KvUiSweepExemptions.InputKeyEffectFor(enter, ""),
+                "без факта от панели причину не выдумываем");
+            Assert.AreEqual("", KvUiSweepExemptions.InputKeyEffectFor(letter, "какой-то факт"),
+                "правило узкое: только «ввод» и «отмена»");
+        }
+
+        // ================================== ИНВЕНТАРЬ ОБХОДА: ДЕДУП ПУТИ И ВИДА (заказ A)
+
+        /// <summary>
+        /// ИНВЕНТАРЬ НЕ ВКЛЮЧАЕТ ВТОРОЙ ЭКЗЕМПЛЯР ТОГО ЖЕ ПУТИ.
+        ///
+        /// ОТКУДА (планшет, отчёт 13.11.2026): из-за утечки холстов один и тот же кнопки
+        /// встречались в инвентаре сотнями (`KvXrGroupCanvas#3/…`, `#4/…`, …), и обход нажимал
+        /// одни и те же кнопки снова и снова. Лечится и утечкой (см. `KvXrGroupPanelTests`), и
+        /// ЭТОЙ страховкой: путь + вид — один элемент, повтор не включается.
+        /// </summary>
+        [Test]
+        public void Inventory_KeepsFirstOccurrenceOfEachPathAndKind()
+        {
+            var keys = new List<string>
+            {
+                KvUiSweepInventory.KeyOf("A/B/Set_Enter«123»", KvUiSweepKind.Button),
+                KvUiSweepInventory.KeyOf("A/B/Set_Enter«123»", KvUiSweepKind.Button),   // повтор
+                KvUiSweepInventory.KeyOf("A/B/Set_Enter«123»", KvUiSweepKind.Toggle),   // тот же путь, другой вид
+                KvUiSweepInventory.KeyOf("A/C/Set_Enter«123»", KvUiSweepKind.Button),   // другой путь
+                KvUiSweepInventory.KeyOf("A/B/Set_Enter«456»", KvUiSweepKind.Button)    // подпись в ключ не входит
+            };
+
+            List<int> keep = KvUiSweepInventory.FirstOccurrences(keys);
+
+            Assert.AreEqual(3, keep.Count,
+                "из пяти записей остаются три: первый путь, тот же путь другого вида и другой путь; " +
+                "остальные " + (keys.Count - keep.Count) + " — повторы");
+            CollectionAssert.AreEqual(new[] { 0, 2, 3 }, keep,
+                "остаётся ПЕРВЫЙ экземпляр каждого ключа, порядок сохраняется");
+            Assert.AreEqual(keys[1], keys[4],
+                "подпись «123»/«456» в ключ не входит — иначе один и тот же элемент считался бы двумя");
+        }
     }
 }

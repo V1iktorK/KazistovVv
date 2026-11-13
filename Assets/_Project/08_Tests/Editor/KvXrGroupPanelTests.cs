@@ -455,6 +455,115 @@ namespace KazistovVvTests
             }
             Assert.Greater(checkedIds, 0, "проверка обязана была осмотреть хотя бы одну команду");
         }
+
+        // ==================================================== УТЕЧКА ОКОН И ХОЛСТОВ (заказ A)
+
+        /// <summary>
+        /// ПОВТОРНЫЕ ОТКРЫТИЯ ЭКРАНОВ ПЕРЕИСПОЛЬЗУЮТ ОДИН ХОЛСТ И НЕ КОПЯТ ОБЪЕКТЫ СЦЕНЫ.
+        ///
+        /// ОТКУДА (планшет, самопрогон 13.11.2026, чистое состояние): каждое нажатие
+        /// `Set_Enter«123»` (экран ввода значений шлема) прибавляло +14 объектов сцены
+        /// (1803→1817), а под окном копились `KvXrGroupCanvas#1 … #151` — инвентарь обхода
+        /// раздулся до тысяч элементов и одни и те же кнопки проверялись сотни раз.
+        ///
+        /// ПРИЧИНА ПО КОДУ. `Rebuild(firstTime: true)` — его зовёт КАЖДОЕ `OpenScreen`, а
+        /// `OpenInput` зовёт `OpenScreen` — создавал НОВЫЙ `KvXrGroupCanvas` с новой подписью
+        /// `PanelLabel` и не уничтожал прежний: `ClearIcons` чистит только `icons`/`rows`, то
+        /// есть содержимое холста, но не сам холст. Лечится ПЕРЕИСПОЛЬЗОВАНИЕМ: один холст
+        /// живёт столько же, сколько панель.
+        /// </summary>
+        [Test]
+        public void RepeatedScreenOpens_ReuseOneCanvasAndDontGrowSceneObjects()
+        {
+            var host = new GameObject("KvXrCanvasLeakTest");
+            var panel = host.AddComponent<KvXrGroupPanel>();
+            panel.logOnBuild = false;
+            try
+            {
+                panel.OpenScreen(KvXrPanelLevel.SettingsScreen);
+                int canvases = CountChildrenNamed(panel.transform, KvXrOverlayPolicy.VrGroupCanvasName);
+                int objects = CountTree(panel.transform);
+                Assert.AreEqual(1, canvases,
+                    "после первого открытия экрана холст панели ровно один");
+
+                // То, что делает оператор: «Ввести значение» (Set_Enter) → экран ввода → назад.
+                for (int i = 0; i < 4; i++)
+                {
+                    panel.OpenInput(KvXrValueFieldId.PanelRadius);
+                    panel.OpenScreen(KvXrPanelLevel.SettingsScreen);
+                }
+
+                Assert.AreEqual(1, CountChildrenNamed(panel.transform, KvXrOverlayPolicy.VrGroupCanvasName),
+                    "каждое открытие экрана создавало НОВЫЙ KvXrGroupCanvas — окна и экраны " +
+                    "обязаны переиспользовать один холст, а не копить экземпляры #N");
+                Assert.AreEqual(objects, CountTree(panel.transform),
+                    "повторные нажатия Set_Enter не должны увеличивать число объектов сцены: " +
+                    "было " + objects + ", стало " + CountTree(panel.transform));
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        /// <summary>Сколько прямых детей с таким именем (холсты панели считаются по имени).</summary>
+        private static int CountChildrenNamed(Transform parent, string name)
+        {
+            int count = 0;
+            for (int i = 0; i < parent.childCount; i++)
+                if (parent.GetChild(i).name == name) count++;
+            return count;
+        }
+
+        /// <summary>Сколько объектов в поддереве (считается сам корень).</summary>
+        private static int CountTree(Transform root)
+        {
+            int count = 1;
+            for (int i = 0; i < root.childCount; i++) count += CountTree(root.GetChild(i));
+            return count;
+        }
+
+        // ==================================================== «ВВОД» И «ОТМЕНА» (заказ D)
+
+        /// <summary>
+        /// КЛАВИШИ ЭКРАНА ВВОДА ОСТАВЛЯЮТ ЧЕСТНЫЙ ФАКТ ДЛЯ ОБХОДА.
+        ///
+        /// ОТКУДА (планшет, отчёт 13.11.2026): `Key_50«ввод»` и `Key_51«отмена»` дали
+        /// `effect=нет изменений exempt=-` — «нажал и ничего не изменилось», хотя это штатное
+        /// поведение: пустой/непригодный буфер `KvXrValueInput.Commit` НЕ принимает (значение
+        /// не изменено — так решает контракт), а «отмена» значение и не должна менять.
+        /// Панель обязана назвать факт своим текстом и отметить, что нажатие реально было
+        /// (счётчик `InputKeySeq`), иначе обход не отличит «сработало» от «клавиша не дошла».
+        /// </summary>
+        [Test]
+        public void InputScreenEnterAndCancel_RecordHonestFact()
+        {
+            var host = new GameObject("KvXrInputFactTest");
+            var panel = host.AddComponent<KvXrGroupPanel>();
+            panel.logOnBuild = false;
+            try
+            {
+                panel.OpenInput(KvXrValueFieldId.PanelRadius);
+
+                int seqBefore = panel.InputKeySeq;
+                panel.CommitInput();                       // буфер пуст — принимать нечего
+                Assert.Greater(panel.InputKeySeq, seqBefore,
+                    "нажатие «ввод» обязано отметить факт: иначе обход не отличит его от ненажатой клавиши");
+                StringAssert.Contains("значение не изменено", panel.InputKeyNote,
+                    "пустой ввод обязан быть назван фактом: " + panel.InputKeyNote);
+
+                panel.OpenInput(KvXrValueFieldId.PanelRadius);
+                panel.CancelInput();
+                StringAssert.Contains("отмена", panel.InputKeyNote,
+                    "отмена ввода обязана называться своими словами: " + panel.InputKeyNote);
+                StringAssert.Contains("значение не изменено", panel.InputKeyNote,
+                    "отмена значение не меняет — это и есть честная причина: " + panel.InputKeyNote);
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
     }
 }
 
