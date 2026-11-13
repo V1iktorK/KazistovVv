@@ -694,7 +694,7 @@
     },
     {
       "key": "cmd.video.toggle.desc",
-      "text": "把操作者视角录成 MP4（视频文件夹）"
+      "text": "把 PNG 帧序列（frame_000001.png …）和 recording.json 清单写入录制文件夹；本构建不生成视频文件"
     },
     {
       "key": "cmd.view.singularity",
@@ -946,7 +946,7 @@
     },
     {
       "key": "cmd.pose.goto.desc",
-      "text": "将机器人平滑移动到选定位姿（“位姿”面板）"
+      "text": "打开功能面板的“位姿”标签页；机器人保持不动"
     },
     {
       "key": "cmd.pose.save",

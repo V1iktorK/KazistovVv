@@ -694,7 +694,7 @@
     },
     {
       "key": "cmd.video.toggle.desc",
-      "text": "Bedieneransicht als MP4 aufzeichnen"
+      "text": "Schreibt PNG-Einzelbilder (frame_000001.png …) und ein recording.json-Manifest in den Aufnahmeordner; diese Version erzeugt keine Videodatei"
     },
     {
       "key": "cmd.view.singularity",
@@ -946,7 +946,7 @@
     },
     {
       "key": "cmd.pose.goto.desc",
-      "text": "Bewegt den Roboter sanft zur ausgewählten Pose (Panel „Posen“)"
+      "text": "Öffnet den Tab «Posen» im Funktionsfenster; der Roboter bleibt stehen"
     },
     {
       "key": "cmd.pose.save",

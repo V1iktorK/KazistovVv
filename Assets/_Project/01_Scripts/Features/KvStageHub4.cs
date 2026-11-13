@@ -565,7 +565,19 @@ namespace KazistovVvFeatures
             if (ui != null) ui.RebuildTree(true);
         }
 
-        public void CycleLighting() { Lighting.SetPreset((Lighting.Index + 1) % Lighting.Presets.Count); }
+        public void CycleLighting()
+        {
+            // АРИФМЕТИКА — ВНУТРИ `KvLightingStudio.Next` (дефект B, 13.11.2026). Здесь стояло
+            // `Lighting.SetPreset((Lighting.Index + 1) % Lighting.Presets.Count)`: при пустом
+            // списке пресетов это DivideByZeroException, а `KvCommands.Invoke` исключения
+            // обработчика не перехватывает — команда `light.next` падала без объяснения.
+            if (Lighting == null)
+            {
+                Debug.LogWarning("[Stages4] свет: сервис освещения не создан — переключать нечего");
+                return;
+            }
+            Lighting.Next();
+        }
 
         public void ToggleVoice() { Voice.SetEnabled(!Voice.Enabled); }
 

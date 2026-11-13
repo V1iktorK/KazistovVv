@@ -18,10 +18,14 @@
 //  `Tools/ui-sweep-device.ps1` на устройстве, и это написано в отчёте прямо.
 // ================================================================================================
 
+using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using KazistovVvDiagnostics;
 using KazistovVvXr;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.UI;
 
 namespace KazistovVvTests
 {
@@ -2022,6 +2026,196 @@ namespace KazistovVvTests
             Assert.AreEqual(0, run.NoEffect, "не ни в «без эффекта»: причина заявлена заранее");
             Assert.AreEqual(run.Total, run.Worked + run.NoEffect + run.Exempted + run.Missing,
                 "тождество отчёта N = P + F + E + исчезло");
+        }
+
+        // ------------------------------------- 25. ЛИМИТ СБОРА: ОБХОД ОБЯЗАН БЫТЬ ПОЛНЫМ
+
+        /// <summary>
+        /// СБОР БЕРЁТ ВСЕ ЭЛЕМЕНТЫ, А НЕ ПЕРВЫЕ 140.
+        ///
+        /// ОТКУДА (дефект D1, 13.11.2026). `KvUiSweepRuntime.MaxElements = 140` обрезал сбор:
+        /// в отчёте 13.11 стояло «СТАРТ: элементов=140» — ровно предел, то есть инвентарь AR
+        /// (41+ кнопка тулбара, динамические меню) не попадал в прогон НИКОГДА и проверить его
+        /// было нельзя. Лимит снят: границу держит бюджет времени (`TotalBudgetSeconds`), который
+        /// печатает честную строку «ПРЕДЕЛ: … с истекли — остальные НЕ ПРОВЕРЯЛИСЬ».
+        /// </summary>
+        [Test]
+        public void Collection_TakesEveryElement_NotOnlyFirst140()
+        {
+            const int buttons = 200;          // больше прежнего предела 140 — иначе тест не ловит обрезку
+
+            var runtimeType = typeof(KvUiSweepRuntime);
+            var candidateType = runtimeType.GetNestedType("Candidate", BindingFlags.NonPublic);
+            Assert.IsNotNull(candidateType,
+                "в KvUiSweepRuntime нет вложенного класса Candidate — сбор обхода изменился, тест надо переписать");
+            var collect = runtimeType.GetMethod("CollectTargets",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsNotNull(collect, "в KvUiSweepRuntime нет метода CollectTargets");
+
+            GameObject host = new GameObject("KvUiSweepCollectionHost");
+            try
+            {
+                var canvasGo = new GameObject("TestCanvas", typeof(Canvas));
+                canvasGo.transform.SetParent(host.transform, false);
+                for (int i = 0; i < buttons; i++)
+                {
+                    var button = new GameObject("Btn_" + i.ToString("000"),
+                        typeof(RectTransform), typeof(Image), typeof(Button));
+                    button.transform.SetParent(canvasGo.transform, false);
+                }
+
+                KvUiSweepRuntime runtime = host.AddComponent<KvUiSweepRuntime>();
+                IList list = (IList)System.Activator.CreateInstance(
+                    typeof(List<>).MakeGenericType(candidateType));
+                collect.Invoke(runtime, new object[] { list });
+
+                Assert.GreaterOrEqual(list.Count, buttons,
+                    "сбор обрезан на " + list.Count + " из " + buttons +
+                    " кнопок: инвентарь интерфейса не проверяется никогда (прежний предел 140)");
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        // ------------------------------------- 26. ДОК-ПАНЕЛИ: ШТАТНОЕ ОТКРЫТИЕ И ПРИЧИНА
+
+        /// <summary>
+        /// ЭЛЕМЕНТ ЗАКРЫТОЙ ДОК-ПАНЕЛИ — ШТАТНАЯ КОМАНДА ОТКРЫТИЯ И ЧЕСТНАЯ ПРИЧИНА, А НЕ «ИСЧЕЗ».
+        ///
+        /// ОТКУДА (дефект D2, отчёт 13.11.2026 12:14, макет ar): 31 элемент из 140 — все
+        /// `KazistovVv_UI/KazistovVvDockCanvas/Dock_Настройки/Body/Scroll/Content/Switch_*` —
+        /// получили «исчез (путь не найден)». Причина: канвас док-панелей гаснет, когда запрошенных
+        /// панелей нет, а раскладка хранится в PlayerPrefs — панель «Настройки» остаётся
+        /// свёрнутой/узкой, и никакое «восстановление экрана» её не раскрывает. Теперь обход
+        /// ОТКРЫВАЕТ ПАНЕЛЬ ШТАТНОЙ КОМАНДОЙ (`view.panel.settings` и т.п.), докручивает список к
+        /// строке, а если панель открыть не удалось — называет причину «панель не открыта».
+        /// </summary>
+        [Test]
+        public void DockPanel_OpenCommandAndNotOpenReason_AreHonest()
+        {
+            Assert.AreEqual("view.panel.tree", KvUiSweepDockNav.OpenCommandFor("tree"),
+                "панель дерева открывается своей штатной командой");
+            Assert.AreEqual("view.panel.properties", KvUiSweepDockNav.OpenCommandFor("properties"));
+            Assert.AreEqual("view.panel.settings", KvUiSweepDockNav.OpenCommandFor("settings"),
+                "настройки открываются штатной командой, НЕ ui.settings: та переключает вкладку " +
+                "и спрятала бы строки других вкладок");
+            Assert.AreEqual("help.hotkeys", KvUiSweepDockNav.OpenCommandFor("hotkeys"));
+            Assert.AreEqual("", KvUiSweepDockNav.OpenCommandFor("нет такой панели"),
+                "для неизвестной панели команды нет — это не повод выдумывать");
+
+            const string realPath =
+                "KazistovVv_UI/KazistovVvDockCanvas/Dock_Настройки/Body/Scroll/Content/" +
+                "Switch_Фонарик (G)«Фонарик (G)»";
+            Assert.IsTrue(KvUiSweepDockNav.IsDockPath(realPath),
+                "путь из реального отчёта 13.11.2026 обязан узнаваться как путь док-панели");
+            Assert.IsFalse(KvUiSweepDockNav.IsDockPath(
+                    "ArRuntime/ArUiCanvas/ArButtons/ArButton_Команды«Команды»"),
+                "кнопка AR — не док-панель: правило не должно захватывать чужие пути");
+
+            string reason = KvUiSweepDockNav.NotOpenReasonFor("settings",
+                "канвас панелей выключен (запрошенных панелей нет)");
+            StringAssert.Contains("панель не открыта", reason,
+                "причина обязана называть то, что мешает проверке");
+            StringAssert.Contains("settings", reason, "панель обязана быть названа");
+            StringAssert.Contains("канвас панелей выключен", reason, "и деталь попытки");
+
+            // ЭЛЕМЕНТ С ТАКОЙ ПРИЧИНОЙ — ИСКЛЮЧЕНИЕ: не «без эффекта» и не «исчез».
+            var run = new KvUiSweepRun { Layout = "ar" };
+            run.Add(new KvUiSweepElement
+            {
+                Path = realPath,
+                Ok = false,
+                Effect = "не нажимали — панель не открыта",
+                ExemptReason = reason
+            });
+            Assert.AreEqual(1, run.Exempted, "непроверенный из-за закрытой панели элемент — исключение");
+            Assert.AreEqual(0, run.NoEffect, "и НЕ «без эффекта»");
+            Assert.AreEqual(0, run.Missing, "и НЕ «исчез»: панель названа причиной");
+        }
+
+        // ------------------------------------- 27. НЕНАЖАТЫЙ ЭЛЕМЕНТ ВСЕГДА С ПРИЧИНОЙ
+
+        /// <summary>
+        /// СИСТЕМНЫЙ ШЛЮЗ ПОЛУЧАЕТ СВОЮ ПРИЧИНУ ДАЖЕ БЕЗ ФЛАГА В КАНДИДАТЕ.
+        ///
+        /// ОТКУДА (дефект D3, чистое состояние 13.11.2026): кнопка
+        /// `KvArCameraGateCanvas/GateButton«РАЗРЕШИТЬ КАМЕРУ»` попадала в «без эффекта», хотя
+        /// прогон её СОЗНАТЕЛЬНО не нажимает. Причина исключения читалась только из флага
+        /// `SystemGate`, поставленного при СБОРЕ, а решение «не нажимать» принимается по ПУТИ —
+        /// и эти два источника могли разойтись. Теперь причина считается по пути, и ненажатый
+        /// элемент в принципе не может остаться без неё.
+        /// </summary>
+        [Test]
+        public void UnpressedElement_AlwaysGetsAReason_GatePathFirst()
+        {
+            const string gate = "ArRuntime/KvArCameraGateCanvas/GatePanel/GateButton«РАЗРЕШИТЬ КАМЕРУ»";
+
+            string gateReason = KvUiSweepExemptions.UnpressedReasonFor(gate, true);
+            StringAssert.Contains("системный шлюз", gateReason,
+                "шлюз обязан получать причину «системный шлюз» и без флага SystemGate: " + gateReason);
+
+            // Свой элемент проекта, который прогон не нажал: пустой причины быть не может.
+            string ordinary = KvUiSweepExemptions.UnpressedReasonFor(
+                "KazistovVv_UI/KazistovVvCanvas/KvToolbar/Groups/Cmd_ui.toggle«Показать/скрыть интерфейс»",
+                true);
+            Assert.IsNotEmpty(ordinary,
+                "ненажатый элемент без отдельного правила не может считаться «безэффектным» — " +
+                "нужна честная причина (сам прогон объясняет, почему не нажал)");
+
+            // Системный пункт ВНЕ панелей проекта сохраняет СВОЮ причину.
+            string system = KvUiSweepExemptions.UnpressedReasonFor(
+                "ArRuntime/ArUiCanvas/PcToolbar/Tool_ui.settings«Настройки»", false);
+            StringAssert.Contains("систем", system.ToLowerInvariant(),
+                "причина системного пункта обязана называть системный экран: " + system);
+
+            // Элемент с такой причиной в отчёте — исключение, а не провал.
+            var run = new KvUiSweepRun { Layout = "ar" };
+            run.Add(new KvUiSweepElement
+            {
+                Path = gate,
+                Ok = false,
+                Effect = "не нажимали — правило запрещает (опасно для прогона)",
+                ExemptReason = gateReason
+            });
+            Assert.AreEqual(1, run.Exempted);
+            Assert.AreEqual(0, run.NoEffect, "ненажатый шлюз — не «без эффекта»");
+        }
+
+        // ------------------------------------- 28. uiVisible: СНИМОК ВИДИТ И RESTORE ВОЗВРАЩАЕТ
+
+        /// <summary>
+        /// КОМАНДА `ui.toggle` («Показать/скрыть интерфейс») ВИДНА СНИМКУ И ВОЗВРАЩАЕТСЯ ПОСЛЕ
+        /// ЭЛЕМЕНТА.
+        ///
+        /// ОТКУДА (дефект D4, 13.11.2026). `Restore` возвращал док-панели, режим, язык и
+        /// `KvSettings`, но НЕ `uiVisible`: после `ui.toggle` оболочка оставалась скрытой, и 12
+        /// элементов `Cmd_*` не проверялись вторым проходом — их пути просто не существовали.
+        /// Теперь признак есть в снимке (значит, нажатие видно) и возвращается в исходное.
+        /// </summary>
+        [Test]
+        public void UiVisible_IsSeenBySnapshotAndRestoredAfterUiToggle()
+        {
+            var before = new KvUiSweepSnapshot { UiVisible = 1 };
+            var after = new KvUiSweepSnapshot { UiVisible = 0 };
+
+            string diff = KvUiSweepDiff.Describe(before, after);
+            StringAssert.Contains("оболочка показана", diff,
+                "скрытие интерфейса обязано быть видно снимку, иначе ui.toggle выглядел бы " +
+                "неизменением состояния: " + diff);
+
+            // РЕШЕНИЕ ВОССТАНОВЛЕНИЯ: именно его принимает `Restore`.
+            Assert.IsTrue(KvUiSweepUiVisible.NeedsRestore(1, false),
+                "скрытую командой оболочку обязаны вернуть — иначе следующие элементы не проверяются");
+            Assert.IsTrue(KvUiSweepUiVisible.Target(1), "цель — снова показать");
+            Assert.IsTrue(KvUiSweepUiVisible.NeedsRestore(0, true),
+                "показанную, а потом скрытую другим способом — вернуть в скрытое");
+            Assert.IsFalse(KvUiSweepUiVisible.Target(0), "до нажатия оболочка была скрыта — так и оставляем");
+            Assert.IsFalse(KvUiSweepUiVisible.NeedsRestore(1, true),
+                "когда состояние уже совпадает, оболочку не трогаем");
+            Assert.IsFalse(KvUiSweepUiVisible.NeedsRestore(0, false),
+                "то же для скрытой: лишний SetUiVisible перестраивает интерфейс без нужды");
         }
     }
 }

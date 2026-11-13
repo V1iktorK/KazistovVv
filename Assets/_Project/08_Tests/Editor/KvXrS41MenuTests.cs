@@ -1,6 +1,8 @@
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 using KazistovVvXr;
 
 namespace KazistovVvTests
@@ -422,6 +424,59 @@ namespace KazistovVvTests
                 // шесть разделов + две строки + «Закрыть»
                 Assert.AreEqual(KvXrStartMenuLayout.SectionCount + 2 + 1, panel.IconCount,
                     "в разделе «Выход» обязано быть шесть разделов, две строки и «Закрыть»");
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        // ============================================== П1б: СТРОКА «ПЕРЕМЕСТИТЬ РОБОТА»
+
+        /// <summary>
+        /// СТРОКА «ПЕРЕМЕСТИТЬ РОБОТА» ОБЯЗАНА СТРОИТЬСЯ В МЕНЮ И ВЕСТИ НА СВОЁ ДЕЙСТВИЕ.
+        ///
+        /// ОТКУДА (требование владельца 12.11.2026). Подпись
+        /// (`KvXrStartMenuRows.MoveRobotRowLabel`), действие (`KvXrStartRowAction.MoveRobotToFixedSpot`)
+        /// и обработчик нажатия в панели (`KvXrGroupPanel.PressStartRow`) ЕСТЬ, но
+        /// `StartContentLabels` строку не добавляла: в шлеме кнопки не было вовсе — пункт был
+        /// написан, но не собран. Требование владельца: строка строится и ведёт на действие.
+        /// </summary>
+        [Test]
+        public void StartMenu_RobotsSection_BuildsMoveRobotRowAndRoutesToItsAction()
+        {
+            GameObject host;
+            KvXrGroupPanel panel = NewPanel(KvXrPanelLevel.Groups, out host);
+            try
+            {
+                panel.OpenStartMenu();
+                panel.SelectStartSection((int)KvXrStartSection.Robots);
+
+                int icon = -1;
+                for (int i = 0; i < panel.IconCount; i++)
+                    if (panel.TitleAt(i) == KvXrStartMenuRows.MoveRobotRowLabel) { icon = i; break; }
+
+                Assert.GreaterOrEqual(icon, 0,
+                    "строки «" + KvXrStartMenuRows.MoveRobotRowLabel + "» нет в разделе «Робот» " +
+                    "стартового меню — StartContentLabels её не добавляет, и в шлеме пункт недостижим");
+
+                // НОМЕР СТРОКИ, А НЕ НОМЕР ИКОНКИ: в меню СНАЧАЛА идут иконки разделов
+                // (`MenuSec_0…`), и только потом строки (`MenuRow_0…`). Именно по номеру строки
+                // замыкается обработчик иконки и именно его ждёт `ActionFor`.
+                int row = icon - KvXrStartMenuLayout.SectionCount;
+                Assert.GreaterOrEqual(row, 0,
+                    "строка меню обязана идти после иконок разделов — индекс не может быть отрицательным");
+
+                // СТРОКА ВЕДЁТ НА ДЕЙСТВИЕ: тот же номер, по которому идёт нажатие строки.
+                Assert.AreEqual(KvXrStartRowAction.MoveRobotToFixedSpot,
+                    KvXrStartMenuRows.ActionFor(KvXrStartSection.Robots, row, 0, 0),
+                    "нажатие этой строки обязано идти на действие «переместить робота»");
+
+                // НАЖАТИЕ ДОХОДИТ ДО ОБРАБОТЧИКА. В EditMode режима выбора места не создан,
+                // и панель честно отвечает в журнале — а не падает и не молчит.
+                if (KvMrRobotPick.Active == null)
+                    LogAssert.Expect(LogType.Warning, new Regex("переместить робота"));
+                panel.PressStartRow(row);
             }
             finally
             {

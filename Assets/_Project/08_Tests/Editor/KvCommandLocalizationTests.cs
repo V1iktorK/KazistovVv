@@ -217,6 +217,102 @@ namespace KazistovVvTests
             Assert.AreEqual(0, vague.Count,
                 "исключения без причины: " + string.Join(", ", vague.ToArray()));
         }
+
+        // ---------------------------------------------------------------- 3. ЧЕСТНЫЕ ОПИСАНИЯ
+
+        /// <summary>Семь словарей, в которых обязаны быть честные описания.</summary>
+        private static readonly string[] AllLanguages =
+            { "ru", "en", "de", "es", "fr", "ja", "zh" };
+
+        /// <summary>
+        /// ТЕКСТ КЛЮЧА ИЗ СЛОВАРЯ ЯЗЫКА (`""` — ключа нет). Формат JSON — массив объектов
+        /// `{"key": …, "text": …}`, поэтому читаем регуляркой, как и весь файл: так тест не
+        /// зависит от версии JSON-библиотеки проекта.
+        /// </summary>
+        private static string TextOf(string language, string key)
+        {
+            string path = Path.Combine(Application.dataPath, "StreamingAssets",
+                "kazistovvv_i18n", language + ".json");
+            if (!File.Exists(path)) return "";
+            string pattern = @"""key""\s*:\s*""" + Regex.Escape(key) +
+                             @"""\s*,\s*""text""\s*:\s*""((?:[^""\\]|\\.)*)""";
+            Match m = Regex.Match(File.ReadAllText(path), pattern);
+            return m.Success ? m.Groups[1].Value : "";
+        }
+
+        /// <summary>
+        /// ОПИСАНИЕ `video.toggle` ГОВОРИТ ПРО КАДРЫ PNG, А НЕ ПРО MP4 ЧЕРЕЗ UNITY RECORDER.
+        ///
+        /// ОТКУДА (дефект C, 13.11.2026). Во всех семи словарях описание обещало «запись вида
+        /// оператора в MP4 (через Unity Recorder)», а в APK Recorder НЕТ: пишется последовательность
+        /// кадров `frame_000001.png …` плюс манифест `recording.json` (`KvCaptures`). Обещание,
+        /// которое сборка не выполняет, — враньё в интерфейсе, поэтому описание честно называет
+        /// то, что реально делает кнопка.
+        /// </summary>
+        [Test]
+        public void VideoToggleDescription_SaysPngFrames_NotMp4OrRecorder()
+        {
+            foreach (string language in AllLanguages)
+            {
+                string desc = TextOf(language, "cmd.video.toggle.desc");
+                Assert.IsNotEmpty(desc, "в словаре " + language + " нет cmd.video.toggle.desc");
+
+                StringAssert.Contains("PNG", desc,
+                    language + ": описание video.toggle обязано называть кадры PNG — это то, " +
+                    "что реально пишет сборка: " + desc);
+
+                Assert.IsFalse(desc.ToLowerInvariant().Contains("mp4"),
+                    language + ": описание video.toggle обещает MP4, которого в сборке нет: " + desc);
+                Assert.IsFalse(desc.ToLowerInvariant().Contains("recorder"),
+                    language + ": описание video.toggle обещает Unity Recorder, которого в сборке нет: " + desc);
+            }
+        }
+
+        /// <summary>
+        /// ОПИСАНИЕ `pose.goto` ГОВОРИТ «ОТКРЫВАЕТ ВКЛАДКУ ПОЗ», А НЕ «ПЕРЕЕЗДАЕТ РОБОТА».
+        ///
+        /// ОТКУДА (дефект C, 13.11.2026). Описание обещало «плавный переезд робота в выбранную
+        /// позу», а обработчик (`FeatureHub`, `pose.goto`) делает ровно одно:
+        /// `hub.Window.Show(1)` — открывает вкладку «Позы». Робот при этом НЕ ДВИГАЕТСЯ.
+        /// </summary>
+        [Test]
+        public void PoseGotoDescription_SaysItOpensPosesTab_NotThatRobotMoves()
+        {
+            // Слова старого обещания на всех семи языках — их в честном описании быть не может.
+            string[] lies =
+            {
+                "переезд", "перемещ", "плавн",          // ru
+                "smoothly",                             // en
+                "suavement",                            // es
+                "douceur",                              // fr
+                "スムーズ",                              // ja
+                "平滑"                                   // zh
+            };
+            // Слова «вкладка/таб» — честное то, что команда действительно делает.
+            string[] tabs =
+            {
+                "вкладк", "tab", "pestaña", "pestan", "onglet", "タブ", "选项卡", "标签"
+            };
+
+            foreach (string language in AllLanguages)
+            {
+                string desc = TextOf(language, "cmd.pose.goto.desc");
+                Assert.IsNotEmpty(desc, "в словаре " + language + " нет cmd.pose.goto.desc");
+                string low = desc.ToLowerInvariant();
+
+                foreach (string lie in lies)
+                    Assert.IsFalse(low.Contains(lie),
+                        language + ": описание pose.goto всё ещё обещает движение робота («" +
+                        lie + "»): " + desc);
+
+                bool opensTab = false;
+                foreach (string tab in tabs)
+                    if (low.Contains(tab)) { opensTab = true; break; }
+                Assert.IsTrue(opensTab,
+                    language + ": описание pose.goto обязано сказать, что команда открывает вкладку " +
+                    "«Позы»: " + desc);
+            }
+        }
     }
 }
 

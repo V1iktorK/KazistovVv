@@ -694,7 +694,7 @@
     },
     {
       "key": "cmd.video.toggle.desc",
-      "text": "Graba la vista del operador en MP4"
+      "text": "Escribe fotogramas PNG (frame_000001.png …) y un manifiesto recording.json en la carpeta de grabación; esta compilación no crea archivo de vídeo"
     },
     {
       "key": "cmd.view.singularity",
@@ -946,7 +946,7 @@
     },
     {
       "key": "cmd.pose.goto.desc",
-      "text": "Mueve el robot suavemente a la pose seleccionada (panel «Poses»)"
+      "text": "Abre la pestaña «Poses» del panel de funciones; el robot no se mueve"
     },
     {
       "key": "cmd.pose.save",

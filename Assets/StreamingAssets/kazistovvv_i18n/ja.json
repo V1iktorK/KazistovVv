@@ -694,7 +694,7 @@
     },
     {
       "key": "cmd.video.toggle.desc",
-      "text": "操作者視点を MP4 で録画します"
+      "text": "PNG連番フレーム（frame_000001.png …）と recording.json マニフェストを録画フォルダーに書き出します。このビルドは動画ファイルを作りません"
     },
     {
       "key": "cmd.view.singularity",
@@ -946,7 +946,7 @@
     },
     {
       "key": "cmd.pose.goto.desc",
-      "text": "ロボットを選択した姿勢へスムーズに移動（「姿勢」パネル）"
+      "text": "機能パネルの「姿勢」タブを開きます。ロボットは動きません"
     },
     {
       "key": "cmd.pose.save",

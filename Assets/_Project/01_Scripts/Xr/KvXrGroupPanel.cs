@@ -2030,6 +2030,11 @@ for (int i = 0; i < shown; i++) labels.Add("Робот: " + NameOf(startRobots[i
                     labels.Add("Добавить 6-осевой робот");
                     labels.Add("Добавить SCARA");
                     labels.Add("Сменить робота");
+                    // СТРОКА ВЛАДЕЛЬЦА (12.11.2026): «Переместить робота». Подпись, действие и
+                    // обработчик уже были, а ЭТОЙ строки не хватало — пункт не собирался и в
+                    // шлеме его не существовало. Подпись берётся из того же источника, что и
+                    // действие (`KvXrStartMenuRows`), иначе две части снова разъедутся.
+                    labels.Add(KvXrStartMenuRows.MoveRobotRowLabel);
                     break;
 }
 case KvXrStartSection.Project:                    labels.Add("Сброс сцены (новый проект)");

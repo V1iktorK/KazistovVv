@@ -232,6 +232,29 @@
 //       «по одному элементу с восстановлением» дороже прежнего, но ОБХОД НЕ ДОЛЖЕН ОБОРВАТЬСЯ
 //       по бюджету, не дойдя до конца — иначе вернётся молчаливое «не проверено».
 //
+//  ДОРАБОТКА ПО ПРОГОНУ 13.11.2026 (отчёт ar 12:14: 140 элементов, 60 сработало, 49 исключений,
+//  31 «исчез», 0 «без эффекта»; правки A–D заказа владельца):
+//   40) ЛИМИТ СБОРА СНЯТ (`MaxElements = int.MaxValue`): прежние 140 обрезали инвентарь AR
+//       (41+ кнопка тулбара, динамические меню), и непроверенное не называлось ничем. Границу
+//       держит бюджет времени, а его конец печатается честной строкой «ПРЕДЕЛ: …»;
+//   41) ДОК-ПАНЕЛЬ ОТКРЫВАЕТСЯ ШТАТНОЙ КОМАНДОЙ ПЕРЕД ЭЛЕМЕНТОМ (`view.panel.settings` и т.п.),
+//       независимо от раскладки в PlayerPrefs: команда → `ShowPanel` менеджера (сброс уехавшей
+//       раскладки) → раскрытие свёрнутой панели, затем список ДОКРУЧИВАЕТСЯ к строке
+//       (`ScrollDockTo`). Если панель открыть не удалось — элемент получает ЯВНУЮ причину
+//       `панель не открыта: док-панель «…» — <факт>` и НЕ попадает ни в «исчез», ни в «без
+//       эффекта» (ровно 31 «исчез» из отчёта 13.11 были путями `…/Dock_Настройки/…`);
+//   42) НЕНАЖАТЫЙ ЭЛЕМЕНТ ВСЕГДА С ПРИЧИНОЙ: `ShouldPress == false` — решение самого прогона,
+//       и без причины такой элемент считался «без эффекта», то есть прогон обвинял бы кнопку,
+//       которую сам отказался нажимать (в чистом состоянии — `GateButton«РАЗРЕШИТЬ КАМЕРУ»`).
+//       Причина считается ПО ПУТИ (`UnpressedReasonFor`), а не только по флагу сбора;
+//   43) `uiVisible` ВОЗВРАЩАЕТСЯ В `Restore`: команда `ui.toggle` гасит оболочку целиком, и
+//       раньше следующие 12 элементов `Cmd_*` проверялись в мире без интерфейса — их путей
+//       там просто не существовало. Признак есть в снимке (`оболочка показана`), в решении
+//       (`KvUiSweepUiVisible`) и в самом возврате;
+//   44) СТРОКА «ПЕРЕМЕСТИТЬ РОБОТА» СНОВА СТРОИТСЯ в разделе «Робот» стартового меню шлема
+//       (требование владельца 12.11.2026): подпись, действие и обработчик были, а строки в
+//       `StartContentLabels` не было — пункт в шлеме не существовал.
+//
 //  ЧЕСТНАЯ ГРАНИЦА. Таймаут на элемент измеряется по ФАКТИЧЕСКОМУ времени: Unity не даёт прервать
 //  вызов, который уже выполняется в главном потоке, поэтому «завис навсегда» виден как обрыв файла
 //  отчёта сразу после строки `press=` (виновник назван), а «завис на 5 секунд» — как `ok=0 timeout`
@@ -851,6 +874,12 @@ namespace KazistovVvDiagnostics
         public int Language;
         /// <summary>Комфорт: признак виньетки + сила в сотых (одно число, чтобы сравнение было точным).</summary>
         public int Comfort;
+        /// <summary>
+        /// ОБОЛОЧКА ИНТЕРФЕЙСА ПОКАЗАНА (0/1) — признак, который меняет команда `ui.toggle`
+        /// («Показать/скрыть интерфейс»). Без него снимок не видит скрытия оболочки, а
+        /// `Restore` не возвращает его — и следующие элементы проверяются в мире без интерфейса.
+        /// </summary>
+        public int UiVisible;
         /// <summary>Сколько команд выполнено за всё время (`KvCommands.ExecutedCount`).</summary>
         public int Commands;
         /// <summary>Сколько объектов в сцене (появился/исчез объект — эффект).</summary>
@@ -1557,6 +1586,8 @@ namespace KazistovVvDiagnostics
             var sb = new StringBuilder(120);
             Append(sb, "панели", before.VisiblePanels, after.VisiblePanels);
             Append(sb, "элементы оболочки", before.UiObjects, after.UiObjects);
+            // ВИДИМОСТЬ ОБОЛОЧКИ (дефект D4): «Показать/скрыть интерфейс» меняет именно её.
+            Append(sb, "оболочка показана", before.UiVisible, after.UiVisible);
             Append(sb, "строки дерева", before.TreeRows, after.TreeRows);
             Append(sb, "строки свойств", before.PropertyRows, after.PropertyRows);
             Append(sb, "кнопок тулбара", before.ToolbarButtons, after.ToolbarButtons);
@@ -2655,6 +2686,100 @@ namespace KazistovVvDiagnostics
                 if (path.IndexOf(patterns[i], StringComparison.OrdinalIgnoreCase) >= 0) return true;
             return false;
         }
+
+        /// <summary>
+        /// ПРИЧИНА ДЛЯ ЭЛЕМЕНТА, КОТОРЫЙ ПРОГОН СОЗНАТЕЛЬНО НЕ НАЖАЛ (`""` не бывает никогда).
+        ///
+        /// ОТКУДА (дефект D3, чистое состояние 13.11.2026). Кнопка
+        /// `KvArCameraGateCanvas/GateButton«РАЗРЕШИТЬ КАМЕРУ»` получала «без эффекта», хотя прогон
+        /// её НЕ нажимает: причина исключения читалась только из флага `SystemGate`, поставленного
+        /// при СБОРЕ элемента, а решение «не нажимать» (`ShouldPress`) принимается по ПУТИ — два
+        /// источника могли разойтись, и ненажатый элемент оставался без объяснения.
+        /// Теперь причина считается по тому же пути, что и запрет нажатия, и пустой быть не может:
+        /// иначе самопрогон обвинял бы в бездействии кнопку, которую сам же трогать отказался.
+        /// </summary>
+        public const string NotPressedReason =
+            "не нажимали — правило запрещает (опасно для прогона)";
+
+        /// <summary>Причина для ненажатого элемента: системный шлюз → системный экран → правило → общая.</summary>
+        public static string UnpressedReasonFor(string path, bool projectOwned)
+        {
+            if (IsGatePath(path)) return GateReason;
+            string system = SystemScreenReason(path, projectOwned);
+            if (system.Length > 0) return system;
+            string rule = ReasonFor(path);
+            if (rule.Length > 0) return rule;
+            return NotPressedReason;
+        }
+    }
+
+    /// <summary>
+    /// РЕШЕНИЕ ПО ВОЗВРАТУ ВИДИМОСТИ ОБОЛОЧКИ (`ui.toggle` → `Restore`).
+    ///
+    /// ОТКУДА (дефект D4, 13.11.2026). `Restore` возвращал док-панели, режим, язык и `KvSettings`,
+    /// но НЕ `uiVisible`: после команды «Показать/скрыть интерфейс» оболочка оставалась скрытой,
+    /// и 12 элементов `Cmd_*` не проверялись вторым проходом — их путей в мире без интерфейса
+    /// просто не существовало. Решение вынесено в чистую функцию, чтобы его проверял тест.
+    /// </summary>
+    public static class KvUiSweepUiVisible
+    {
+        /// <summary>Надо ли вернуть оболочку к состоянию до нажатия (значение `UiVisible` снимка).</summary>
+        public static bool NeedsRestore(int before, bool nowVisible)
+        {
+            return (before != 0) != nowVisible;
+        }
+
+        /// <summary>В какое состояние вернуть: true — показать, false — скрыть.</summary>
+        public static bool Target(int before)
+        {
+            return before != 0;
+        }
+    }
+
+    /// <summary>
+    /// ДОК-ПАНЕЛИ ОБОЛОЧКИ: ШТАТНАЯ КОМАНДА ОТКРЫТИЯ И ЧЕСТНАЯ ПРИЧИНА, ЕСЛИ НЕ ОТКРЫЛАСЬ.
+    ///
+    /// ОТКУДА (дефект D2, отчёт 13.11.2026 12:14, макет ar): 31 элемент из 140 — все
+    /// `…/KazistovVvDockCanvas/Dock_Настройки/Body/Scroll/Content/Switch_*` — получили
+    /// «исчез (путь не найден)». Канвас док-панелей гаснет, когда запрошенных панелей нет, а
+    /// раскладка хранится в PlayerPrefs: панель «Настройки» остаётся свёрнутой/узкой, и
+    /// «восстановление экрана» её не раскрывает. Лечение — ОТКРЫВАТЬ панель штатной командой
+    /// (та же, что у кнопки оператора), а если не вышло — называть причину «панель не открыта».
+    /// </summary>
+    public static class KvUiSweepDockNav
+    {
+        /// <summary>Четыре dock-панели оболочки — в порядке `KazistovVvUIManager.DockById`.</summary>
+        public static readonly string[] Ids = { "tree", "properties", "settings", "hotkeys" };
+
+        /// <summary>
+        /// ШТАТНАЯ КОМАНДА ОТКРЫТИЯ ПАНЕЛИ (`""` — для неизвестной панели команды нет).
+        /// Настройки открываются `view.panel.settings`, А НЕ `ui.settings`: та переключает вкладку
+        /// на «Функции» и спрятала бы строки других вкладок — элемент остался бы непроверенным.
+        /// </summary>
+        public static string OpenCommandFor(string dockId)
+        {
+            switch (dockId)
+            {
+                case "tree": return "view.panel.tree";
+                case "properties": return "view.panel.properties";
+                case "settings": return "view.panel.settings";
+                case "hotkeys": return "help.hotkeys";
+                default: return "";
+            }
+        }
+
+        /// <summary>Это путь элемента док-панели? (Путь строится от корня `Dock_&lt;название&gt;`.)</summary>
+        public static bool IsDockPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            return path.IndexOf("/Dock_", StringComparison.Ordinal) >= 0;
+        }
+
+        /// <summary>Честная причина для элемента, чью панель открыть не удалось.</summary>
+        public static string NotOpenReasonFor(string dockId, string detail)
+        {
+            return KvUiSweepPanelNav.NotOpenReason("док-панель «" + dockId + "»", detail);
+        }
     }
 
     /// <summary>Имя макета для отчёта: `vr`, `mr`, `ar`, `pc`.</summary>
@@ -2716,8 +2841,21 @@ namespace KazistovVvDiagnostics
         /// </summary>
         public const float TotalBudgetSeconds = 600f;
 
-        /// <summary>Предел числа проверяемых элементов (защита от комбинаторного взрыва уровней панели).</summary>
-        public const int MaxElements = 140;
+        /// <summary>
+        /// ПРЕДЕЛ ЧИСЛА ЭЛЕМЕНТОВ СНЯТ (дефект D1, 13.11.2026).
+        ///
+        /// ЧТО БЫЛО. Старое значение 140 обрезало СБОР: в отчёте 13.11 стояло «СТАРТ: элементов=140»
+        /// — ровно предел, то есть инвентарь AR (41+ кнопка тулбара, динамические меню) в прогон не
+        /// попадал вовсе и проверить его было нельзя. Потерянное при обрезке не называлось ничем.
+        ///
+        /// ЧТО СТАЛО. Границу держит БЮДЖЕТ ВРЕМЕНИ (`TotalBudgetSeconds`): по его истечении обход
+        /// печатает честную строку «ПРЕДЕЛ: … с истекли — проверено X из Y; остальные НЕ
+        /// ПРОВЕРЯЛИСЬ», то есть непроверенное видно числом, а не теряется молча. Замер 13.11:
+        /// 140 элементов за 18,6 с (~0,13 с на элемент) — 600 с бюджета хватает на порядок больше
+        /// элементов, чем старый предел. КОМБИНАТОРНЫЙ ВЗРЫВ УРОВНЕЙ тот же бюджет гасит сам:
+        /// очередь всё равно ограничена тем, что реально построено в интерфейсе.
+        /// </summary>
+        public const int MaxElements = int.MaxValue;
 
         /// <summary>На сколько уровней вглубь раскрывать панель шлема (0 — только иконки групп).</summary>
         public const int MaxPanelDepth = 3;
@@ -3218,13 +3356,35 @@ namespace KazistovVvDiagnostics
                     }
                     if (!found)
                     {
-                        // ОТКЛАДЫВАЕМ: путь может снова появиться к концу прогона (AR-интерфейс
-                        // перестраивается). Второй проход восстановит экран ЕЩЁ РАЗ и либо
-                        // проверит элемент, либо назовёт «панель не открыта» с именем экрана —
-                        // тихий «исчез» для элементов панели больше невозможен.
-                        Defer(c, false, "");
-                        queue.Done(key);
-                        continue;
+                        // ДОК-ПАНЕЛЬ ОБОЛОЧКИ (дефект D2, отчёт 13.11.2026): 31 элемент
+                        // `…/KazistovVvDockCanvas/Dock_Настройки/…` «исчез», потому что канвас
+                        // доков выключен, пока ни одна панель не запрошена, а раскладка из
+                        // PlayerPrefs держит панель свёрнутой. Такой путь сначала ОТКРЫВАЕТСЯ
+                        // штатной командой (`view.panel.settings` и т.п.) — и только если панель
+                        // так и не открылась, элемент получает честную причину «панель не
+                        // открыта», а НЕ «исчез».
+                        string dockId = DockIdOfPath(KazistovVvUIManager.Instance, c.Path);
+                        if (dockId.Length > 0)
+                        {
+                            yield return OpenDockPanelStep(c, dockId);
+                            found = Locate(c);
+                            if (!found)
+                            {
+                                RecordDockNotOpen(c, dockId);
+                                queue.Done(key);
+                                continue;
+                            }
+                        }
+                        else
+                        {
+                            // ОТКЛАДЫВАЕМ: путь может снова появиться к концу прогона (AR-интерфейс
+                            // перестраивается). Второй проход восстановит экран ЕЩЁ РАЗ и либо
+                            // проверит элемент, либо назовёт «панель не открыта» с именем экрана —
+                            // тихий «исчез» для элементов панели больше невозможен.
+                            Defer(c, false, "");
+                            queue.Done(key);
+                            continue;
+                        }
                     }
                 }
 
@@ -3405,6 +3565,13 @@ namespace KazistovVvDiagnostics
                 TimedOut = timedOut
             };
             element.ExemptReason = ExemptReasonFor(c, sectionBefore);
+            // НЕНАЖАТЫЙ ЭЛЕМЕНТ ОБЯЗАН БЫТЬ С ПРИЧИНОЙ (дефект D3, 13.11.2026). `mayPress == false`
+            // — решение САМОГО прогона: он сознательно не трогает такой элемент (системный шлюз,
+            // системный экран, выход). Без причины этот элемент считался «без эффекта», то есть
+            // прогон обвинял бы кнопку, которую сам отказался нажимать (чистое состояние:
+            // `GateButton«РАЗРЕШИТЬ КАМЕРУ»`).
+            if (!mayPress && string.IsNullOrEmpty(element.ExemptReason))
+                element.ExemptReason = KvUiSweepExemptions.UnpressedReasonFor(c.Path, c.ProjectOwned);
 
             if (timedOut)
             {
@@ -3431,8 +3598,11 @@ namespace KazistovVvDiagnostics
         private static string ExemptReasonFor(Candidate c, int sectionBefore)
         {
             // СИСТЕМНЫЙ ШЛЮЗ — САМОЕ ПЕРВОЕ И САМОЕ ТОЧНОЕ объяснение: это не «недоступен» и не
-            // «нужно железо», а «это шлюз, а не интерфейс оператора».
-            if (c.SystemGate) return KvUiSweepExemptions.GateReason;
+            // «нужно железо», а «это шлюз, а не интерфейс оператора». ФЛАГ ПРОВЕРЯЕТСЯ ВМЕСТЕ С
+            // ПУТЁМ (дефект D3): решение «не нажимать» принимается по пути, поэтому и причина
+            // обязана считаться по пути — иначе кандидат, собранный без флага, оставался бы
+            // без объяснения и попадал в «без эффекта».
+            if (c.SystemGate || KvUiSweepExemptions.IsGatePath(c.Path)) return KvUiSweepExemptions.GateReason;
 
             // СОСТОЯНИЕ AR: «ставить некуда» — с ФАКТИЧЕСКИМ числом плоскостей.
             string plane = KvUiSweepExemptions.PlaneReasonFor(c.Path, CountArPlanes());
@@ -3832,6 +4002,23 @@ namespace KazistovVvDiagnostics
                         notOpen++;
                         RecordPanelNotOpen(rc);
                         continue;
+                    }
+
+                    // ДОК-ПАНЕЛЬ ОБОЛОЧКИ (дефект D2): последняя попытка — ОТКРЫТЬ панель
+                    // штатной командой и найти строку ещё раз. Если не вышло — честная
+                    // «панель не открыта» с деталью, а НЕ «исчез» (31 «исчез» из отчёта 13.11).
+                    string dockId = DockIdOfPath(KazistovVvUIManager.Instance, rc.Path);
+                    if (dockId.Length > 0)
+                    {
+                        yield return OpenDockPanelStep(rc, dockId);
+                        located = Locate(rc) && PanelLevelMatches(rc);
+                        if (!located)
+                        {
+                            notOpen++;
+                            RecordDockNotOpen(rc, dockId);
+                            Line("[KvUiSweep] ВТОРОЙ ПРОХОД: " + rc.Path + " — панель не открыта");
+                            continue;
+                        }
                     }
 
                     notFound++;
@@ -4427,9 +4614,10 @@ namespace KazistovVvDiagnostics
                     KvDockPanel dock = ui.DockById(ids[i]);
                     if (dock == null || dock.Root == null) continue;
                     if (gate != dock.Root && !gate.IsChildOf(dock.Root)) continue;
-                    ui.ShowPanel(ids[i]);            // штатный путь: тот же, что у кнопки панели
+                    // ШТАТНЫЙ ПУТЬ: команда оператора, а при необходимости и сам менеджер —
+                    // он же сбрасывает уехавшую раскладку (см. `OpenDockPanel`).
+                    c.PreparedBy = OpenDockPanel(ui, ids[i]);
                     c.Container = ids[i];
-                    c.PreparedBy = "ShowPanel(" + ids[i] + ")";
 
                     // ПРОВЕРКА ФАКТА, А НЕ НАДЕЖДЫ. На планшете `ShowPanel(tree)` вернул
                     // управление, а панель осталась неактивной: кнопки её шапки нажимались в
@@ -4502,6 +4690,168 @@ namespace KazistovVvDiagnostics
             return PrepResult.HiddenPanel;
         }
 
+        // ============================================== ДОК-ПАНЕЛИ: ОТКРЫТИЕ И ПРИЧИНА (D2)
+
+        /// <summary>
+        /// ОТКРЫТЬ ДОК-ПАНЕЛЬ ШТАТНЫМ ПУТЁМ — НЕЗАВИСИМО ОТ СОХРАНЁННОГО СОСТОЯНИЯ РАСКЛАДКИ.
+        ///
+        /// ПОРЯДОК ТРИ ШАГА И ВАЖЕН:
+        ///   1) КОМАНДА ОПЕРАТОРА (`view.panel.settings` и т.п.) — ровно то, что нажимает человек;
+        ///   2) ЕСЛИ ПАНЕЛИ НЕТ НА ЭКРАНЕ — `ShowPanel` самого менеджера: он включает флаг,
+        ///      поднимает канвас панелей и, если раскладка «уехала» (PlayerPrefs с другого
+        ///      разрешения/ориентации), возвращает сторону, толщину и свёрнутость по умолчанию;
+        ///   3) ЕСЛИ ПАНЕЛЬ СВЁРНУТА — раскрыть: свёрнутость живёт в том же PlayerPrefs и
+        ///      переживает любые «восстановления экрана» (дефект D2, отчёт 13.11.2026).
+        /// Возвращает, ЧЕМ открыли — для строки `открыто:` в отчёте.
+        /// </summary>
+        private static string OpenDockPanel(KazistovVvUIManager ui, string dockId)
+        {
+            if (ui == null || string.IsNullOrEmpty(dockId)) return "";
+            KvDockPanel panel = ui.DockById(dockId);
+            if (panel == null) return "";
+
+            string how = "";
+            string command = KvUiSweepDockNav.OpenCommandFor(dockId);
+            if (!ui.IsPanelEffectivelyVisible(dockId))
+            {
+                // КОМАНДА ТОЛЬКО КОГДА ПАНЕЛИ НА ЭКРАНЕ НЕТ: `view.panel.settings` — это
+                // TogglePanel, и на УЖЕ видимой панели она бы её ЗАКРЫЛА (а следующая за ней
+                // проверка снова открыла — лишнее уничтожение и пересборка содержимого).
+                if (command.Length > 0)
+                {
+                    try
+                    {
+                        if (KvCommands.Invoke(command)) how = "команда " + command;
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogWarning("[KvUiSweep] команда открытия панели «" + command +
+                                         "» упала: " + e.GetType().Name + ": " + e.Message);
+                    }
+                }
+
+                if (!ui.IsPanelEffectivelyVisible(dockId))
+                {
+                    ui.ShowPanel(dockId);         // штатный путь менеджера + сброс раскладки
+                    how = how.Length > 0
+                        ? how + " + ShowPanel(" + dockId + ")"
+                        : "ShowPanel(" + dockId + ")";
+                }
+            }
+
+            if (panel.Collapsed)
+            {
+                panel.SetCollapsed(false);        // раскладка из PlayerPrefs: свёрнута — раскрыть
+                how = how.Length > 0 ? how + " + раскрыта свёрнутая" : "раскрыта свёрнутая";
+            }
+            return how.Length > 0 ? how : "панель уже открыта";
+        }
+
+        /// <summary>
+        /// ОТКРЫТЬ ПАНЕЛЬ И ДОКРУТИТЬ СПИСОК К СТРОКЕ (корутина). Кадр на пересборку обязателен:
+        /// команда включает канвас и перекладывает панель, а индекс путей пересобирается следующим
+        /// шагом — без паузы поиск работал бы на старом индексе.
+        /// </summary>
+        private IEnumerator OpenDockPanelStep(Candidate c, string dockId)
+        {
+            KazistovVvUIManager ui = KazistovVvUIManager.Instance;
+            string how = OpenDockPanel(ui, dockId);
+            if (!string.IsNullOrEmpty(how)) c.PreparedBy = how;
+            yield return null;
+            yield return null;
+            ScrollDockTo(c.Target);
+        }
+
+        /// <summary>
+        /// ДОКРУТИТЬ СПИСОК ПАНЕЛИ К СТРОКЕ ЭЛЕМЕНТА. Нужен, чтобы строка была не только в
+        /// иерархии, но и В ВИДИМОЙ ЧАСТИ списка (иначе у виртуализированных списков её просто
+        /// ещё не построили, а у обычного — оператор не увидит, что её проверяли). Лучший случай:
+        /// прокрутки нет или высота контента не больше вьюпорта — тогда нечего и двигать.
+        /// </summary>
+        private static void ScrollDockTo(Selectable target)
+        {
+            if (target == null) return;
+            try
+            {
+                ScrollRect scroll = target.GetComponentInParent<ScrollRect>();
+                if (scroll == null || scroll.content == null) return;
+                RectTransform item = target.transform as RectTransform;
+                RectTransform viewport = scroll.viewport != null
+                    ? scroll.viewport
+                    : scroll.transform as RectTransform;
+                if (item == null || viewport == null) return;
+
+                Canvas.ForceUpdateCanvases();
+                float viewHeight = viewport.rect.height;
+                float contentHeight = scroll.content.rect.height;
+                if (viewHeight <= 1f || contentHeight <= viewHeight) return;
+
+                float top = -item.anchoredPosition.y;   // расстояние строки от верха контента
+                float center = top + item.rect.height * 0.5f;
+                float normalized = Mathf.Clamp01(
+                    (center - viewHeight * 0.5f) / (contentHeight - viewHeight));
+                scroll.verticalNormalizedPosition = 1f - normalized;
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[KvUiSweep] прокрутка списка к строке не удалась: " +
+                                 e.GetType().Name + ": " + e.Message);
+            }
+        }
+
+        /// <summary>id док-панели, которой принадлежит путь элемента (`""` — путь не дока).</summary>
+        private static string DockIdOfPath(KazistovVvUIManager ui, string path)
+        {
+            if (ui == null || !KvUiSweepDockNav.IsDockPath(path)) return "";
+            for (int i = 0; i < KvUiSweepDockNav.Ids.Length; i++)
+            {
+                string id = KvUiSweepDockNav.Ids[i];
+                KvDockPanel panel = ui.DockById(id);
+                if (panel == null || panel.Root == null) continue;
+                if (path.IndexOf("/" + panel.Root.name + "/", StringComparison.Ordinal) >= 0)
+                    return id;
+            }
+            return "";
+        }
+
+        /// <summary>
+        /// ПОЧЕМУ ПАНЕЛЬ НЕ ОТКРЫЛАСЬ — ДЕТАЛЬ ДЛЯ ПРИЧИНЫ. Названа ФАКТИЧЕСКИМ состоянием
+        /// (флаг, канвас, свёрнутость, размер), а не догадкой: по этой строке видно, что именно
+        /// мешает проверке.
+        /// </summary>
+        private static string DockNotOpenDetail(KazistovVvUIManager ui, string dockId)
+        {
+            if (ui == null) return "менеджера интерфейса нет";
+            KvDockPanel panel = ui.DockById(dockId);
+            if (panel == null) return "панели нет в оболочке";
+            if (!ui.IsPanelVisible(dockId))
+                return "панель не показана: канвас доков выключен, пока ни одна панель не запрошена";
+            if (panel.Collapsed) return "панель свёрнута (раскладка из PlayerPrefs)";
+            if (!ui.IsPanelEffectivelyVisible(dockId))
+                return "панель не попадает в экран: " + ui.DescribeDock(panel);
+            return "панель открыта, но строка не найдена: " + ui.DescribeDock(panel);
+        }
+
+        /// <summary>
+        /// ЗАПИСАТЬ ЭЛЕМЕНТ С ЧЕСТНОЙ ПРИЧИНОЙ «панель не открыта». Это ИСКЛЮЧЕНИЕ, а не «исчез»
+        /// и не «без эффекта»: панель названа, деталь — по факту, а счётчик «исчезло» не растёт.
+        /// </summary>
+        private void RecordDockNotOpen(Candidate c, string dockId)
+        {
+            string detail = DockNotOpenDetail(KazistovVvUIManager.Instance, dockId);
+            string reason = KvUiSweepDockNav.NotOpenReasonFor(dockId, detail);
+            Line("[KvUiSweep] ПАНЕЛЬ ДОКА НЕ ОТКРЫЛАСЬ: " + c.Path + " — " + reason);
+            Record(new KvUiSweepElement
+            {
+                Path = c.Path,
+                Kind = c.Kind,
+                Ok = false,
+                Effect = "не нажимали — панель не открыта",
+                ExemptReason = reason,
+                Method = "пропущен"
+            });
+        }
+
         /// <summary>
         /// ВОЗВРАТ СОСТОЯНИЯ после элемента: закрыть открытую панель, выключить принудительно
         /// включённый предок, ВЕРНУТЬ СОСТОЯНИЕ DOCK-ПАНЕЛЕЙ, сбросить выделение uGUI и отменить
@@ -4570,6 +4920,15 @@ namespace KazistovVvDiagnostics
                     KvXrSettings.SetVignetteEnabled(before.Comfort >= 1000);
                     KvXrSettings.SetVignetteStrength(KvUiSweepSettings.ComfortStrength(before.Comfort));
                 }
+
+                // ВИДИМОСТЬ ОБОЛОЧКИ ТОЖЕ НАЗАД (дефект D4, 13.11.2026). Команда `ui.toggle`
+                // («Показать/скрыть интерфейс») гасит оболочку целиком, и раньше `Restore`
+                // возвращал панели дока, режим, язык и `KvSettings`, но НЕ `uiVisible`: канвас
+                // оставался выключенным, и 12 элементов `Cmd_*` не проверялись вторым проходом —
+                // их путей в мире без интерфейса просто не существовало.
+                KazistovVvUIManager shell = KazistovVvUIManager.Instance;
+                if (shell != null && KvUiSweepUiVisible.NeedsRestore(before.UiVisible, shell.uiVisible))
+                    KazistovVvUIManager.SetUiVisible(KvUiSweepUiVisible.Target(before.UiVisible));
 
                 // ФЛАГИ ОБОЛОЧКИ — ТОЖЕ НАЗАД: переключатель «Фонарик» пишет в `KvSettings` и
                 // сохраняется в PlayerPrefs, поэтому без возврата следующий элемент проверялся бы
@@ -5475,6 +5834,10 @@ namespace KazistovVvDiagnostics
                 if (ui.IsPanelVisible("properties")) s.VisiblePanels++;
                 if (ui.IsPanelVisible("settings")) s.VisiblePanels++;
                 if (ui.IsPanelVisible("hotkeys")) s.VisiblePanels++;
+                // ВИДИМОСТЬ ОБОЛОЧКИ (дефект D4): команда `ui.toggle` прячет интерфейс целиком.
+                // Без этого признака снимок не видел ни самого нажатия, ни того, что следующие
+                // элементы проверяются в мире, где оболочки нет.
+                s.UiVisible = ui.uiVisible ? 1 : 0;
                 s.UiObjects = ui.UiObjectCount;
                 s.TreeRows = ui.TreeRowCount;
                 s.PropertyRows = ui.PropertyRowCount;

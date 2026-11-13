@@ -694,7 +694,7 @@
     },
     {
       "key": "cmd.video.toggle.desc",
-      "text": "Record the operator view into MP4 (Videos folder)"
+      "text": "Writes PNG frames (frame_000001.png …) and a recording.json manifest into the recording folder; this build makes no video file"
     },
     {
       "key": "cmd.view.singularity",
@@ -946,7 +946,7 @@
     },
     {
       "key": "cmd.pose.goto.desc",
-      "text": "Smoothly move the robot to the selected pose (Poses panel)"
+      "text": "Opens the «Poses» tab of the features panel; the robot stays where it is"
     },
     {
       "key": "cmd.pose.save",

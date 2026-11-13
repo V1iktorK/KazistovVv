@@ -432,6 +432,15 @@ namespace KazistovVvFeatures
 
         public void SetPreset(int value, bool smooth = true)
         {
+            // ПУСТОЙ СПИСК — СОСТОЯНИЕ, А НЕ ИСКЛЮЧЕНИЕ (дефект B, 13.11.2026). Раньше
+            // `Mathf.Clamp(value, 0, -1)` возвращал −1 и `presets[index]` падал, а до этого
+            // `(Index + 1) % Presets.Count` в обработчике `light.next` бросал DivideByZeroException,
+            // который `KvCommands.Invoke` НЕ перехватывает: оператор видел падение без объяснения.
+            if (presets.Count == 0)
+            {
+                Report("пресетов освещения нет — список пуст, применять нечего");
+                return;
+            }
             index = Mathf.Clamp(value, 0, presets.Count - 1);
             Apply(smooth ? transitionDuration : 0f, smooth ? 0.05f : 0f);
             Report("пресет освещения: " + CurrentTitle + " — " + presets[index].note);
@@ -439,6 +448,13 @@ namespace KazistovVvFeatures
 
         public void Next()
         {
+            // Деление на ноль при пустом списке (см. SetPreset): причина уходит в журнал и в
+            // статус, исключения нет.
+            if (presets.Count == 0)
+            {
+                Report("смена освещения: пресетов нет — список пуст, переключать нечего");
+                return;
+            }
             SetPreset((index + 1) % presets.Count);
         }
 

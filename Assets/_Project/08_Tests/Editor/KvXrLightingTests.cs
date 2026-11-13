@@ -152,6 +152,38 @@ namespace KazistovVvTests
             }
             return stats;
         }
+
+        // ====================================== ПУСТОЙ СПИСОК ПРЕСЕТОВ СВЕТА (команда light.next)
+
+        /// <summary>
+        /// ПУСТОЙ СПИСОК ПРЕСЕТОВ — ЧЕСТНАЯ ПРИЧИНА В ЖУРНАЛЕ, А НЕ ДЕЛЕНИЕ НА НОЛЬ.
+        ///
+        /// ОТКУДА (дефект B, 13.11.2026). Обработчик `light.next` считал следующий индекс как
+        /// `(Index + 1) % Presets.Count`: при пустом списке это `DivideByZeroException`, который
+        /// `KvCommands.Invoke` НЕ перехватывает — команда падает исключением, оператор не видит
+        /// ни результата, ни объяснения. Пустой список — это СОСТОЯНИЕ, и оно обязано быть
+        /// названо (журнал/статус), а не исключением.
+        /// </summary>
+        [Test]
+        public void LightingNext_WithEmptyPresetList_ReportsReasonInsteadOfDividingByZero()
+        {
+            var studio = new KazistovVvFeatures.KvLightingStudio();
+            studio.Presets.Clear();
+
+            string reported = null;
+            studio.Message += delegate (string text) { reported = text; };
+
+            Assert.DoesNotThrow(delegate { studio.Next(); },
+                "light.next при пустом списке пресетов не должен бросать DivideByZeroException");
+            Assert.DoesNotThrow(delegate { studio.SetPreset(0); },
+                "SetPreset при пустом списке тоже обязан обойтись без исключения");
+
+            Assert.IsNotNull(reported, "пустой список — честная причина, и она обязана попасть в журнал");
+            StringAssert.Contains("пресет", reported.ToLowerInvariant(),
+                "причина обязана называть пустой список пресетов: " + reported);
+            Assert.AreEqual("пресетов нет", studio.Status(),
+                "статус обязан честно говорить, что переключать нечего");
+        }
     }
 }
 
