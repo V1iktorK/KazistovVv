@@ -255,6 +255,44 @@
 //       (требование владельца 12.11.2026): подпись, действие и обработчик были, а строки в
 //       `StartContentLabels` не было — пункт в шлеме не существовал.
 //
+//  ДОРАБОТКА ПО СЕДЬМОМУ ПРОГОНУ НА ПЛАНШЕТЕ 13.11.2026 (чистое состояние, 504 элемента;
+//  правки A–C заказа владельца):
+//   45) ВКЛАДКА ПАНЕЛИ НАСТРОЕК ВОЗВРАЩАЕТСЯ ПЕРЕД НАЖАТИЕМ СТРОКИ (дефект A). 72 строки
+//       `…/Dock_Настройки/Body/Scroll/Content/Switch_*` получили «панель открыта, но строка
+//       не найдена» при ФАКТИЧЕСКИ ОТКРЫТОЙ панели («сторона Bottom · толщина 224 · включена
+//       да · свёрнута нет · размер 1253×224»). Причина НЕ в прокрутке и не в кавычках: панель
+//       пересобирает содержимое под АКТИВНУЮ вкладку (`KvSettingsView.SetTab` → `Rebuild`),
+//       обход же собрал строки на другой вкладке (до них он дожал `Seg5«Справка»`) и перед
+//       нажатием её не возвращал. Теперь при СБОРЕ запоминается вкладка строки
+//       (`Candidate.SettingsTab`, `KvUiSweepDockNav.SettingsTabFor`), а перед нажатием она
+//       возвращается штатным путём (`KvSettingsView.SetTab`) — и только когда текущая вкладка
+//       ДРУГАЯ (`NeedsSettingsTabRestore`), потому что лишняя пересборка уничтожает только что
+//       найденную строку. После вкладки список докручивается к строке (`ScrollDockTo`);
+//   46) «НЕТ ИЗМЕНЕНИЙ» БОЛЬШЕ НЕ ПИШЕТСЯ ПРО НЕДОСТУПНУЮ КНОПКУ (дефект B1): 13 строк
+//       `Cmd_robot.model.*` (модели без геометрии), `Cmd_robot.playpause`, `Cmd_robot.stop`,
+//       `Cmd_edit.undo`, `Cmd_edit.redo` имели пустой эффект и читались как «кнопка не
+//       работает», хотя оператор их тоже не может нажать. Причина исключения осталась та же
+//       (`interactable=false`), а строка эффекта теперь называет причину —
+//       `KvUiSweepExemptions.NotPressedEffectFor`;
+//   47) UNDO/REDO ПРИ ПУСТОМ СТЕКЕ — СВОЯ причина (дефект B2): у этих двух команд `Enabled`
+//       определяется ТОЛЬКО заполненностью стека (`FeatureHub`: `IsEnabled = CanUndo/CanRedo`),
+//       поэтому «недоступна» заменяется на «нечего отменять/повторять: стек пуст» —
+//       `KvUiSweepExemptions.EmptyStackReasonFor`;
+//   48) ДЕРЕВО ВИДНО СНИМКУ (дефект B3): 7 строк `Dock_Дерево моделей/…/Row_*/Eye` и `Row_*`
+//       получали «нет изменений». `Eye` переключает `Renderer.enabled` объекта сцены — признака
+//       в снимке не было вовсе (добавлен `TreeHidden`); выбор строки живёт в ДВУХ трекерах
+//       (`KvTreeView.Selected` и `KazistovVvUIManager.SelectedNode`), снимок читал только второй
+//       (добавлен `TreeSelection` — отпечаток выбора СОБСТВЕННОГО трекера дерева). Причина
+//       «строка уже выбрана» считается ПО СОСТОЯНИЮ ДО НАЖАТИЯ и по ОБОИМ трекерам: после
+//       нажатия выбрана любая строка, и правило по состоянию после вычёркивало бы удачные
+//       нажатия. Если у узла нечего скрывать — честная причина «нет рендереров»
+//       (`NothingToHideReasonFor`), а если клик не дошёл вовсе — эффект называет это прямо
+//       (`TreeRowNoChangeEffect`), НЕ «нет изменений»;
+//   49) БЮДЖЕТ ПРОГОНА 600 → 1800 с (правка C): инвентарь вырос до 504 элементов (лимит сбора
+//       снят, пункт 40), а обход «по одному элементу с восстановлением экрана» укладывался в
+//       600 с только до 313-го. Бюджет ОДНОГО элемента (2 с) не трогался: граница у прогона
+//       одна — время, и её конец по-прежнему печатается строкой «ПРЕДЕЛ: …».
+//
 //  ЧЕСТНАЯ ГРАНИЦА. Таймаут на элемент измеряется по ФАКТИЧЕСКОМУ времени: Unity не даёт прервать
 //  вызов, который уже выполняется в главном потоке, поэтому «завис навсегда» виден как обрыв файла
 //  отчёта сразу после строки `press=` (виновник назван), а «завис на 5 секунд» — как `ok=0 timeout`
@@ -988,6 +1026,27 @@ namespace KazistovVvDiagnostics
         /// <summary>Отпечаток выбранного узла дерева (нажатие строки дерева меняет выбор).</summary>
         public int SelectedNodeHash;
 
+        // ---------------------------------------------------------------- дерево: СОБСТВЕННЫЙ трекер и видимость
+        //
+        // ЗАЧЕМ ВТОРОЙ ТРЕКЕР И ГЛАЗИК (дефект B3, отчёт 13.11.2026: 7 строк `Row_*` и
+        // `Row_*/Eye` с «нет изменений»). Выбор строки живёт в ДВУХ местах: `KvTreeView.Selected`
+        // (его меняет сама строка) и `KazistovVvUIManager.SelectedNode` (его меняет обработчик
+        // выбора). Снимок читал только второй, то есть изменение первого было ему не видно.
+        // А «глазик» строки переключает `Renderer.enabled` объекта сцены — признака для него
+        // в снимке не было ВООБСЕ: рабочий глазик выглядел мёртвым.
+
+        /// <summary>
+        /// ОТПЕЧАТОК ВЫБОРА СОБСТВЕННОГО ТРЕКЕРА ДЕРЕВА (`KvTreeView.Selected`, −1 — дерева нет).
+        /// Читается вместе с `SelectedNodeHash`: нажатие строки обязано быть видно хотя бы одному
+        /// из двух трекеров, иначе рабочая строка попадает в «нет изменений».
+        /// </summary>
+        public int TreeSelection;
+        /// <summary>
+        /// СКОЛЬКО ОБЪЕКТОВ ДЕРЕВА СКРЫТО «ГЛАЗИКОМ» (есть объект и его рендереры выключены).
+        /// Меняется только `KvTreeView.SetObjectVisible` — то есть ровно то, что делает кнопка Eye.
+        /// </summary>
+        public int TreeHidden;
+
         // ---------------------------------------------------------------- статус и меню дока
         //
         // ЗАЧЕМ (итерация 6 на планшете): большинство оставшихся «нет изменений» — кнопки, которые
@@ -1644,6 +1703,11 @@ namespace KazistovVvDiagnostics
             Append(sb, "объектов интерфейса", before.UiObjectsAll, after.UiObjectsAll);
             Append(sb, "активных объектов интерфейса", before.UiObjectsActive, after.UiObjectsActive);
             Append(sb, "выбранный узел дерева", before.SelectedNodeHash, after.SelectedNodeHash);
+            // ДЕРЕВО ПО СОБСТВЕННОМУ ТРЕКЕРУ И ЕГО «ГЛАЗИК» (дефект B3): без этих двух строк
+            // нажатие строки, изменившей только `KvTreeView.Selected`, и переключение видимости
+            // объекта (`Renderer.enabled`) читались бы как «нет изменений».
+            Append(sb, "выделение в дереве", before.TreeSelection, after.TreeSelection);
+            Append(sb, "скрытых объектов дерева", before.TreeHidden, after.TreeHidden);
 
             // СТАТУС И МЕНЮ ДОКА: кнопки, которые «только сообщают», пишут именно сюда.
             Append(sb, "длина статуса", before.StatusLength, after.StatusLength);
@@ -2136,6 +2200,145 @@ namespace KazistovVvDiagnostics
 
         /// <summary>Причина для «элемент недоступен» — отдельная формулировка, она про состояние, а не про железо.</summary>
         public const string DisabledReason = "элемент недоступен (interactable=false)";
+
+        // ------------------------------------------------ честная СТРОКА ЭФФЕКТА вместо «нет изменений»
+        //
+        // ЗАЧЕМ ОТДЕЛЬНО ОТ ПРИЧИНЫ (дефект B1, отчёт 13.11.2026). У недоступной кнопки причина
+        // исключения (`exempt=`) уже была, а `effect=` был ПУСТ — и в отчёте строка печаталась
+        // как `effect=нет изменений`, то есть «нажал и ничего не изменилось». Для кнопки, которую
+        // оператор физически не может нажать, это ложное обвинение: её работа — быть выключенной.
+        // Здесь — текст, который ставится ВМЕСТО «нет изменений» и называет причину.
+
+        /// <summary>Эффект для элемента, который прогон не нажал, потому что он недоступен.</summary>
+        public const string UnavailableEffect =
+            "не нажимали — недоступен оператору (interactable=false/IsEnabled=false)";
+
+        /// <summary>Эффект для `edit.undo` при пустом стеке отмены.</summary>
+        public const string NothingToUndoEffect = "не нажимали — нечего отменять: стек отмены пуст";
+
+        /// <summary>Эффект для `edit.redo` при пустом стеке повтора.</summary>
+        public const string NothingToRedoEffect = "не нажимали — нечего повторять: стек повтора пуст";
+
+        /// <summary>
+        /// ТЕКСТ ЭФФЕКТА ДЛЯ НЕНАЖАТОГО/НЕДОСТУПНОГО ЭЛЕМЕНТА по его причине исключения
+        /// (`""` — правило не про этот случай, эффект остаётся прежним).
+        /// </summary>
+        public static string NotPressedEffectFor(string reason)
+        {
+            if (string.IsNullOrEmpty(reason)) return "";
+            if (reason == DisabledReason) return UnavailableEffect;
+            if (reason == NothingToUndoReason) return NothingToUndoEffect;
+            if (reason == NothingToRedoReason) return NothingToRedoEffect;
+            return "";
+        }
+
+        // ------------------------------------------------ undo/redo при пустом стеке (дефект B2)
+
+        /// <summary>Причина для `edit.undo`, когда отменять нечего.</summary>
+        public const string NothingToUndoReason =
+            "нечего отменять: стек отмены пуст — кнопка недоступна оператору";
+
+        /// <summary>Причина для `edit.redo`, когда повторять нечего.</summary>
+        public const string NothingToRedoReason =
+            "нечего повторять: стек повтора пуст — кнопка недоступна оператору";
+
+        /// <summary>
+        /// ID КОМАНДЫ ИЗ ПУТИ ТУЛБАРА (`…/Groups/Cmd_edit.undo` → `edit.undo`, `""` — не команда).
+        /// Номер дубликата (`Cmd_edit.undo#2`) и подпись (`«…»`) отрезаются: они часть ключа
+        /// поиска, но не часть имени команды.
+        /// </summary>
+        public static string CommandIdOfPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return "";
+            string text = path;
+            int quote = text.IndexOf('«');
+            if (quote >= 0) text = text.Substring(0, quote);
+            int slash = text.LastIndexOf('/');
+            string segment = slash >= 0 ? text.Substring(slash + 1) : text;
+            if (!segment.StartsWith("Cmd_", StringComparison.Ordinal)) return "";
+            int hash = segment.IndexOf('#');
+            if (hash >= 0) segment = segment.Substring(0, hash);
+            return segment.Length > "Cmd_".Length ? segment.Substring("Cmd_".Length) : "";
+        }
+
+        /// <summary>
+        /// ПРИЧИНА «НЕЧЕГО ОТМЕНЯТЬ/ПОВТОРИТЬ» — ТОЛЬКО для `edit.undo`/`edit.redo` и ТОЛЬКО когда
+        /// команда зарегистрирована и выключена. У этих двух команд `Enabled` определяется
+        /// ИСКЛЮЧИТЕЛЬНО заполненностью стека (`FeatureHub`: `IsEnabled = CanUndo` / `CanRedo`),
+        /// поэтому выключение и есть пустой стек — это факт реестра, а не догадка. Для любых
+        /// других команд (даже выключенных) возвращается `""`: их причина — общая
+        /// `DisabledReason`.
+        /// </summary>
+        public static string EmptyStackReasonFor(string path, bool registered, bool enabled)
+        {
+            if (!registered || enabled) return "";
+            string id = CommandIdOfPath(path);
+            if (id == "edit.undo") return NothingToUndoReason;
+            if (id == "edit.redo") return NothingToRedoReason;
+            return "";
+        }
+
+        // ------------------------------------------------ дерево: выбор строки и «глазик» (дефект B3)
+
+        /// <summary>
+        /// ЭФФЕКТ ДЛЯ СТРОКИ ДЕРЕВА, ДО КОТОРОЙ КЛИК НЕ ДОШЁЛ: нажатие не изменило ни выбор узла,
+        /// ни свойства, ни выделение. Это НЕ «нет изменений» (как будто кнопка сработала вхолостую),
+        /// а конкретное утверждение о том, что событие до обработчика строки не дошло.
+        /// </summary>
+        public const string TreeRowNoChangeEffect =
+            "нажатие строки дерева не изменило ни выбор узла, ни свойства — клик не дошёл до строки";
+
+        /// <summary>
+        /// ЭФФЕКТ ДЛЯ «ГЛАЗИКА», КОТОРЫЙ НЕ ПЕРЕКЛЮЧИЛ ВИДИМОСТЬ: у узла есть рендереры, а
+        /// нажатие их не изменило — значит событие до обработчика не дошло либо объект пережил
+        /// пересборку. Называется конкретика, а не «нет изменений».
+        /// </summary>
+        public const string EyeNoChangeEffect =
+            "глазик не изменил видимость объекта — рендереры не переключились";
+
+        /// <summary>
+        /// ПРИЧИНА «СТРОКА УЖЕ ВЫБРАНА» ПО СОСТОЯНИЮ ДО НАЖАТИЯ.
+        ///
+        /// ЗАЧЕМ ДО, А НЕ ПОСЛЕ (и почему по ОБОИМ трекерам). `KvTreeView` держит выбор в двух
+        /// местах — `KvTreeView.Selected` и `KazistovVvUIManager.SelectedNode`. Сверка ПОСЛЕ
+        /// нажатия вычёркивала бы УДАЧНОЕ нажатие: после него выбрана любая строка, и рабочая
+        /// строка получала бы причину «уже выбрана» вместе с реальным эффектом. Состояние ДО
+        /// нажатия — единственный честный вопрос: «и так уже выбрана?».
+        /// </summary>
+        public static string TreeRowAlreadySelectedReasonFor(bool selectedBefore)
+        {
+            return selectedBefore ? TreeRowAlreadySelectedReason : "";
+        }
+
+        /// <summary>
+        /// ПРИЧИНА «НЕЧЕГО СКРЫВАТЬ» ДЛЯ «ГЛАЗИКА» СТРОКИ ДЕРЕВА. `KvTreeView.SetObjectVisible`
+        /// выключает ТОЛЬКО `Renderer` объекта узла: если у узла нет объекта в сцене или у объекта
+        /// нет рендереров, нажатие физически ничего не меняет — и это обязано быть сказано
+        /// причиной, а не выдано за «кнопка не работает». Правило узкое: только путь, у которого
+        /// последний сегмент — `Eye`.
+        /// </summary>
+        public static string NothingToHideReasonFor(string path, bool hasRenderers)
+        {
+            if (hasRenderers) return "";
+            if (!IsEyePath(path)) return "";
+            return NothingToHideReason;
+        }
+
+        /// <summary>Причина «глазику нечего переключать».</summary>
+        public const string NothingToHideReason =
+            "у узла нет объекта с рендерерами — скрывать нечего";
+
+        /// <summary>Путь кончается кнопкой видимости строки дерева (`…/Row_TCP/Eye`).</summary>
+        public static bool IsEyePath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            string text = path;
+            int quote = text.IndexOf('«');
+            if (quote >= 0) text = text.Substring(0, quote);
+            int slash = text.LastIndexOf('/');
+            string segment = slash >= 0 ? text.Substring(slash + 1) : text;
+            return string.Equals(segment, "Eye", StringComparison.OrdinalIgnoreCase);
+        }
 
         /// <summary>
         /// ПРИЧИНА ДЛЯ ЭЛЕМЕНТОВ СИСТЕМНОГО ШЛЮЗА (предполётной заглушки).
@@ -2780,6 +2983,36 @@ namespace KazistovVvDiagnostics
         {
             return KvUiSweepPanelNav.NotOpenReason("док-панель «" + dockId + "»", detail);
         }
+
+        /// <summary>
+        /// ВКЛАДКА ПАНЕЛИ НАСТРОЕК, НА КОТОРОЙ ЛЕЖИТ ПУТЬ (`−1` — путь не из настроек или
+        /// вкладка неизвестна).
+        ///
+        /// ЗАЧЕМ ЗАПОМИНАТЬ ПРИ СБОРЕ (дефект A, отчёт 13.11.2026: 72 строки «панель открыта, но
+        /// строка не найдена»). Содержимое панели настроек живёт ТОЛЬКО на активной вкладке:
+        /// `KvSettingsView.SetTab` пересобирает строки, и строки других вкладок физически не
+        /// существуют. Единственное место, где вкладка строки ещё честно известна, — момент
+        /// сбора: элемент лежит в иерархии именно на ней. К моменту нажатия обход мог дожать
+        /// любую вкладку (`Seg0…Seg5`), и без этого правила панель была бы открыта, а строкы — нет.
+        /// </summary>
+        public static int SettingsTabFor(string path, string dockRootName, int currentTab)
+        {
+            if (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(dockRootName) || currentTab < 0)
+                return -1;
+            return path.IndexOf("/" + dockRootName + "/", StringComparison.Ordinal) >= 0
+                ? currentTab
+                : -1;
+        }
+
+        /// <summary>
+        /// НАДО ЛИ ВЕРНУТЬ ПАНЕЛЬ НАСТРОЕК НА ВКЛЯДКУ СТРОКИ ПЕРЕД НАЖАТИЕМ. Правило узкое:
+        /// только когда строка собрана на вкладке (`>= 0`), текущая вкладка тоже известна и они
+        /// РАЗНЫЕ. Лишний вызов пересобрал бы содержимое и уничтожил только что найденную строку.
+        /// </summary>
+        public static bool NeedsSettingsTabRestore(int candidateTab, int currentTab)
+        {
+            return candidateTab >= 0 && currentTab >= 0 && candidateTab != currentTab;
+        }
     }
 
     /// <summary>Имя макета для отчёта: `vr`, `mr`, `ar`, `pc`.</summary>
@@ -2834,12 +3067,14 @@ namespace KazistovVvDiagnostics
 
         /// <summary>
         /// Общий предел прогона: по его истечении прогон завершается с честным отчётом.
-        /// ПОДНЯТ С 240 ДО 600 (пункт 39 шапки): обход «по одному элементу с восстановлением
-        /// экрана» дороже прежнего (каждый элемент панели — показ/возврат панели + кадр
-        /// пересборки), а прогон ОБЯЗАН дойти до конца — оборванный по бюджету обход вернул бы
-        /// молчаливое «не проверено» вместо итога.
+        /// ПОДНЯТ С 600 ДО 1800 (правка C, отчёт планшета 13.11.2026): лимит сбора снят, инвентарь
+        /// AR вырос до 504 элементов, а обход «по одному элементу с восстановлением экрана»
+        /// (каждый элемент дока — показ/возврат панели + кадр пересборки) укладывался в 600 с
+        /// только до 313-го элемента — прогон оборвался и не дал итога. Бюджет ОДНОГО элемента
+        /// (`ElementBudgetSeconds`) не менялся: граница у прогона одна — время, и её конец
+        /// по-прежнему печатается строкой «ПРЕДЕЛ: …».
         /// </summary>
-        public const float TotalBudgetSeconds = 600f;
+        public const float TotalBudgetSeconds = 1800f;
 
         /// <summary>
         /// ПРЕДЕЛ ЧИСЛА ЭЛЕМЕНТОВ СНЯТ (дефект D1, 13.11.2026).
@@ -3487,6 +3722,11 @@ namespace KazistovVvDiagnostics
             KvXrGroupPanel sectionPanel = c.IsPanelIcon ? c.Panel : c.PanelOwner;
             if (sectionPanel != null) sectionBefore = (int)sectionPanel.StartSection;
 
+            // СТРОКА ДЕРЕВА ВЫБРАНА ДО НАЖАТИЯ — тоже читается ДО (дефект B3). Сверять состояние
+            // ПОСЛЕ нельзя: после удачного нажатия выбрана ЛЮБАЯ строка, и правило вычёркивало бы
+            // успешное нажатие. Плюс выбор живёт в двух трекерах — проверяются оба.
+            bool treeRowSelectedBefore = TreeRowAlreadySelected(c);
+
             float t0 = Time.realtimeSinceStartup;
 
             // ОПАСНЫЕ ЭЛЕМЕНТЫ НЕ НАЖИМАЕМ: «Выход из приложения» завершает прогон раньше
@@ -3564,7 +3804,7 @@ namespace KazistovVvDiagnostics
                 Method = string.IsNullOrEmpty(c.PreparedBy) ? method : method + " · открыто: " + c.PreparedBy,
                 TimedOut = timedOut
             };
-            element.ExemptReason = ExemptReasonFor(c, sectionBefore);
+            element.ExemptReason = ExemptReasonFor(c, sectionBefore, treeRowSelectedBefore);
             // НЕНАЖАТЫЙ ЭЛЕМЕНТ ОБЯЗАН БЫТЬ С ПРИЧИНОЙ (дефект D3, 13.11.2026). `mayPress == false`
             // — решение САМОГО прогона: он сознательно не трогает такой элемент (системный шлюз,
             // системный экран, выход). Без причины этот элемент считался «без эффекта», то есть
@@ -3572,6 +3812,19 @@ namespace KazistovVvDiagnostics
             // `GateButton«РАЗРЕШИТЬ КАМЕРУ»`).
             if (!mayPress && string.IsNullOrEmpty(element.ExemptReason))
                 element.ExemptReason = KvUiSweepExemptions.UnpressedReasonFor(c.Path, c.ProjectOwned);
+
+            // ЧЕСТНАЯ СТРОКА ЭФФЕКТА ВМЕСТО «нет изменений» (дефекты B1/B2, отчёт 13.11.2026).
+            // Пустой эффект печатается как `effect=нет изменений` — «нажал и ничего не изменилось».
+            // Для элемента, который прогон НЕ МОГ нажать (кнопка выключена у оператора) и для
+            // строки дерева, до которой клик не дошёл, это ложное обвинение: теперь строка
+            // называет причину. `Ok` НЕ меняется — элемент по-прежнему не «сработал».
+            if (mayPress && string.IsNullOrEmpty(effect) && string.IsNullOrEmpty(element.Effect))
+            {
+                string honest = KvUiSweepExemptions.NotPressedEffectFor(element.ExemptReason);
+                if (honest.Length == 0 && string.IsNullOrEmpty(element.ExemptReason))
+                    honest = TreeNoChangeEffectFor(c);
+                if (honest.Length > 0) element.Effect = honest;
+            }
 
             if (timedOut)
             {
@@ -3595,7 +3848,12 @@ namespace KazistovVvDiagnostics
         /// состояние ДО: после удачного нажатия раздел и так открылся бы на нужном номере, и
         /// правило закрывало бы УСПЕШНОЕ нажатие, вычёркивая его из «сработало».
         /// </param>
-        private static string ExemptReasonFor(Candidate c, int sectionBefore)
+        /// <param name="treeRowSelectedBefore">
+        /// Строка дерева была выбрана ДО нажатия (по ОБОИМ трекерам выбора). Состояние после
+        /// нажатия сверять нельзя: после удачного нажатия выбрана любая строка, и правило
+        /// вычёркивало бы успешное нажатие (дефект B3).
+        /// </param>
+        private static string ExemptReasonFor(Candidate c, int sectionBefore, bool treeRowSelectedBefore)
         {
             // СИСТЕМНЫЙ ШЛЮЗ — САМОЕ ПЕРВОЕ И САМОЕ ТОЧНОЕ объяснение: это не «недоступен» и не
             // «нужно железо», а «это шлюз, а не интерфейс оператора». ФЛАГ ПРОВЕРЯЕТСЯ ВМЕСТЕ С
@@ -3607,6 +3865,13 @@ namespace KazistovVvDiagnostics
             // СОСТОЯНИЕ AR: «ставить некуда» — с ФАКТИЧЕСКИМ числом плоскостей.
             string plane = KvUiSweepExemptions.PlaneReasonFor(c.Path, CountArPlanes());
             if (plane.Length > 0) return plane;
+
+            // UNDO/REDO ПРИ ПУСТОМ СТЕКЕ — ДО общей проверки «недоступна» (дефект B2). У этих двух
+            // команд `Enabled` определяется ТОЛЬКО заполненностью стека, поэтому их выключение и
+            // есть «нечего отменять» — называется своими словами, а не общей «недоступна».
+            string emptyStack = KvUiSweepExemptions.EmptyStackReasonFor(
+                c.Path, CommandExists(c.Path), CommandEnabled(c.Path));
+            if (emptyStack.Length > 0) return emptyStack;
 
             if (!IsInteractable(c)) return KvUiSweepExemptions.DisabledReason;
 
@@ -3630,14 +3895,12 @@ namespace KazistovVvDiagnostics
             string blocker = KvUiSweepExemptions.MenuBlockerReasonFor(c.Path, MenuOpenNow());
             if (blocker.Length > 0) return blocker;
 
-            // 3) Строка дерева, которая УЖЕ выбрана: повторное нажатие выбор не меняет.
-            if (c.Target != null)
-            {
-                KvTreeRow row = c.Target.GetComponent<KvTreeRow>();
-                KazistovVvUIManager ui = KazistovVvUIManager.Instance;
-                if (row != null && row.Node != null && ui != null && ui.SelectedNode == row.Node)
-                    return KvUiSweepExemptions.TreeRowAlreadySelectedReason;
-            }
+            // 3) Строка дерева, которая БЫЛА выбрана ДО нажатия: повторное нажатие выбор не меняет.
+            //    Состояние читается ДО нажатия и по ОБОИМ трекерам (`KvTreeView.Selected` и
+            //    `KazistovVvUIManager.SelectedNode`) — сверка ПОСЛЕ вычёркивала бы удачное
+            //    нажатие: после него выбрана любая строка (дефект B3, отчёт 13.11.2026).
+            string alreadySelected = KvUiSweepExemptions.TreeRowAlreadySelectedReasonFor(treeRowSelectedBefore);
+            if (alreadySelected.Length > 0) return alreadySelected;
 
             // 4) РАЗДЕЛ СТАРТОВОГО МЕНЮ, КОТОРЫЙ УЖЕ ОТКРЫТ ДО НАЖАТИЯ — законное «ничего не
             //    меняет», с проверкой ФАКТИЧЕСКОГО состояния ДО нажатия. Правило работает и для
@@ -3705,6 +3968,20 @@ namespace KazistovVvDiagnostics
                         string leaf = KvUiSweepExemptions.LeafRowReasonFor(hasChildren);
                         if (leaf.Length > 0) return leaf;
                     }
+                }
+
+                // «ГЛАЗИК» СТРОКИ ДЕРЕВА: `KvTreeView.SetObjectVisible` выключает ТОЛЬКО рендереры
+                // объекта узла. Если объекта в сцене нет или рендереров у него нет, нажатие
+                // физически ничего не меняет — это честная причина, а не «нет изменений»
+                // (дефект B3, отчёт 13.11.2026: пять `Row_*/Eye` с пустым эффектом).
+                if (KvUiSweepExemptions.IsEyePath(c.Path))
+                {
+                    KvTreeRow eyeRow = c.Target.GetComponentInParent<KvTreeRow>();
+                    ProjectNode eyeNode = eyeRow != null ? eyeRow.Node : null;
+                    bool hasRenderers = eyeNode != null && eyeNode.WorldTransform != null &&
+                                        eyeNode.WorldTransform.GetComponentsInChildren<Renderer>(true).Length > 0;
+                    string nothingToHide = KvUiSweepExemptions.NothingToHideReasonFor(c.Path, hasRenderers);
+                    if (nothingToHide.Length > 0) return nothingToHide;
                 }
 
                 // `ExpandAll`/`CollapseAll`, когда дерево уже в этом состоянии.
@@ -4751,6 +5028,13 @@ namespace KazistovVvDiagnostics
         /// ОТКРЫТЬ ПАНЕЛЬ И ДОКРУТИТЬ СПИСОК К СТРОКЕ (корутина). Кадр на пересборку обязателен:
         /// команда включает канвас и перекладывает панель, а индекс путей пересобирается следующим
         /// шагом — без паузы поиск работал бы на старом индексе.
+        ///
+        /// ВКЛЯДКА ПАНЕЛИ НАСТРОЕК (дефект A, отчёт 13.11.2026: 72 «панель открыта, но строка не
+        /// найдена»). Панель в этом методе уже ОТКРЫТА — но содержимое панели настроек живёт
+        /// только на активной вкладке, а строки собраны на СВОЕЙ. Поэтому, если вкладка строки
+        /// известна и отличается от текущей, вкладка возвращается штатным путём
+        /// (`KvSettingsView.SetTab` — тот же вызов, что делает оператор, нажимая `Seg0…Seg5`),
+        /// и только ПОСЛЕ этого ищется строка и докручивается список.
         /// </summary>
         private IEnumerator OpenDockPanelStep(Candidate c, string dockId)
         {
@@ -4759,7 +5043,28 @@ namespace KazistovVvDiagnostics
             if (!string.IsNullOrEmpty(how)) c.PreparedBy = how;
             yield return null;
             yield return null;
-            ScrollDockTo(c.Target);
+
+            // ВКЛЯДКА: пересборка содержимого синхронна, а старые строки гибнут в конце кадра —
+            // поэтому после `SetTab` ждём ДВА кадра, иначе индекс поймает пересечение старых и
+            // новых строк и ключ строки получит номер дубликата.
+            if (ui != null && ui.SettingsView != null &&
+                KvUiSweepDockNav.NeedsSettingsTabRestore(c.SettingsTab, ui.SettingsTab))
+            {
+                int tab = c.SettingsTab;
+                ui.SettingsView.SetTab(tab);
+                Line("[KvUiSweep] ВКЛАДКА НАСТРОЕК: " + c.Path +
+                     " — вернули вкладку " + tab + " (строка собрана на ней, панель открыта)");
+                c.PreparedBy = string.IsNullOrEmpty(c.PreparedBy)
+                    ? "вкладка " + tab + " панели настроек"
+                    : c.PreparedBy + " + вкладка " + tab + " панели настроек";
+                yield return null;
+                yield return null;
+            }
+
+            // ДОКРУТКА ПОСЛЕ ПОИСКА, А НЕ ДО: до этого момента ссылки на строку ещё нет
+            // (`ScrollDockTo(null)` — no-op), и список оставался там, где его оставила прошлая
+            // проверка — оператор не видел, какую строку нажимали.
+            if (Locate(c)) ScrollDockTo(c.Target);
         }
 
         /// <summary>
@@ -4838,7 +5143,13 @@ namespace KazistovVvDiagnostics
         /// </summary>
         private void RecordDockNotOpen(Candidate c, string dockId)
         {
-            string detail = DockNotOpenDetail(KazistovVvUIManager.Instance, dockId);
+            KazistovVvUIManager ui = KazistovVvUIManager.Instance;
+            string detail = DockNotOpenDetail(ui, dockId);
+            // ФАКТ О ВКЛАДКЕ (дефект A): если панель открыта, но строка собрана на другой вкладке —
+            // это и есть объяснение, и оно обязано быть в отчёте, а не спрятано за «не найдена».
+            if (ui != null && KvUiSweepDockNav.NeedsSettingsTabRestore(c.SettingsTab, ui.SettingsTab))
+                detail += " · строка собрана на вкладке " + c.SettingsTab +
+                          ", панель сейчас на вкладке " + ui.SettingsTab;
             string reason = KvUiSweepDockNav.NotOpenReasonFor(dockId, detail);
             Line("[KvUiSweep] ПАНЕЛЬ ДОКА НЕ ОТКРЫЛАСЬ: " + c.Path + " — " + reason);
             Record(new KvUiSweepElement
@@ -5265,6 +5576,17 @@ namespace KazistovVvDiagnostics
         /// </summary>
         private void CollectUgui(List<Candidate> into)
         {
+            // ВКЛЯДКА ПАНЕЛИ НАСТРОЕК ДЛЯ КАЖДОЙ СТРОКИ (дефект A). Запоминается ЗДЕСЬ, в момент
+            // сбора: единственный момент, когда строка физически лежит на своей вкладке. К
+            // моменту нажатия обход мог дожать любую вкладку (`Seg0…Seg5`), и содержимое панели
+            // пересобралось бы уже без неё.
+            KazistovVvUIManager ui = KazistovVvUIManager.Instance;
+            KvDockPanel settingsDock = ui != null ? ui.DockById("settings") : null;
+            string settingsRoot = settingsDock != null && settingsDock.Root != null
+                ? settingsDock.Root.name
+                : "";
+            int settingsTab = ui != null ? ui.SettingsTab : -1;
+
             Canvas[] canvases = UnityEngine.Object.FindObjectsByType<Canvas>(
                 FindObjectsInactive.Include);
             var seen = new HashSet<Selectable>();
@@ -5305,7 +5627,8 @@ namespace KazistovVvDiagnostics
                         ProjectOwned = IsProjectOwned(s.transform),
                         OpensPanel = KvUiSweepTiers.OpensPanel(path, label),
                         SystemGate = KvUiSweepExemptions.IsGatePath(path),
-                        PanelOwner = s.GetComponentInParent<KvXrGroupPanel>()
+                        PanelOwner = s.GetComponentInParent<KvXrGroupPanel>(),
+                        SettingsTab = KvUiSweepDockNav.SettingsTabFor(path, settingsRoot, settingsTab)
                     };
                     RecordPanelRoute(candidate);
                     into.Add(candidate);
@@ -5921,6 +6244,9 @@ namespace KazistovVvDiagnostics
             if (ui != null)
                 snapshot.SelectedNodeHash = KvUiSweepNames.StableHash(DescribeSelectedNode(ui));
 
+            // СОБСТВЕННЫЙ ТРЕКЕР ДЕРЕВА И «ГЛАЗИК» (дефект B3, отчёт 13.11.2026).
+            CaptureTreeState(snapshot);
+
             CountCanvasObjects(out snapshot.UiObjectsAll, out snapshot.UiObjectsActive);
             CaptureStatusAndMenus(snapshot, ui);
         }
@@ -5988,6 +6314,49 @@ namespace KazistovVvDiagnostics
         private static string DescribeSelectedNode(KazistovVvUIManager ui)
         {
             ProjectNode node = ui.SelectedNode;
+            if (node == null) return "";
+            string name = string.IsNullOrEmpty(node.DisplayName) ? node.Key : node.DisplayName;
+            return (node.Id ?? "") + "|" + (name ?? "");
+        }
+
+        /// <summary>
+        /// СНЯТЬ ВЫБОР СО СОБСТВЕННОГО ТРЕКЕРА ДЕРЕВА И ЧИСЛО СКРЫТЫХ ОБЪЕКТОВ (дефект B3).
+        ///
+        /// ЗАЧЕМ ОТДЕЛЬНО ОТ `SelectedNodeHash`. `KvTreeView` хранит выбор в двух местах: в себе
+        /// (`Selected` — его меняет сама строка) и в менеджере (`SelectedNode` — его меняет
+        /// обработчик выбора). Снимок читал только менеджер, поэтому строка, изменившая только
+        /// трекер дерева, выглядела мёртвой. «Глазик» же (`Eye`) переключает `Renderer.enabled`
+        /// объекта сцены — признака для этого в снимке не было ВООБСЕ, и рабочий глазик
+        /// попадал в «нет изменений». Оба числа читаются из живого дерева, без него — `−1`/`0`.
+        /// </summary>
+        private static void CaptureTreeState(KvUiSweepSnapshot snapshot)
+        {
+            KvTreeView tree = UnityEngine.Object.FindAnyObjectByType<KvTreeView>();
+            if (tree == null)
+            {
+                snapshot.TreeSelection = -1;
+                snapshot.TreeHidden = 0;
+                return;
+            }
+
+            ProjectNode selected = tree.Selected;
+            snapshot.TreeSelection = selected == null ? -1
+                : KvUiSweepNames.StableHash(DescribeNode(selected));
+
+            List<ProjectNode> nodes = tree.VisibleNodes();
+            int hidden = 0;
+            for (int i = 0; i < nodes.Count; i++)
+            {
+                ProjectNode node = nodes[i];
+                if (node == null || node.WorldTransform == null) continue;
+                if (!KvTreeView.IsObjectVisible(node)) hidden++;
+            }
+            snapshot.TreeHidden = hidden;
+        }
+
+        /// <summary>Подпись узла для отпечатка — та же форма, что у `DescribeSelectedNode`.</summary>
+        private static string DescribeNode(ProjectNode node)
+        {
             if (node == null) return "";
             string name = string.IsNullOrEmpty(node.DisplayName) ? node.Key : node.DisplayName;
             return (node.Id ?? "") + "|" + (name ?? "");
@@ -6353,6 +6722,62 @@ namespace KazistovVvDiagnostics
             return c.Target != null && c.Target.IsInteractable();
         }
 
+        /// <summary>Есть ли команда с id, вырезанным из пути тулбара, в реестре `KvCommands`.</summary>
+        private static bool CommandExists(string path)
+        {
+            string id = KvUiSweepExemptions.CommandIdOfPath(path);
+            return id.Length > 0 && KvCommands.Get(id) != null;
+        }
+
+        /// <summary>Включена ли команда с id, вырезанным из пути тулбара (нет команды — выключена).</summary>
+        private static bool CommandEnabled(string path)
+        {
+            string id = KvUiSweepExemptions.CommandIdOfPath(path);
+            if (id.Length == 0) return false;
+            KvCommand command = KvCommands.Get(id);
+            return command != null && command.Enabled;
+        }
+
+        /// <summary>
+        /// СТРОКА ДЕРЕВА УЖЕ ВЫБРАНА ДО НАЖАТИЯ — по ОБОИМ трекерам выбора. Путь читается ДО
+        /// нажатия: после него выбрана любая строка, и сверка по состоянию после вычёркивала бы
+        /// удачное нажатие (дефект B3, отчёт 13.11.2026).
+        /// </summary>
+        private static bool TreeRowAlreadySelected(Candidate c)
+        {
+            if (c == null || c.IsPanelIcon || c.Target == null) return false;
+            // ТОЛЬКО сама строка, а не её «глазик»/стрелка: у стрелки своя работа (раскрытие),
+            // и она обязана проверяться нажатием, даже если строка уже выбрана.
+            KvTreeRow row = c.Target.GetComponent<KvTreeRow>();
+            if (row == null || row.Node == null) return false;
+
+            KazistovVvUIManager ui = KazistovVvUIManager.Instance;
+            if (ui != null && ui.SelectedNode == row.Node) return true;
+
+            // ВТОРОЙ ТРЕКЕР: `KvTreeView` хранит выбор сам, и до обработчика выбора он может
+            // разойтись с менеджером. Если хотя бы один трекер уже держит этот узел — строка и так
+            // выбрана, и повторное нажатие законно ничего не меняет.
+            KvTreeView tree = UnityEngine.Object.FindAnyObjectByType<KvTreeView>();
+            return tree != null && tree.Selected == row.Node;
+        }
+
+        /// <summary>
+        /// ЧЕСТНЫЙ ТЕКСТ ЭФФЕКТА ДЛЯ ЭЛЕМЕНТА СТРОКИ ДЕРЕВА, У КОТОРОГО НИЧЕГО НЕ ИЗМЕНИЛОСЬ
+        /// и который не попал ни в одно исключение: клик не дошёл до обработчика строки. Называет
+        /// конкретику вместо общего «нет изменений»; `Ok` остаётся false — это дефект, а не
+        /// «сработало» (дефект B3).
+        /// </summary>
+        private static string TreeNoChangeEffectFor(Candidate c)
+        {
+            if (c == null || c.IsPanelIcon || c.Target == null) return "";
+            if (c.Target.GetComponentInParent<KvTreeRow>() == null) return "";
+            if (KvUiSweepExemptions.IsEyePath(c.Path)) return KvUiSweepExemptions.EyeNoChangeEffect;
+            string name = c.Target.gameObject.name;
+            if (name.StartsWith("Row_", StringComparison.Ordinal))
+                return KvUiSweepExemptions.TreeRowNoChangeEffect;
+            return "";
+        }
+
         /// <summary>
         /// ЭЛЕМЕНТ ПРИНАДЛЕЖИТ ПАНЕЛЯМ ПРОЕКТА? От этого зависит, считается ли подпись
         /// «Настройки» системным пунктом.
@@ -6683,6 +7108,13 @@ namespace KazistovVvDiagnostics
             public string[] ResultTitles;
             /// <summary>Панель оболочки, которую пришлось открыть (`""` — не открывали).</summary>
             public string Container = "";
+            /// <summary>
+            /// ВКЛЯДКА ПАНЕЛИ НАСТРОЕК, НА КОТОРОЙ СТРОКУ СОБРАЛИ (`−1` — путь не из настроек).
+            /// Содержимое панели настроек живёт только на активной вкладке, поэтому без этой
+            /// записи панель была бы открыта, а строки другой вкладки — физически не существовало
+            /// (дефект A, отчёт 13.11.2026: 72 «панель открыта, но строка не найдена»).
+            /// </summary>
+            public int SettingsTab = -1;
             /// <summary>Элемент принадлежит панелям проекта (а не посторонней заставке/плагину).</summary>
             public bool ProjectOwned = true;
             /// <summary>ОТКРЫВАЕТ ПАНЕЛЬ/ЭКРАН — признак ЯРУСА 1 (см. `KvUiSweepTiers`).</summary>

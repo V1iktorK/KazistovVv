@@ -2217,5 +2217,310 @@ namespace KazistovVvTests
             Assert.IsFalse(KvUiSweepUiVisible.NeedsRestore(0, false),
                 "то же для скрытой: лишний SetUiVisible перестраивает интерфейс без нужды");
         }
+
+        // ------------- 29. ВКЛАДКА ПАНЕЛИ НАСТРОЕК: СТРОКА НАХОДИТСЯ ПРИ ОТКРЫТОЙ ПАНЕЛИ
+
+        /// <summary>Ключ поиска элемента (`PathOf` прогона) — тем же способом, что и обход.</summary>
+        private static string SweepKeyOf(Transform t)
+        {
+            MethodInfo pathOf = typeof(KvUiSweepRuntime).GetMethod("PathOf",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.IsNotNull(pathOf, "в KvUiSweepRuntime нет статического PathOf — сбор пути изменился");
+            string path = (string)pathOf.Invoke(null, new object[] { t });
+            return KvUiSweepNames.KeyOf(path);
+        }
+
+        /// <summary>Есть ли ключ в ЖИВОМ индексе «путь → элемент» — то, что проверяет `Locate`.</summary>
+        private static bool SweepIndexContains(GameObject host, string key)
+        {
+            KvUiSweepRuntime runtime = host.GetComponent<KvUiSweepRuntime>();
+            Assert.IsNotNull(runtime, "хост без KvUiSweepRuntime — индекс пересобрать нечем");
+
+            MethodInfo rebuild = typeof(KvUiSweepRuntime).GetMethod("RebuildUiIndex",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsNotNull(rebuild, "в KvUiSweepRuntime нет RebuildUiIndex");
+            rebuild.Invoke(runtime, null);
+
+            FieldInfo field = typeof(KvUiSweepRuntime).GetField("pathIndex",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsNotNull(field, "в KvUiSweepRuntime нет индекса pathIndex");
+            var index = (IDictionary)field.GetValue(runtime);
+            return index != null && index.Contains(key);
+        }
+
+        private static Transform FindByPrefix(Transform root, string prefix)
+        {
+            foreach (Transform t in root.GetComponentsInChildren<Transform>(true))
+                if (t != null && t.name.StartsWith(prefix, System.StringComparison.Ordinal)) return t;
+            return null;
+        }
+
+        /// <summary>
+        /// УБРАТЬ СТРОКИ ПРЕЖНЕЙ ВКЛАДКИ, ЕСЛИ ОНИ ОСТАЛИСЬ. `KvSettingsView.Clear` в редакторе
+        /// уничтожает строки сразу (`DestroyImmediate`), но тест не должен зависеть от этого:
+        /// оставшаяся старая строка замаскировала бы смену вкладки и проверка «строки больше нет»
+        /// стала бы ложной. Здесь — та же операция, что делает конец кадра на устройстве.
+        /// </summary>
+        private static void FlushPendingSwitchRows(Transform root)
+        {
+            var pending = new List<Transform>();
+            foreach (Transform t in root.GetComponentsInChildren<Transform>(true))
+                if (t != null && t.name.StartsWith("Switch_", System.StringComparison.Ordinal))
+                    pending.Add(t);
+            for (int i = 0; i < pending.Count; i++)
+                if (pending[i] != null) Object.DestroyImmediate(pending[i].gameObject);
+        }
+
+        /// <summary>
+        /// СТРОКА `…/Dock_Настройки/Body/Scroll/Content/Switch_*` НАХОДИТСЯ ПРИ ОТКРЫТОЙ ПАНЕЛИ —
+        /// НА СВОЕЙ ВКЛАДКЕ.
+        ///
+        /// ОТКУДА (планшет, отчёт 13.11.2026 `_ui_sweep_ar_1311c.txt`): 72 строки панели настроек
+        /// получили «панель открыта, но строка не найдена» при ФАКТИЧЕСКИ ОТКРЫТОЙ панели
+        /// («сторона Bottom · толщина 224 · включена да · свёрнута нет · размер 1253×224»).
+        /// Панель открыта, но содержимое пересобирается под АКТИВНУЮ вкладку
+        /// (`KvSettingsView.SetTab` → `Rebuild`), а обход собрал строки на другой вкладке и перед
+        /// нажатием вкладку не возвращал. Тест строит НАСТОЯЩИЙ `KvSettingsView` и проходит этот
+        /// ход: строка есть → вкладку сменили → строки нет → вкладку вернули → путь СНОВА находится.
+        /// </summary>
+        [Test]
+        public void SettingsRow_IsFoundWithOpenPanel_OnItsOwnTab()
+        {
+            GameObject host = new GameObject("KvUiSweepSettingsRowHost");
+            try
+            {
+                var canvasGo = new GameObject("KazistovVv_UI", typeof(Canvas));
+                canvasGo.transform.SetParent(host.transform, false);
+                var dockCanvas = new GameObject("KazistovVvDockCanvas", typeof(RectTransform));
+                dockCanvas.transform.SetParent(canvasGo.transform, false);
+                var panelRoot = new GameObject("Dock_Настройки", typeof(RectTransform));
+                panelRoot.transform.SetParent(dockCanvas.transform, false);
+                var body = new GameObject("Body", typeof(RectTransform));
+                body.transform.SetParent(panelRoot.transform, false);
+
+                host.AddComponent<KvUiSweepRuntime>();
+
+                var view = body.AddComponent<KazistovVvUI.KvSettingsView>();
+                var callbacks = new KazistovVvUI.KvSettingsCallbacks
+                {
+                    HasFeature = delegate { return true; },
+                    GetFeature = delegate { return false; }
+                };
+                view.Build((RectTransform)body.transform, callbacks);
+
+                Assert.AreEqual(0, view.ActiveTab, "панель настроек открывается на вкладке «Функции»");
+                Assert.Greater(view.RowCount, 0, "вкладка «Функции» обязана построить строки");
+
+                Transform row = FindByPrefix(body.transform, "Switch_");
+                Assert.IsNotNull(row, "строка Switch_* вкладки «Функции» не построилась");
+
+                string key = SweepKeyOf(row);
+                StringAssert.Contains("/Dock_Настройки/", key,
+                    "путь обязан быть путём док-панели «Настройки»: " + key);
+
+                // ПАНЕЛЬ ОТКРЫТА, вкладка своя — строка находится (то, что обязан делать обход).
+                Assert.IsTrue(SweepIndexContains(host, key),
+                    "при ОТКРЫТОЙ панели и СВОЕЙ вкладке строка обязана находиться: " + key);
+
+                // ПРОГОН НАЖАЛ ВКЛАДКУ ДО ПРОВЕРКИ СТРОК (отчёт 13.11: `Seg5«Справка»`) —
+                // строки прежней вкладки физически перестают существовать.
+                int ownTab = view.ActiveTab;
+                view.SetTab(KazistovVvUI.KvSettingsView.TabCount - 1);
+                FlushPendingSwitchRows(body.transform);
+                Assert.IsFalse(SweepIndexContains(host, key),
+                    "после смены вкладки строка прежней вкладки исчезает — ровно это видел прогон: " + key);
+
+                // ОБХОД ВОЗВРАЩАЕТ ВКЛАДКУ, НА КОТОРОЙ СТРОКУ СОБРАЛИ, — И ПУТЬ НАХОДИТСЯ.
+                view.SetTab(ownTab);
+                Assert.IsTrue(SweepIndexContains(host, key),
+                    "строка обязана находиться, когда панель открыта и стоит ЕЁ вкладка: " + key);
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        /// <summary>
+        /// ВКЛЯДКА СТРОКИ ЗАПИСЫВАЕТСЯ ПРИ СБОРЕ, А ВОЗВРАЩАЕТСЯ ТОЛЬКО КОГДА НАДО — узкое правило.
+        ///
+        /// ЗАЧЕМ ОТДЕЛЬНО. Возврат вкладки пересобирает содержимое панели настроек: лишний вызов
+        /// уничтожает только что найденную строку, поэтому правило обязано срабатывать ровно
+        /// тогда, когда текущая вкладка НЕ та, на которой строку собрали.
+        /// </summary>
+        [Test]
+        public void SettingsTabRule_RestoresOnlyTheRowsOwnTab()
+        {
+            const string rowPath = "KazistovVv_UI/KazistovVvDockCanvas/Dock_Настройки/" +
+                                   "Body/Scroll/Content/Switch_Фонарик (G)«Фонарик (G)»";
+            const string treePath = "KazistovVv_UI/KazistovVvDockCanvas/Dock_Дерево моделей/" +
+                                    "Body/KvTreeView/Scroll/Content/Row_Столы«Столы»";
+
+            Assert.AreEqual(2, KvUiSweepDockNav.SettingsTabFor(rowPath, "Dock_Настройки", 2),
+                "строка панели настроек запоминает вкладку, на которой её собрали");
+            Assert.AreEqual(-1, KvUiSweepDockNav.SettingsTabFor(treePath, "Dock_Настройки", 2),
+                "чужая док-панель — не вкладка настроек: правило не должно захватывать её пути");
+            Assert.AreEqual(-1, KvUiSweepDockNav.SettingsTabFor(rowPath, "Dock_Настройки", -1),
+                "нет известной вкладки — нечего возвращать");
+            Assert.AreEqual(-1, KvUiSweepDockNav.SettingsTabFor(rowPath, "", 2),
+                "панели настроек нет в сцене — нечего возвращать");
+
+            Assert.IsTrue(KvUiSweepDockNav.NeedsSettingsTabRestore(2, 5),
+                "строка собрана на вкладке 2, панель сейчас на 5 — вкладку надо вернуть");
+            Assert.IsFalse(KvUiSweepDockNav.NeedsSettingsTabRestore(2, 2),
+                "вкладка уже нужная — лишняя пересборка содержимого не нужна");
+            Assert.IsFalse(KvUiSweepDockNav.NeedsSettingsTabRestore(-1, 5),
+                "путь не из настроек — правило к нему не относится");
+            Assert.IsFalse(KvUiSweepDockNav.NeedsSettingsTabRestore(2, -1),
+                "текущая вкладка неизвестна — вслепую пересобирать нельзя");
+        }
+
+        // ------------------------- 30. БЮДЖЕТ ПРОГОНА ПОД ПОЛНЫЙ ИНВЕНТАРЬ
+
+        /// <summary>
+        /// ОБЩИЙ БЮДЖЕТ 1800 с, БЮДЖЕТ ЭЛЕМЕНТА НЕ ТРОНУТ.
+        ///
+        /// ОТКУДА (планшет, отчёт 13.11.2026): инвентарь вырос до 504 элементов (лимит сбора
+        /// снят), а 600 с не вмещали обход «по одному элементу с восстановлением экрана» — прогон
+        /// оборвался на 313-м элементе и не дал итога. Граница у бюджета одна, и это время;
+        /// элементный предел (2 с) остаётся прежним — иначе «завис на элементе» перестал бы
+        /// быть виден.
+        /// </summary>
+        [Test]
+        public void TotalBudget_Is1800Seconds_AndElementBudgetUntouched()
+        {
+            Assert.AreEqual(1800f, KvUiSweepRuntime.TotalBudgetSeconds,
+                "общий бюджет обязан вмещать 504 элемента (прежние 600 с обрывали прогон на 313-м)");
+            Assert.AreEqual(2f, KvUiSweepRuntime.ElementBudgetSeconds,
+                "бюджет ОДНОГО элемента не трогали: он и так достаточен, а трогать его — значит");
+            Assert.Greater(KvUiSweepRuntime.TotalBudgetSeconds, 600f,
+                "бюджет обязан быть больше прежнего — иначе прогон оборвётся там же");
+        }
+
+        // ------------- 31. ЧЕСТНЫЕ ПРИЧИНЫ ВМЕСТО «НЕТ ИЗМЕНЕНИЙ» (недоступные, undo/redo, дерево)
+
+        /// <summary>
+        /// НЕДОСТУПНЫЙ ОПЕРАТОРУ И UNDO/REDO ПРИ ПУСТОМ СТЕКЕ — ЧЕСТНОЕ ИСКЛЮЧЕНИЕ, А НЕ «НЕТ
+        /// ИЗМЕНЕНИЙ».
+        ///
+        /// ОТКУДА (планшет, отчёт 13.11.2026): 13 строк `element=… effect=нет изменений` —
+        /// `Cmd_robot.model.*` (модели без геометрии), `Cmd_robot.playpause`, `Cmd_robot.stop`,
+        /// `Cmd_edit.undo`, `Cmd_edit.redo`. Нажать их оператор тоже не может: кнопка в тулбаре
+        /// выключена. Причина исключения уже была, но СТРОКА ЭФФЕКТА пуста — и читается как
+        /// «кнопка не работает». Теперь эффект называет причину.
+        /// </summary>
+        [Test]
+        public void UnavailableAndEmptyStack_ReadAsHonestException_NotNoChange()
+        {
+            string disabled = KvUiSweepExemptions.DisabledReason;
+            string effect = KvUiSweepExemptions.NotPressedEffectFor(disabled);
+            StringAssert.Contains("недоступен оператору", effect,
+                "недоступный элемент обязан быть назван так, как его видит оператор: " + effect);
+            StringAssert.Contains("interactable=false", effect, "и назван факт, а не догадка: " + effect);
+            StringAssert.Contains("IsEnabled=false", effect,
+                "и названа вторая причина выключения — состояние реестра команд: " + effect);
+
+            var unavailable = new KvUiSweepElement
+            {
+                Path = "KazistovVv_UI/KazistovVvCanvas/KvToolbar/Groups/Cmd_robot.playpause",
+                Ok = false,
+                Effect = effect,
+                ExemptReason = disabled,
+                Method = "не нажимали (interactable=false)"
+            };
+            StringAssert.DoesNotContain("нет изменений", unavailable.Line,
+                "недоступная кнопка не может выглядеть как «нажал и ничего не изменилось»: " + unavailable.Line);
+
+            var run = new KvUiSweepRun { Layout = "ar" };
+            run.Add(unavailable);
+            Assert.AreEqual(1, run.Exempted, "недоступная кнопка — исключение, а не провал");
+            Assert.AreEqual(0, run.NoEffect, "и НЕ «без эффекта»");
+            Assert.AreEqual(1, run.Disabled,
+                "но число недоступных обязано печататься отдельно: всегда серая кнопка — дефект заполнения");
+
+            // UNDO / REDO ПРИ ПУСТОМ СТЕКЕ — СВОЯ причина, а не общая «недоступна».
+            const string undoPath = "KazistovVv_UI/KazistovVvCanvas/KvToolbar/Groups/Cmd_edit.undo";
+            const string redoPath = "KazistovVv_UI/KazistovVvCanvas/KvToolbar/Groups/Cmd_edit.redo";
+
+            Assert.AreEqual("edit.undo", KvUiSweepExemptions.CommandIdOfPath(undoPath),
+                "id команды берётся из последнего сегмента пути");
+            Assert.AreEqual("", KvUiSweepExemptions.EmptyStackReasonFor(undoPath, true, true),
+                "включённая команда — причину не выдумываем");
+
+            string undo = KvUiSweepExemptions.EmptyStackReasonFor(undoPath, true, false);
+            StringAssert.Contains("нечего отменять", undo,
+                "пустой стек отмены обязан называться своими словами: " + undo);
+            string redo = KvUiSweepExemptions.EmptyStackReasonFor(redoPath, true, false);
+            StringAssert.Contains("нечего повторять", redo,
+                "пустой стек повтора — отдельная причина: " + redo);
+
+            Assert.AreEqual("", KvUiSweepExemptions.EmptyStackReasonFor(
+                    "KazistovVv_UI/KazistovVvCanvas/KvToolbar/Groups/Cmd_robot.stop", true, false),
+                "выключенная НЕ undo/redo команда — это не «нечего отменять»");
+            Assert.AreEqual("", KvUiSweepExemptions.EmptyStackReasonFor(undoPath, false, false),
+                "команды нет в реестре — причину про стек не выдумываем");
+
+            var emptyStack = new KvUiSweepElement
+            {
+                Path = undoPath,
+                Ok = false,
+                Effect = KvUiSweepExemptions.NotPressedEffectFor(undo),
+                ExemptReason = undo,
+                Method = "не нажимали (interactable=false)"
+            };
+            StringAssert.DoesNotContain("нет изменений", emptyStack.Line,
+                "пустой стек обязан читаться как «нечего отменять»: " + emptyStack.Line);
+        }
+
+        /// <summary>
+        /// ВЫБОР СТРОКИ ДЕРЕВА И ВИДИМОСТЬ ОБЪЕКТА (ГЛАЗИК) ВИДНЫ СНИМКУ, А «НЕЧЕГО СКРЫВАТЬ» —
+        /// ЧЕСТНАЯ ПРИЧИНА.
+        ///
+        /// ОТКУДА (планшет, отчёт 13.11.2026): 7 строк `Dock_Дерево моделей/…/Row_*/Eye` и
+        /// `Row_*` получили «нет изменений». `Eye` переключает `Renderer.enabled` объекта сцены
+        /// (`KvTreeView.SetObjectVisible`) — снимок этого признака не имел вовсе. Выбор строки
+        /// живёт в ДВУХ трекерах (`KvTreeView.Selected` и `KazistovVvUIManager.SelectedNode`),
+        /// и снимок читал только второй — изменение первого было ему не видно.
+        /// </summary>
+        [Test]
+        public void TreeRowSelectionAndVisibility_AreSeenBySnapshot()
+        {
+            string diff = KvUiSweepDiff.Describe(
+                new KvUiSweepSnapshot { TreeSelection = 111, TreeHidden = 0 },
+                new KvUiSweepSnapshot { TreeSelection = 222, TreeHidden = 1 });
+            StringAssert.Contains("выделение в дереве: 111→222", diff,
+                "смена выбранного узла обязана быть видна снимку: " + diff);
+            StringAssert.Contains("скрытых объектов дерева: 0→1", diff,
+                "переключение глазика обязано быть видно снимку: " + diff);
+
+            Assert.AreEqual("", KvUiSweepDiff.Describe(
+                    new KvUiSweepSnapshot { TreeSelection = 5, TreeHidden = 1 },
+                    new KvUiSweepSnapshot { TreeSelection = 5, TreeHidden = 1 }),
+                "одинаковое состояние — это не эффект");
+
+            const string eyePath = "KazistovVv_UI/KazistovVvDockCanvas/Dock_Дерево моделей/" +
+                                   "Body/KvTreeView/Scroll/Content/Row_TCP/Eye";
+            const string arrowPath = "KazistovVv_UI/KazistovVvDockCanvas/Dock_Дерево моделей/" +
+                                     "Body/KvTreeView/Scroll/Content/Row_TCP/Arrow";
+
+            string nothing = KvUiSweepExemptions.NothingToHideReasonFor(eyePath, false);
+            StringAssert.Contains("рендерер", nothing,
+                "у узла нечего скрывать — это обязано быть сказано, а не «нет изменений»: " + nothing);
+            Assert.AreEqual("", KvUiSweepExemptions.NothingToHideReasonFor(eyePath, true),
+                "у узла есть рендереры — глазик обязан проверяться нажатием");
+            Assert.AreEqual("", KvUiSweepExemptions.NothingToHideReasonFor(arrowPath, false),
+                "правило узкое: только про глазик, а не про любую кнопку строки");
+
+            // УЖЕ ВЫБРАННАЯ СТРОКА — по СОСТОЯНИЮ ДО НАЖАТИЯ (после нажатия выбрана ЛЮБАЯ строка).
+            Assert.AreEqual(KvUiSweepExemptions.TreeRowAlreadySelectedReason,
+                KvUiSweepExemptions.TreeRowAlreadySelectedReasonFor(true),
+                "строка, выбранная ДО нажатия, законно ничего не меняет");
+            Assert.AreEqual("", KvUiSweepExemptions.TreeRowAlreadySelectedReasonFor(false),
+                "не выбранная строка обязана проверяться нажатием — иначе правило скроет дефект");
+
+            StringAssert.Contains("не изменило", KvUiSweepExemptions.TreeRowNoChangeEffect,
+                "нажатие строки, до которой клик не дошёл, обязано называться конкретно, " +
+                "а не общим «нет изменений»");
+        }
     }
 }

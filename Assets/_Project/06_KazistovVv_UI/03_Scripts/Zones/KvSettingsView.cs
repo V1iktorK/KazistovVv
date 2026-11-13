@@ -438,7 +438,16 @@ namespace KazistovVvUI
         private void Clear()
         {
             foreach (GameObject go in rows)
-                if (go != null) Destroy(go);
+            {
+                if (go == null) continue;
+                // В РЕДАКТОРЕ (`Destroy`) Unity пишет ошибку «Destroy may not be called from
+                // edit mode» и объект остаётся висеть до конца кадра — а кадра в EditMode-тесте
+                // нет. Содержимое панели настроек пересобирается при КАЖДОЙ смене вкладки, и
+                // оставшиеся старые строки дали бы обходу чужие ключи путей. Поэтому в редакторе
+                // уничтожаем сразу, на устройстве — как раньше (`Destroy` в конце кадра).
+                if (Application.isPlaying) Destroy(go);
+                else DestroyImmediate(go);
+            }
             rows.Clear();
             switches.Clear();
             switchIds.Clear();
