@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Text;
@@ -532,6 +533,99 @@ public static class KvE2eSettingsDiag
 
                 KvXrSettings.SetModeIndex(originalMode);
                 Write("\n  режим восстановлен: " + KvXrSettings.ModeLabel(KvXrSettings.GetModeIndex()) + "\n");
+
+                // ШАГ 10 (языки) идёт ПОСЛЕ проверки консоли: переключение языка пересобирает
+                // оболочку, и ошибки этой пересборки ловятся отдельным Check шага, а не смешиваются
+                // с состоянием консоли за весь прогон.
+                Next(6);
+                break;
+            }
+
+            // ---------------------------------------------------------- 10. ЯЗЫКИ ИНТЕРФЕЙСА
+            //
+            // КРАСНЫЙ СПИСОК §7 (13.11.2026): «Пять из семи языков интерфейса пусты». В списке
+            // «Настройки → Интерфейс → Язык интерфейса» пять пунктов показывали `· 0` строк:
+            // пункт выглядел рабочим, а выбор ничего не менял. Здесь проверяется НА ПОСТРОЕННОМ
+            // интерфейсе (а не по тексту исходника): какие кнопки `Lang_*` реально нарисованы,
+            // что в подписях нет «· 0» и что выбор языка меняет СТРОКИ, а не только код состояния.
+            case 10:
+            {
+                var offeredCodes = new List<string>();
+                foreach (KvLangInfo lang in KvLoc.Offered())
+                    if (lang != null) offeredCodes.Add(lang.code);
+
+                var shownCodes = new List<string>();
+                var zeroLabels = new List<string>();
+                Transform searchRoot = settingsView != null ? settingsView.transform : null;
+                if (searchRoot == null && ui != null) searchRoot = ui.transform;
+                if (searchRoot != null)
+                {
+                    foreach (Transform t in searchRoot.GetComponentsInChildren<Transform>(true))
+                    {
+                        if (t == null || !t.name.StartsWith("Lang_")) continue;
+                        string code = t.name.Substring("Lang_".Length);
+                        shownCodes.Add(code);
+                        Text label = t.GetComponentInChildren<Text>(true);
+                        string text = label != null ? label.text : "";
+                        // Подпись формата «Название (English)  ·  N» — «· 0» означает пустой
+                        // словарь у языка, который РИСУЕТСЯ в списке выбора.
+                        if (System.Text.RegularExpressions.Regex.IsMatch(text ?? "", @"·\s*0\s*$"))
+                            zeroLabels.Add(code + " → «" + text + "»");
+                    }
+                }
+
+                Check("9.3 в списке выбора языка нет ни одного пункта с нулём строк",
+                      searchRoot != null && shownCodes.Count > 0 && zeroLabels.Count == 0,
+                      "кнопок языков: " + shownCodes.Count +
+                      (zeroLabels.Count > 0 ? " · подписи с «· 0»: " + string.Join("; ", zeroLabels.ToArray()) : ""));
+
+                // СПИСОК НА ЭКРАНЕ = СПИСОК `KvLoc.Offered()`: панель не может показать язык,
+                // который отсев не предложил, и не может потерять предложенный.
+                var missing = new List<string>();
+                foreach (string code in offeredCodes)
+                    if (!shownCodes.Contains(code)) missing.Add(code);
+                var extra = new List<string>();
+                foreach (string code in shownCodes)
+                    if (code != KvLoc.SystemCode && !offeredCodes.Contains(code)) extra.Add(code);
+
+                Check("9.4 язык без строк не предлагается: кнопки на панели = KvLoc.Offered()",
+                      searchRoot != null && offeredCodes.Count >= 2 && missing.Count == 0 && extra.Count == 0,
+                      "предложено: " + string.Join(",", offeredCodes.ToArray()) +
+                      " · на панели: " + string.Join(",", shownCodes.ToArray()) +
+                      (missing.Count > 0 ? " · потеряны: " + string.Join(",", missing.ToArray()) : "") +
+                      (extra.Count > 0 ? " · лишние: " + string.Join(",", extra.ToArray()) : ""));
+
+                // ВЫБОР ЯЗЫКА МЕНЯЕТ СТРОКИ. Каждый пункт обязан работать: код состояния
+                // меняется у любого языка, а вот ТЕКСТ — только у переведённого.
+                string savedPreference = KvLoc.PreferenceCode;
+                string savedCurrent = KvLoc.CurrentCode;
+                string before = KvLoc.T("menu.file", null);
+                string target = "";
+                foreach (string code in offeredCodes)
+                    if (code != savedCurrent) { target = code; break; }
+
+                string after = "";
+                bool switched = false;
+                if (target.Length > 0)
+                {
+                    KvLoc.SetLanguage(target);
+                    after = KvLoc.T("menu.file", null);
+                    switched = !string.Equals(before, after, StringComparison.Ordinal);
+                }
+
+                Check("9.5 выбор языка реально меняет строки интерфейса",
+                      target.Length > 0 && !string.IsNullOrEmpty(before) &&
+                      !string.IsNullOrEmpty(after) && switched,
+                      "было («" + savedCurrent + "»): «" + before + "»" +
+                      (target.Length > 0
+                          ? " · стало («" + target + "»): «" + after + "»"
+                          : " · предложенных языков кроме текущего нет"));
+
+                // ВОЗВРАТ ИСХОДНОГО ВЫБОРА: прогон не имеет права оставить за собой чужой язык.
+                if (!string.IsNullOrEmpty(savedPreference)) KvLoc.SetLanguage(savedPreference);
+                Check("9.6 после проверки язык интерфейса возвращён к исходному выбору",
+                      KvLoc.CurrentCode == savedCurrent,
+                      "было «" + savedCurrent + "», стало «" + KvLoc.CurrentCode + "»");
 
                 Finish();
                 break;

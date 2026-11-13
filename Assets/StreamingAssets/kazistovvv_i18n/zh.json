@@ -818,7 +818,7 @@
     },
     {
       "key": "cmd.file.import.desc",
-      "text": "从文件加载点和轨迹（预留项）"
+      "text": "解析数据文件夹中最新的场景文件并应用"
     },
     {
       "key": "cmd.gamepad.hud",

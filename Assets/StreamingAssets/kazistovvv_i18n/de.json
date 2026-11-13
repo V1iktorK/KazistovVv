@@ -818,7 +818,7 @@
     },
     {
       "key": "cmd.file.import.desc",
-      "text": "Punkte und Trajektorien aus einer Datei laden (Platzhalter)"
+      "text": "Die letzte Szenariodatei im Datenordner einlesen und anwenden"
     },
     {
       "key": "cmd.gamepad.hud",

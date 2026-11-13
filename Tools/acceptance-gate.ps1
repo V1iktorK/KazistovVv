@@ -19,6 +19,7 @@
       EDITMODE      EditMode-тесты: упавших 0 И тестов не меньше 1264 (набор не уменьшился)
       REPO_GUARDS   Tools/repo-guards.ps1: провалов 0
       UI_STUBS      в реестре команд нет кнопок-заглушек (Stub = true) — требование владельца
+      LOCALES       словари всех семи языков непустые, язык с 0 строк не предлагается в выборе
       P4_3_RATCHET  число тестов, читающих исходники, не растёт (храповик)
       SECRET        пароля ключа подписи нет ни в отслеживаемых, ни в новых файлах
       GIT_ASSETS    после прогона нет изменённых .mat/.unity/.prefab (P4-15)
@@ -74,6 +75,11 @@ param(
 )
 
 $ErrorActionPreference = 'Continue'
+
+# КОДИРОВКА КОНСОЛИ — UTF8 (добавлено тестировщиком 13.11.2026).
+# Иначе кириллица из adb (логи, отчёты) приходит мусором: совпадения вроде «ИТОГ»/«исчез»
+# молча не срабатывают, и судья выносит ЛОЖНЫЙ вердикт (замерено: match False → True).
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 # ================================================================ 0. ОКРУЖЕНИЕ
 if ([string]::IsNullOrWhiteSpace($ProjectPath)) { $ProjectPath = Split-Path -Parent $PSScriptRoot }
@@ -331,6 +337,64 @@ if ($deadButtons.Count -eq 0) {
     Add-Result 'UI_STUBS' $true ("кнопок без функционала нет (перекрытых заглушек-регистраций: " + $shadowed.Count + ")")
 } else {
     Add-Result 'UI_STUBS' $false ("КНОПКИ БЕЗ ФУНКЦИОНАЛА: " + $deadButtons.Count + " → " + ($deadButtons -join ', '))
+}
+# ================================================================ 4г. LOCALES (красный список §7)
+#
+# ТЕСТИРОВЩИК 13.11.2026, §7: «Пять из семи языков интерфейса пусты». В списке «Настройки →
+# Интерфейс → Язык интерфейса» пять пунктов показывали `· 0` строк: пункт выглядел рабочим,
+# а выбор ничего не менял — ровно то, что владелец запретил словами «чтобы все кнопочки были
+# заполнены функционалом».
+#
+# ЧТО ПРОВЕРЯЕТСЯ ЗДЕСЬ (статически, без Unity — гейт не может нажимать кнопки сам):
+#   1) у КАЖДОГО из семи языков проекта есть файл словаря, он разбирается и содержит ХОТЯ БЫ
+#      ОДНУ непустую строку: пустой словарь не должен поставляться в сборку;
+#   2) в коде списка выбора есть отсев языка с нулём строк (`KvLoc.Offered`): без него язык
+#      с пустым каталогом снова попадёт в меню и снова будет обещать перевод.
+#
+# ЧЕСТНО О ГРАНИЦАХ. Статический гейт НЕ видит живого списка на вкладке «Интерфейс» и не
+# отличает «словарь полон в файле» от «словарь доехал до памяти на устройстве». Поэтому
+# поведение закреплено отдельно: EditMode-тесты `KvLocaleOfferTests` (отсев, живой счётчик,
+# реальная смена текста) и Е2Е-проверки 9.3–9.5 в `KvE2eSettingsDiag` (кнопки `Lang_*` на
+# построенной панели и смена строки после выбора).
+Write-Host ""
+Write-Host "--- языки интерфейса (LOCALES) ---"
+$localeProblems = @()
+$localeCodes = @('ru','en','zh','es','de','fr','ja')
+$i18nDir = Join-Path $ProjectPath 'Assets\StreamingAssets\kazistovvv_i18n'
+foreach ($code in $localeCodes) {
+    $locFile = Join-Path $i18nDir ($code + '.json')
+    if (-not (Test-Path -LiteralPath $locFile)) { $localeProblems += "${code}: нет файла словаря"; continue }
+    try {
+        $doc = Get-Content -LiteralPath $locFile -Raw -Encoding UTF8 | ConvertFrom-Json
+        $rows = @()
+        if ($null -ne $doc -and $doc.PSObject.Properties['strings'] -and $doc.strings) { $rows = @($doc.strings) }
+        $filled = @($rows | Where-Object { $_ -and $_.PSObject.Properties['text'] -and $_.text -and ([string]$_.text).Trim() -ne '' })
+        if ($filled.Count -eq 0) { $localeProblems += "${code}: 0 непустых строк в словаре" }
+    } catch {
+        $localeProblems += "${code}: словарь не разбирается ($($_.Exception.Message))"
+    }
+}
+
+# 2) ОТСЕВ В КОДЕ. Ищется сам факт наличия отсева: список выбора обязан строиться через
+#    `KvLoc.Offered` (языки с нулём строк в выбор не попадают).
+$localeSources = @(
+    (Join-Path $ProjectPath 'Assets\_Project\06_KazistovVv_UI\03_Scripts\Core\KvLocalization.cs'),
+    (Join-Path $ProjectPath 'Assets\_Project\06_KazistovVv_UI\03_Scripts\Zones\KvSettingsView.cs')
+)
+$hasOfferFilter = $false
+foreach ($src in $localeSources) {
+    if ((Test-Path -LiteralPath $src) -and (Select-String -LiteralPath $src -Pattern 'Offered\(' -Quiet -ErrorAction SilentlyContinue)) {
+        $hasOfferFilter = $true
+    }
+}
+if (-not $hasOfferFilter) {
+    $localeProblems += 'список выбора языка не отсекает языки с нулём строк (KvLoc.Offered не найден в коде)'
+}
+
+if ($localeProblems.Count -eq 0) {
+    Add-Result 'LOCALES' $true ("словари непустые на всех " + $localeCodes.Count + " языках · язык с 0 строк не предлагается в выборе")
+} else {
+    Add-Result 'LOCALES' $false ("ЯЗЫКИ БЕЗ ПЕРЕВОДА: " + ($localeProblems -join ' | '))
 }
 # ================================================================ 5. EDITMODE
 Write-Host ""
@@ -828,7 +892,7 @@ if (-not $NoState) {
         $state | Add-Member -NotePropertyName Counts -NotePropertyValue ([pscustomobject]@{}) -Force
     }
     $newCounts = [ordered]@{}
-    foreach ($code in 'EDITMODE','REPO_GUARDS','SECRET','GIT_ASSETS','APK_NAMES','APK_FRESH','UI_STUBS','P4_3_RATCHET','E2E_PC','E2E_AR','MUTATION','HEADSET','UI_SWEEP','REAL_TABLE') {
+    foreach ($code in 'EDITMODE','REPO_GUARDS','SECRET','GIT_ASSETS','APK_NAMES','APK_FRESH','UI_STUBS','LOCALES','P4_3_RATCHET','E2E_PC','E2E_AR','MUTATION','HEADSET','UI_SWEEP','REAL_TABLE') {
         $prev = 0
         $prop = $state.Counts.PSObject.Properties[$code]
         if ($prop) { $prev = [int]$prop.Value }

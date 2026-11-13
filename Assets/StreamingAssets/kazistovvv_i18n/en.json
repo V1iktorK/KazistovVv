@@ -818,7 +818,7 @@
     },
     {
       "key": "cmd.file.import.desc",
-      "text": "Load points and trajectories from a file (placeholder)"
+      "text": "Parse the latest scenario file in the data folder and apply it"
     },
     {
       "key": "cmd.gamepad.hud",

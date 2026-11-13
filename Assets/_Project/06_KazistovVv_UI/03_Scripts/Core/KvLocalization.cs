@@ -91,6 +91,45 @@ namespace KazistovVvUI
         /// <summary>Доступные языки (встроенные + найденные в StreamingAssets).</summary>
         public static IReadOnlyList<KvLangInfo> Languages { get { Ensure(); return langs; } }
 
+        /// <summary>
+        /// ЯЗЫКИ, КОТОРЫЕ ПРЕДЛАГАЮТСЯ ОПЕРАТОРУ В ВЫБОРЕ (красный список §7, 13.11.2026).
+        ///
+        /// ЧТО БЫЛО. Список настроек строился из <see cref="Languages"/> целиком: язык с пустым
+        /// каталогом был рядовым пунктом, выглядел рабочим и ничего не менял при выборе —
+        /// «кнопка без функционала», только в списке языков.
+        ///
+        /// ЧТО СТАЛО. Язык с нулём строк в выбор НЕ попадает: он не может ничего предложить,
+        /// а честнее его не показывать, чем показывать обещание. Пустой язык не исчезает из
+        /// <see cref="Languages"/> — он просто не предлагается, пока в него не придут строки
+        /// (на устройстве словари доезжают из пакета асинхронно).
+        /// </summary>
+        public static List<KvLangInfo> Offered()
+        {
+            Ensure();
+            return OfferedFrom(langs);
+        }
+
+        /// <summary>
+        /// ОТСЕВ ЯЗЫКОВ БЕЗ СТРОК — чистая функция (проверяется тестом на подложке, без
+        /// глобального состояния). Решение принимается по полю языка: оно обновляется при
+        /// КАЖДОЙ добавленной строке (`AddString`), поэтому в нём живёт ровно то число,
+        /// которое увидит оператор в подписи списка. Каталог в памяти при этом — источник
+        /// истины для текста, а поле для его счётчика: расхождение ловит тест
+        /// `LanguageStringCountStaysLiveWhenStringsArriveLate`.
+        /// </summary>
+        public static List<KvLangInfo> OfferedFrom(IReadOnlyList<KvLangInfo> all)
+        {
+            var result = new List<KvLangInfo>();
+            if (all == null) return result;
+            for (int i = 0; i < all.Count; i++)
+            {
+                KvLangInfo info = all[i];
+                if (info == null || info.strings <= 0) continue;
+                result.Add(info);
+            }
+            return result;
+        }
+
         /// <summary>Выбор оператора: код языка или «system».</summary>
         public static string PreferenceCode { get { Ensure(); return preference; } }
 
@@ -319,13 +358,18 @@ namespace KazistovVvUI
         public static string Cycle()
         {
             Ensure();
-            if (langs.Count == 0) return current;
+            // ЦИКЛ ИДЁТ ТОЛЬКО ПО ПРЕДЛАГАЕМЫМ ЯЗЫКАМ. Язык с пустым каталогом не может ничего
+            // показать, и «следующий язык» не должен уводить оператора в интерфейс без перевода
+            // (красный список §7: пункт без строк выглядит рабочим и ничего не меняет).
+            List<KvLangInfo> pool = Offered();
+            if (pool.Count == 0) pool = new List<KvLangInfo>(langs);
+            if (pool.Count == 0) return current;
             int index = 0;
-            for (int i = 0; i < langs.Count; i++)
-                if (string.Equals(langs[i].code, current, StringComparison.OrdinalIgnoreCase)) { index = i; break; }
-            index = (index + 1) % langs.Count;
-            SetLanguage(langs[index].code);
-            return langs[index].code;
+            for (int i = 0; i < pool.Count; i++)
+                if (string.Equals(pool[i].code, current, StringComparison.OrdinalIgnoreCase)) { index = i; break; }
+            index = (index + 1) % pool.Count;
+            SetLanguage(pool[index].code);
+            return pool[index].code;
         }
 
         /// <summary>
@@ -774,6 +818,15 @@ namespace KazistovVvUI
                 catalogs[code] = map;
             }
             map[key] = text ?? "";
+
+            // ЖИВОЙ СЧЁТЧИК ЯЗЫКА (красный список §7, 13.11.2026). Поле `strings` — это число,
+            // которое панель настроек показывает оператору в подписи списка языков (`· N`).
+            // Раньше оно заполнялось ОДИН раз, в `Ensure`, сразу после чтения с диска: на
+            // устройстве диска нет, словари доезжают из пакета асинхронно, и подписи оставались
+            // прежними — оператор видел «中文 · 0» у языка, у которого 535 строк. Теперь каждая
+            // добавленная строка обновляет счётчик, и подпись всегда равна каталогу.
+            KvLangInfo info = Find(code);
+            if (info != null) info.strings = map.Count;
         }
 
         private static KvLangInfo Find(string code)

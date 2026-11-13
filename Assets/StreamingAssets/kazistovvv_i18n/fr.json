@@ -818,7 +818,7 @@
     },
     {
       "key": "cmd.file.import.desc",
-      "text": "Charger des points et trajectoires depuis un fichier (réservé)"
+      "text": "Analyser le dernier fichier de scénario du dossier de données et l'appliquer"
     },
     {
       "key": "cmd.gamepad.hud",

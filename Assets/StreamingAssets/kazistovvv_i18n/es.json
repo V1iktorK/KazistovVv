@@ -818,7 +818,7 @@
     },
     {
       "key": "cmd.file.import.desc",
-      "text": "Cargar puntos y trayectorias desde un archivo (reserva)"
+      "text": "Analizar el último archivo de escenario de la carpeta de datos y aplicarlo"
     },
     {
       "key": "cmd.gamepad.hud",

@@ -818,7 +818,7 @@
     },
     {
       "key": "cmd.file.import.desc",
-      "text": "ファイルから点と軌道を読み込み（予定）"
+      "text": "データフォルダの最新シナリオファイルを解析して適用する"
     },
     {
       "key": "cmd.gamepad.hud",

@@ -852,8 +852,14 @@ namespace KazistovVvUI
 
         /// <summary>
         /// Список языков (ЭТАП 2): «Системный» + все языки словаря. Список берётся из
-        /// `KvLoc.Languages`, поэтому НОВЫЙ ЯЗЫК добавляется простым файлом
+        /// `KvLoc.Offered()`, поэтому НОВЫЙ ЯЗЫК добавляется простым файлом
         /// `StreamingAssets/kazistovvv_i18n/&lt;код&gt;.json` — он появится здесь сам.
+        ///
+        /// ЯЗЫК БЕЗ СТРОК НЕ ПОПАДАЕТ В СПИСОК (красный список §7, 13.11.2026): пять из семи
+        /// пунктов показывали `· 0` и, будучи выбранными, ничего не меняли — пункт без
+        /// перевода выглядел рабочим. Такой язык не предлагается, пока в него не придут строки;
+        /// число в подписи берётся из живого счётчика, а не из значения, снятого один раз при
+        /// старте (на устройстве словари доезжают из пакета асинхронно).
         /// </summary>
         private void BuildLanguageList()
         {
@@ -863,7 +869,7 @@ namespace KazistovVvUI
             codes.Add(KvLoc.SystemCode);
             labels.Add(KvLoc.T("settings.language.system", "Системный (как в ОС)"));
 
-            System.Collections.Generic.IReadOnlyList<KvLangInfo> all = KvLoc.Languages;
+            System.Collections.Generic.IReadOnlyList<KvLangInfo> all = KvLoc.Offered();
             for (int i = 0; i < all.Count; i++)
             {
                 if (all[i] == null) continue;
