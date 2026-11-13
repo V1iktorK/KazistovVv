@@ -314,6 +314,39 @@
 //   53) КЛАВИШИ «ВВОД» И «ОТМЕНА» ЭКРАНА ВВОДА (заказ D). Панель записывает ФАКТ нажатия
 //       (`KvXrGroupPanel.InputKeyNote` + счётчик `InputKeySeq`), обход выдаёт его вместо
 //       «нет изменений»: пустой ввод, отказ по границам, отмена названы своими словами;
+////
+//  ДОРАБОТКА ПО КОНТРОЛЬНОМУ ПРОГОНУ 13.11.2026 (отчёт ar 1311e: 446 элементов, 6 «без
+//  эффекта», 21 «исчез»; заказы A и B):
+//   54) ПУТИ ОБОЛОЧКИ ВОССТАНАВЛИВАЮТСЯ ШТАТНЫМ ПУТЁМ ПЕРЕД ПРОВЕРКОЙ (заказ A). 21 «исчез» —
+//       два класса, которые обход не умел открыть: (1) пункты СПИСКА ГРУППЫ ТУЛБАРА
+//       (`KvToolbarGroupLayer/KvGroupMenu/GM_*` + `KvGroupMenuBlocker` + ручка `Group_flat`):
+//       список пересобирается при каждом открытии (`RebuildRows` уничтожает строки чужой
+//       группы), а ручка `Group_flat` существует только в раскладке «5 в ряд»; (2) СТРОКИ
+//       ВЕРСТАКА (`KvWorkbenchWindow/Canvas/Window/Content/…`): содержимое живёт только на
+//       активной вкладке. Теперь до отказа путь ОТКРЫВАЕТСЯ: список — ручкой своей группы
+//       (`KvToolbar.EnsureGroupMenuOpen`), верстак — своим `Show` на вкладке, записанной при
+//       сборе, ручка — раскладкой, в которой её собрали (`KvSettings.ToolbarLayout` +
+//       пересборка оболочки); всё открытое обходом возвращается в `Restore`. Если открыть не
+//       удалось — элемент получает ЯВНУЮ причину
+//       `панель не открыта: <список группы/верстак/ручка> — <факт>` (`KvUiSweepShellNav`),
+//       а НЕ тихий «исчез»;
+//   55) ПЛЕЕР ЗАПИСИ МЕРЯЕТСЯ СВОИМИ ПРИЗНАКАМИ (заказ B1). Пять кнопок вкладки «Запись»
+//       (`● Записать/Стоп`, `▶ Проиграть/Пауза`, `■ Остановить`, `×0.25`, `×0.5`) дали «нет
+//       изменений»: обработчики НЕ заглушки (`FeatureHub.ToggleRecord`/`TogglePlayback` →
+//       `KvRecordingService`), но снимок не читает ни записи/воспроизведения/паузы, ни
+//       множителя скорости. Теперь эти признаки меряются узко и ТОЛЬКО для кнопок плеера
+//       (`KvUiSweepRecordPlayer`): состояние называется в эффекте («запись: начата»,
+//       «воспроизведение: идёт → пауза», «множитель скорости: ×1.00 → ×0.25»), отказ сервиса
+//       идёт СВОЕЙ строкой текстом самого сервиса (`KvRecordingService.Failed`), а два случая,
+//       когда обработчик МОЛЧА возвращает управление, получают причину по факту:
+//       «воспроизводить нечего: записей нет» и «останавливать нечего…»;
+//   56) ТУМБЛЕР «ПАНЕЛЬ ЛИМИТОВ СУСТАВОВ» МЕРЯЕТ ФАКТ, А НЕ НАСТРОЙКУ (заказ B2). Снимок читал
+//       только `KvSettings.ShowJointLimits`, а переключатель показывает и пишет ФАКТИЧЕСКОЕ
+//       состояние визуализатора (`Flow.Workspace.JointLimitsVisible`): настройка могла быть
+//       уже в целевом значении, а состояние менялось — и рабочий тумблер получал «нет
+//       изменений». Добавлен признак `LimitsShown` (и его возврат в `Restore`); если
+//       визуализатора в сцене вовсе нет — честная причина «панель лимитов не появится:
+//       визуализатор рабочей области в сцене отсутствует»;
 //
 //  ЧЕСТНАЯ ГРАНИЦА. Таймаут на элемент измеряется по ФАКТИЧЕСКОМУ времени: Unity не даёт прервать
 //  вызов, который уже выполняется в главном потоке, поэтому «завис навсегда» виден как обрыв файла
@@ -1090,8 +1123,15 @@ namespace KazistovVvDiagnostics
         public int StartTables;
         /// <summary>Сколько роботов видит стартовое меню.</summary>
         public int StartRobots;
-        /// <summary>Сколько групп тулбара свёрнуто (вкладка группы меняет именно это).</summary>
+        /// <summary>Свёрнутых групп тулбара (вкладка группы меняет именно их).</summary>
         public int ToolbarCollapsedGroups;
+        /// <summary>
+        /// ПАНЕЛЬ ЛИМИТОВ СУСТАВОВ ПОКАЗАНА — ФАКТИЧЕСКИ (`Flow.Workspace.JointLimitsVisible`),
+        /// а не по настройке `KvSettings.ShowJointLimits` (заказ B2). Переключатель в панели
+        /// настроек живёт именно этим состоянием: настройка и визуализатор расходятся, и по
+        /// одной настройке рабочий тумблер выглядел мёртвым.
+        /// </summary>
+        public int LimitsShown;
     }
 
     /// <summary>
@@ -1692,6 +1732,10 @@ namespace KazistovVvDiagnostics
             // выглядели бы мёртвыми.
             Append(sb, "зона достижимости", before.SetWorkspace, after.SetWorkspace);
             Append(sb, "ограничения суставов", before.SetJointLimits, after.SetJointLimits);
+            // ФАКТИЧЕСКОЕ СОСТОЯНИЕ ПАНЕЛИ ЛИМИТОВ (заказ B2): настройка не менялась, а
+            // кольца у суставов появлялись/исчезали — без этой строки рабочий тумблер
+            // получал «нет изменений».
+            Append(sb, "панель лимитов суставов", before.LimitsShown, after.LimitsShown);
             Append(sb, "панель метрик", before.SetMetrics, after.SetMetrics);
             Append(sb, "фонарик", before.SetFlashlight, after.SetFlashlight);
             Append(sb, "автообновление дерева", before.SetAutoTree, after.SetAutoTree);
@@ -2966,6 +3010,34 @@ namespace KazistovVvDiagnostics
             return false;
         }
 
+        // ------------------------------------ панель лимитов суставов (заказ B2)
+
+        /// <summary>
+        /// ПРИЧИНА ДЛЯ ТУМБЛЕРА «ПАНЕЛЬ ЛИМИТОВ СУСТАВОВ», КОГДА ПОКАЗЫВАТЬ НЕЧЕГО: визуализатор
+        /// рабочей области (`TrajectoryFlowController.Workspace`) в этой сцене отсутствует, то
+        /// есть тумблер физически не может показать ни колец, ни панели. Это ФАКТ сцены, а не
+        /// «кнопка не работает»: нажатие меняет только настройку `KvSettings`, которую оператор
+        /// здесь не видит. Если визуализатор есть — состояние меняется на глазах, и причины нет.
+        /// </summary>
+        public const string LimitsNoVisualizerReason =
+            "панель лимитов не появится: визуализатор рабочей области в сцене отсутствует";
+
+        /// <summary>Путь ведёт к тумблеру «Панель лимитов суставов» в панели настроек?</summary>
+        public static bool IsLimitsSwitchPath(string path)
+        {
+            return !string.IsNullOrEmpty(path) &&
+                   path.IndexOf("Switch_Панель лимитов суставов", StringComparison.Ordinal) >= 0;
+        }
+
+        /// <summary>
+        /// ПРИЧИНА ДЛЯ ТУМБЛЕРА ЛИМИТОВ ПО ФАКТУ СЦЕНЫ. Правило узкое: только путь этого
+        /// тумблера и только когда визуализатора нет; чужим переключателям причина не выдаётся.
+        /// </summary>
+        public static string LimitsSwitchReasonFor(string path, bool visualizerPresent)
+        {
+            return IsLimitsSwitchPath(path) && !visualizerPresent ? LimitsNoVisualizerReason : "";
+        }
+
         /// <summary>
         /// ПРИЧИНА ДЛЯ ЭЛЕМЕНТА, КОТОРЫЙ ПРОГОН СОЗНАТЕЛЬНО НЕ НАЖАЛ (`""` не бывает никогда).
         ///
@@ -2989,6 +3061,183 @@ namespace KazistovVvDiagnostics
             string rule = ReasonFor(path);
             if (rule.Length > 0) return rule;
             return NotPressedReason;
+        }
+    }
+
+    // ============================================ ПЛЕЕР ЗАПИСИ В ОКНЕ ФУНКЦИЙ (заказ B1)
+
+    /// <summary>
+    /// ПЛЕЕР ЗАПИСИ: УЗКИЕ ПРИЗНАКИ И ЧЕСТНЫЕ ПОДПИСИ (заказ B1).
+    ///
+    /// ОТКУДА (планшет, отчёт Logs/uisweep_reports/_ui_sweep_ar_1311e.txt): пять кнопок вкладки
+    /// «ЗАПИСЬ И ВОСПРОИЗВЕДЕНИЕ ТРАЕКТОРИИ» получили `effect=нет изменений` —
+    /// `Btn0«● Записать / Стоп (R)»`, `Btn1«▶ Проиграть / Пауза (P)»`, `Btn2«■ Остановить»`,
+    /// `Btn0«×0.25»`, `Btn1«×0.5»`.
+    ///
+    /// ЗАГЛУШКИ НЕТ. Обработчики настоящие: `KvFeatureWindow.BuildRecordTab` зовёт
+    /// `FeatureHub.ToggleRecord`/`TogglePlayback`/`KvRecordingService.StopAll`, а множитель
+    /// скорости пишет и в `hub.playbackSpeed`, и в `KvRecordingService.SpeedMultiplier`.
+    /// Причина «нет изменений» — в ИЗМЕРЕНИИ: общий снимок (`KvUiSweepSnapshot`) признаков
+    /// записи/воспроизведения/паузы/множителя не читает, поэтому работающая кнопка выглядела
+    /// мёртвой. Это дефект метрики, а не кнопки.
+    ///
+    /// ЧТО СТАЛО. Здесь — УЗКИЕ признаки (читаются ТОЛЬКО для кнопок плеера, чтобы фоновая
+    /// запись не давала эффект посторонним элементам) и их честные подписи. Отказы сервиса
+    /// (`KvRecordingService.Failed`: «запись невозможна: робот потока не готов», «в записи
+    /// меньше двух сэмплов»…) приходят ОТ СЕРВИСА своим текстом и здесь не выдумываются;
+    /// правило `NothingToDoReason` покрывает только случаи, когда обработчик МОЛЧА возвращает
+    /// управление: воспроизводить нечего и останавливать нечего.
+    /// </summary>
+    public static class KvUiSweepRecordPlayer
+    {
+        /// <summary>Что делает кнопка (по подписи внутри окна функций).</summary>
+        public enum Kind
+        {
+            /// <summary>Не кнопка плеера — правило не действует.</summary>
+            None = 0,
+            /// <summary>«● Записать / Стоп (R)» — включает/выключает запись.</summary>
+            Record = 1,
+            /// <summary>«▶ Проиграть / Пауза (P)» — играет/ставит на паузу.</summary>
+            Play = 2,
+            /// <summary>«■ Остановить» — останавливает и запись, и воспроизведение.</summary>
+            Stop = 3,
+            /// <summary>«×0.25»…«×4» — множитель скорости воспроизведения.</summary>
+            Speed = 4,
+            /// <summary>«Проиграть» у конкретной записи в списке записей.</summary>
+            PlayRecord = 5
+        }
+
+        /// <summary>СОСТОЯНИЕ ПЛЕЕРА В МОМЕНТ ИЗМЕРЕНИЯ (то, что меняют кнопки).</summary>
+        public struct State
+        {
+            /// <summary>Идёт запись.</summary>
+            public bool Recording;
+            /// <summary>Идёт воспроизведение.</summary>
+            public bool Playing;
+            /// <summary>Воспроизведение поставлено на паузу.</summary>
+            public bool Paused;
+            /// <summary>Множитель скорости воспроизведения (1 — как записано).</summary>
+            public float Speed;
+        }
+
+        /// <summary>Причина: воспроизводить нечего — записей на диске нет.</summary>
+        public const string NoRecordsReason = "воспроизводить нечего: записей нет";
+
+        /// <summary>Причина: останавливать нечего — запись не идёт и воспроизведение не запущено.</summary>
+        public const string NothingToStopReason =
+            "останавливать нечего: запись не идёт и воспроизведение не запущено";
+
+        /// <summary>
+        /// КНОПКА ПЛЕЕРА? Правило узкое: окно функций (`KvFeatureWindow`) И подпись одной из
+        /// кнопок плеера. Остальные кнопки («Выбрать», «Удалить», «Показать фантомом») и
+        /// кнопки тулбара проверяются общим снимком — своё правило им не нужно.
+        /// </summary>
+        public static Kind KindOf(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return Kind.None;
+            if (path.IndexOf("KvFeatureWindow", StringComparison.Ordinal) < 0) return Kind.None;
+
+            string label = LabelOf(path);
+            if (label.Length == 0) return Kind.None;
+            if (label.StartsWith("● Записать", StringComparison.Ordinal)) return Kind.Record;
+            if (label.StartsWith("▶ Проиграть", StringComparison.Ordinal)) return Kind.Play;
+            if (label == "■ Остановить") return Kind.Stop;
+            if (label == "Проиграть") return Kind.PlayRecord;
+            if (label.StartsWith("×", StringComparison.Ordinal)) return Kind.Speed;
+            return Kind.None;
+        }
+
+        /// <summary>Кнопка плеера? (`KindOf` != `None`).</summary>
+        public static bool IsPlayerPath(string path)
+        {
+            return KindOf(path) != Kind.None;
+        }
+
+        /// <summary>СОСТОЯНИЕ С ЖИВОГО ХАБА (хаба/сервиса нет — состояние «простой»).</summary>
+        public static State Capture()
+        {
+            var state = new State { Speed = 1f };
+            FeatureHub hub = FeatureHub.Instance;
+            if (hub == null) return state;
+            state.Speed = hub.playbackSpeed;
+            KvRecordingService service = hub.Recording;
+            if (service == null) return state;
+            state.Recording = service.IsRecording;
+            state.Playing = service.IsPlaying;
+            state.Paused = service.Paused;
+            return state;
+        }
+
+        /// <summary>Сервис записи живого хаба (`null` — хаба или сервиса нет).</summary>
+        public static KvRecordingService ServiceOf()
+        {
+            FeatureHub hub = FeatureHub.Instance;
+            return hub != null ? hub.Recording : null;
+        }
+
+        /// <summary>
+        /// ЧТО ИЗМЕНИЛОСЬ В ПЛЕЕРЕ — строка эффекта (`""` — ничего). Признаки узкие и только
+        /// только про сам плеер: запись/воспроизведение/пауза и множитель скорости. Фоновое
+        /// изменение (договорённость воспроизведения по таймеру) сюда не попадает — иначе
+        /// посторонняя кнопка получила бы чужой эффект.
+        /// </summary>
+        public static string EffectFor(State before, State after)
+        {
+            var parts = new List<string>(3);
+
+            if (before.Recording != after.Recording)
+                parts.Add("запись: " + (after.Recording ? "начата" : "остановлена"));
+
+            if (before.Playing != after.Playing || before.Paused != after.Paused)
+                parts.Add("воспроизведение: " + PlaybackLabel(before) + " → " + PlaybackLabel(after));
+
+            if (Mathf.Abs(before.Speed - after.Speed) > 0.0001f)
+                parts.Add("множитель скорости: ×" +
+                          before.Speed.ToString("0.00", CultureInfo.InvariantCulture) + " → ×" +
+                          after.Speed.ToString("0.00", CultureInfo.InvariantCulture));
+
+            if (parts.Count == 0) return "";
+            var sb = new StringBuilder(64);
+            for (int i = 0; i < parts.Count; i++)
+            {
+                if (i > 0) sb.Append("; ");
+                sb.Append(parts[i]);
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// ПРИЧИНА, ПОЧЕМУ КНОПКА ЗАКОННО НЕЧЕГО НЕ СДЕЛАЛА (`""` — причины нет: пусть
+        /// работает, а отказ назовёт сам сервис). Покрывает только МОЛЧАЩИЕ обработчики:
+        /// `TogglePlayback` без единой записи пишет в журнал и выходит, `StopAll` в простое
+        /// — тоже. Состояние считается ДО нажатия: после нажатия «останавливать нечего»
+        /// вычёркивало бы удачную остановку.
+        /// </summary>
+        public static string NothingToDoReason(string path, State state, bool hasRecords)
+        {
+            Kind kind = KindOf(path);
+            if (kind == Kind.Play || kind == Kind.PlayRecord)
+                return (!state.Playing && !hasRecords) ? NoRecordsReason : "";
+            if (kind == Kind.Stop)
+                return (!state.Recording && !state.Playing) ? NothingToStopReason : "";
+            return "";
+        }
+
+        /// <summary>Подпись воспроизведения для строки эффекта.</summary>
+        private static string PlaybackLabel(State state)
+        {
+            if (!state.Playing) return "остановлено";
+            return state.Paused ? "пауза" : "идёт";
+        }
+
+        /// <summary>Подпись кнопки между «…» в конце пути (`""` — подписи нет).</summary>
+        private static string LabelOf(string path)
+        {
+            int open = path.LastIndexOf('«');
+            if (open < 0) return "";
+            int close = path.IndexOf('»', open);
+            if (close < 0) return "";
+            return path.Substring(open + 1, close - open - 1);
         }
     }
 
@@ -3088,6 +3337,164 @@ namespace KazistovVvDiagnostics
         public static bool NeedsSettingsTabRestore(int candidateTab, int currentTab)
         {
             return candidateTab >= 0 && currentTab >= 0 && candidateTab != currentTab;
+        }
+    }
+
+    // ==================================== ПУТИ ОБОЛОЧКИ И ИХ ЧЕСТНЫЕ ПРИЧИНЫ (заказ A)
+
+    /// <summary>
+    /// ЭЛЕМЕНТЫ ОБОЛОЧКИ, КОТОРЫЕ ВОССТАНАВЛИВАЮТСЯ ШТАТНЫМ ПУТЁМ ПЕРЕД ПРОВЕРКОЙ (заказ A).
+    ///
+    /// ОТКУДА (планшет, отчёт Logs/uisweep_reports/_ui_sweep_ar_1311e.txt): 21 «исчез (путь не
+    /// найден)» из 446. Все они — три класса, которые обход не умел вернуть:
+    ///   1) СПИСОК ГРУППЫ ТУЛБАРА (`KvToolbarGroupLayer/KvGroupMenu/GM_*`, `KvGroupMenuBlocker`):
+    ///      `KvToolbarGroupMenu.RebuildRows` уничтожает строки чужой группы при каждом
+    ///      открытии, а панель пересобирается целиком при смене раскладки/компактности —
+    ///      собранные раньше строки физически не существуют;
+    ///   2) РУЧКА ГРУППЫ ТУЛБАРА (`KvToolbar/Groups/Group_*`): ручка `Group_flat` существует
+    ///      ТОЛЬКО в раскладке «5 в ряд», и прогон сам меняет раскладку строкой настроек;
+    ///   3) СТРОКИ ВЕРСТАКА (`KvWorkbenchWindow/Canvas/Window/Content/…`): содержимое окна
+    ///      живёт только на активной вкладке и пересобирается при её смене.
+    ///
+    /// ЧТО СТАЛО. Здесь — ЧИСТЫЕ опознаватели этих путей и построители честной причины
+    /// `панель не открыта: <какая панель> — <факт>`. Само открытие (ручка группы / `Show`
+    /// верстака / раскладка тулбара) делает рантайм обхода; если открыть не удалось, элемент
+    /// получает ЭТУ причину — исключение отчёта, а не тихий «исчез» и не «без эффекта».
+    /// </summary>
+    public static class KvUiSweepShellNav
+    {
+        /// <summary>Служебная строка сворачивания списка (`GM_Action`) — она не команда.</summary>
+        public const string ActionRowName = "Action";
+
+        /// <summary>Путь ведёт в СПИСОК ГРУППЫ ТУЛБАРА (строки `GM_*` или блокиратор).</summary>
+        public static bool IsGroupMenuPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            return path.IndexOf("/KvGroupMenu/", StringComparison.Ordinal) >= 0 ||
+                   path.IndexOf("/KvGroupMenuBlocker", StringComparison.Ordinal) >= 0;
+        }
+
+        /// <summary>Путь ведёт в ОКНО ВЕРСТАКА («Верстак: постобработка траекторий»).</summary>
+        public static bool IsWorkbenchPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            return path.IndexOf("/KvWorkbenchWindow/", StringComparison.Ordinal) >= 0;
+        }
+
+        /// <summary>Путь ведёт к РУЧКЕ ГРУППЫ ТУЛБАРА (`…/KvToolbar/Groups/Group_*`).</summary>
+        public static bool IsToolbarHandlePath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            return path.IndexOf("/KvToolbar/Groups/Group_", StringComparison.Ordinal) >= 0;
+        }
+
+        /// <summary>Путь относится к одному из трёх классов оболочки выше.</summary>
+        public static bool IsShellPath(string path)
+        {
+            return IsGroupMenuPath(path) || IsWorkbenchPath(path) || IsToolbarHandlePath(path);
+        }
+
+        /// <summary>
+        /// ID КОМАНДЫ У СТРОКИ СПИСКА (`…/KvGroupMenu/GM_eta.toggle«…»` → `eta.toggle`).
+        /// `""` — не строка команды: блокиратор и служебная `GM_Action`.
+        /// </summary>
+        public static string RowCommandId(string path)
+        {
+            if (!IsGroupMenuPath(path)) return "";
+            const string marker = "/KvGroupMenu/GM_";
+            int at = path.IndexOf(marker, StringComparison.Ordinal);
+            if (at < 0) return "";
+            string rest = path.Substring(at + marker.Length);
+            int quote = rest.IndexOf('«');
+            if (quote >= 0) rest = rest.Substring(0, quote);
+            int hash = rest.IndexOf('#');
+            if (hash >= 0) rest = rest.Substring(0, hash);
+            if (rest.Length == 0 || rest == ActionRowName) return "";
+            return rest;
+        }
+
+        /// <summary>
+        /// ID ГРУППЫ, ЧЬЮ РУЧКУ НАДО ОТКРЫТЬ, ЧТОБЫ СТРОКА ПОЯВИЛАСЬ СНОВА
+        /// (`""` — группа неизвестна: у блокиратора и `GM_Action` команды нет, их группа
+        /// берётся из состояния открытого списка при сборе элемента).
+        /// </summary>
+        public static string GroupIdOfPath(string path)
+        {
+            string command = RowCommandId(path);
+            if (command.Length == 0) return "";
+            KvToolbarGroup[] groups = KvToolbarGroups.All;
+            int index = KvToolbarGroups.GroupOf(command);
+            if (index < 0 || index >= groups.Length) return "";
+            return groups[index].Id;
+        }
+
+        /// <summary>Id ручки группы из её пути (`…/Groups/Group_flat` → `flat`).</summary>
+        public static string HandleIdOfPath(string path)
+        {
+            if (!IsToolbarHandlePath(path)) return "";
+            const string marker = "/KvToolbar/Groups/Group_";
+            int at = path.IndexOf(marker, StringComparison.Ordinal);
+            if (at < 0) return "";
+            string rest = path.Substring(at + marker.Length);
+            int quote = rest.IndexOf('«');
+            if (quote >= 0) rest = rest.Substring(0, quote);
+            int hash = rest.IndexOf('#');
+            if (hash >= 0) rest = rest.Substring(0, hash);
+            return rest;
+        }
+
+        /// <summary>
+        /// НАЗВАНИЕ ГРУППЫ ДЛЯ ПРИЧИНЫ (`misc` → «Прочее», `flat` → «Все команды»).
+        /// `""` — группы нет в каталоге (и это честно: название в причине не выдумывается).
+        /// </summary>
+        public static string TitleOfGroup(string groupId)
+        {
+            if (string.IsNullOrEmpty(groupId)) return "";
+            if (groupId == KvToolbarGroups.FlatGroupId) return "Все команды";
+            KvToolbarGroup group = KvToolbarGroups.Find(groupId);
+            return group != null ? group.Title : "";
+        }
+
+        /// <summary>
+        /// ДЕТАЛЬ ДЛЯ РУЧКИ ТУЛБАРА: в КАКОЙ раскладке её собрали и какая раскладка сейчас.
+        /// Раскладка — единственный факт, из-за которого ручка может не существовать
+        /// (`Group_flat` есть только в «5 в ряд»), поэтому именно она и называется.
+        /// </summary>
+        public static string LayoutDetail(int expectedLayout, int currentLayout)
+        {
+            return "ручка собрана при раскладке тулбара " +
+                   expectedLayout.ToString(CultureInfo.InvariantCulture) + ", сейчас " +
+                   currentLayout.ToString(CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// ЧЕСТНАЯ ПРИЧИНА «ПАНЕЛЬ НЕ ОТКРЫЛАСЬ» ДЛЯ ЭЛЕМЕНТА ОБОЛОЧКИ. Называет ИМЕННО свою
+        /// панель (список группы / верстак / ручку) и ФАКТ, который обходу сообщили; тихого
+        /// «исчез» здесь не бывает — «исчез» означал бы «путь не найден» и ничего не говорил
+        /// о том, пытался ли обход открыть панель.
+        /// </summary>
+        public static string NotOpenReasonFor(string path, string detail)
+        {
+            if (IsWorkbenchPath(path))
+                return KvUiSweepPanelNav.NotOpenReason("верстак", detail);
+
+            if (IsToolbarHandlePath(path))
+            {
+                string handle = HandleIdOfPath(path);
+                return KvUiSweepPanelNav.NotOpenReason(
+                    "ручка группы тулбара «" + handle + "»", detail);
+            }
+
+            if (IsGroupMenuPath(path))
+            {
+                string title = TitleOfGroup(GroupIdOfPath(path));
+                string level = title.Length > 0
+                    ? "список группы тулбара «" + title + "»"
+                    : "список группы тулбара";
+                return KvUiSweepPanelNav.NotOpenReason(level, detail);
+            }
+
+            return KvUiSweepPanelNav.NotOpenReason("", detail);
         }
     }
 
@@ -3762,7 +4169,18 @@ namespace KazistovVvDiagnostics
                                 continue;
                             }
                         }
-                        else
+                        else if (KvUiSweepShellNav.IsShellPath(c.Path))
+                        {
+                            // ОБОЛОЧКА (заказ A): список группы тулбара / окно верстака /
+                            // ручка тулбара открываются ШТАТНЫМ ПУТЁМ, затем путь ищется
+                            // заново. Не вышло — состояние возвращается сразу, а элемент уходит
+                            // во второй проход, который назовёт «панель не открыта» с фактом.
+                            yield return OpenShellPanelStep(c);
+                            found = Locate(c);
+                            if (!found) RestoreShellState(c);
+                        }
+
+                        if (!found)
                         {
                             // ОТКЛАДЫВАЕМ: путь может снова появиться к концу прогона (AR-интерфейс
                             // перестраивается). Второй проход восстановит экран ЕЩЁ РАЗ и либо
@@ -3892,6 +4310,17 @@ namespace KazistovVvDiagnostics
             bool inputKeyCandidate = KvUiSweepExemptions.IsInputKeyPath(c.Path);
             int inputKeyBefore = inputKeyCandidate ? InputKeySeqOf(c) : 0;
 
+            // ПЛЕЕР ЗАПИСИ (заказ B1): состояние ДО нажатия читается ЗДЕСЬ, как и глазик и
+            // клавиши ввода, — состояние ПОСЛЕ вычёркивало бы удачное нажатие. Признаки узкие
+            // (`KvUiSweepRecordPlayer`) и меряются только для кнопок плеера, чтобы фоновая
+            // запись не давала эффект посторонним элементам.
+            bool recordPlayer = KvUiSweepRecordPlayer.IsPlayerPath(c.Path);
+            KvUiSweepRecordPlayer.State recordBefore = recordPlayer
+                ? KvUiSweepRecordPlayer.Capture()
+                : new KvUiSweepRecordPlayer.State();
+            bool recordHasRecords = recordPlayer && RecordStoreHasRecords();
+            string recordFail = "";
+
             float t0 = Time.realtimeSinceStartup;
 
             // ОПАСНЫЕ ЭЛЕМЕНТЫ НЕ НАЖИМАЕМ: «Выход из приложения» завершает прогон раньше
@@ -3909,6 +4338,16 @@ namespace KazistovVvDiagnostics
                 // эта строка останется последней в журнале и в файле отчёта — по ней виден виновник.
                 pressStarted = true;
                 Line(run.BeginPress(c.Path, c.Kind, index, total));
+
+                // ОТКАЗЫ ПЛЕЕРА ЗАПИСИ — ТЕКСТОМ САМОГО СЕРВИСА (заказ B1).
+                // `KvRecordingService` отказывает СВОИМИ словами («запись невозможна: робот
+                // потока не готов», «в записи меньше двух сэмплов»…), и эти слова — единственная
+                // честная причина отказа: гадать о предусловиях обход не станет. Слушатель
+                // вешается ТОЛЬКО на кнопки плеера и снимается всегда (`finally`).
+                KvRecordingService recordService =
+                    recordPlayer ? KvUiSweepRecordPlayer.ServiceOf() : null;
+                Action<string> onRecordFail = delegate (string message) { recordFail = message; };
+                if (recordService != null) recordService.Failed += onRecordFail;
                 try
                 {
                     method = Press(c);
@@ -3917,6 +4356,10 @@ namespace KazistovVvDiagnostics
                 {
                     method = "исключение " + e.GetType().Name;
                     Line("[KvUiSweep] ОШИБКА нажатия «" + c.Path + "»: " + e.GetType().Name + ": " + e.Message);
+                }
+                finally
+                {
+                    if (recordService != null) recordService.Failed -= onRecordFail;
                 }
             }
 
@@ -3967,6 +4410,18 @@ namespace KazistovVvDiagnostics
                     effect = effect.Length > 0 ? effect + "; " + eye : eye;
             }
 
+            // ЭФФЕКТ ПЛЕЕРА ЗАПИСИ (заказ B1): запись/воспроизведение/пауза и множитель скорости.
+            // Общий снимок этих признаков не читает, поэтому работающая кнопка «● Записать»
+            // выглядела мёртвой (`effect=нет изменений` в отчёте 13.11e). Здесь — только то,
+            // что изменилось в самом плеере; отказы сервиса добавляются к эффекту отдельно ниже.
+            if (recordPlayer)
+            {
+                KvUiSweepRecordPlayer.State recordAfter = KvUiSweepRecordPlayer.Capture();
+                string playerEffect = KvUiSweepRecordPlayer.EffectFor(recordBefore, recordAfter);
+                if (playerEffect.Length > 0)
+                    effect = effect.Length > 0 ? effect + "; " + playerEffect : playerEffect;
+            }
+
             // ЧТО ИЗМЕНИЛОСЬ НА ПАНЕЛИ ШЛЕМА — запоминаем ДО возврата состояния: после `Restore`
             // панель уже на базовом уровне, и раскрывать следующий уровень было бы не из чего.
             if (c.IsPanelIcon && c.Panel != null)
@@ -4001,6 +4456,40 @@ namespace KazistovVvDiagnostics
             // `GateButton«РАЗРЕШИТЬ КАМЕРУ»`).
             if (!mayPress && string.IsNullOrEmpty(element.ExemptReason))
                 element.ExemptReason = KvUiSweepExemptions.UnpressedReasonFor(c.Path, c.ProjectOwned);
+
+            // ЧЕСТНАЯ ПРИЧИНА ВМЕСТО «нет изменений» (заказ B1). Эффекта нет — значит, нажатие
+            // законно ничего не изменило, и это обязано быть названо фактом: либо САМ сервис
+            // отказал (текст `KvRecordingService.Failed`), либо обработчик молча вернул
+            // управление («записей нет», «останавливать нечего»), либо визуализатора, которого
+            // ждёт тумблер, в сцене нет. `Ok` НЕ меняется: это исключение, а не «сработало».
+            // ГРАНИЦА: если причину уже дал ОБЩИЙ разбор («недоступен оператору», «вкладка
+            // уже выбрана»…), она точнее — своя причина его не подменяет, иначе выключенная
+            // кнопка получила бы объяснение про «нечего останавливать», хотя её и не нажали.
+            if (mayPress && string.IsNullOrEmpty(effect) && string.IsNullOrEmpty(element.ExemptReason))
+            {
+                string honest = "";
+                if (recordPlayer)
+                {
+                    honest = recordFail.Length > 0
+                        ? "отказ плеера записи: " + recordFail
+                        : KvUiSweepRecordPlayer.NothingToDoReason(c.Path, recordBefore, recordHasRecords);
+                }
+                if (honest.Length == 0 && KvUiSweepExemptions.IsLimitsSwitchPath(c.Path))
+                {
+                    honest = KvUiSweepExemptions.LimitsSwitchReasonFor(c.Path, LimitsVisualizerPresent());
+                }
+                if (honest.Length > 0)
+                {
+                    if (string.IsNullOrEmpty(element.ExemptReason)) element.ExemptReason = honest;
+                    element.Effect = honest;
+                }
+            }
+            else if (recordPlayer && recordFail.Length > 0 && !string.IsNullOrEmpty(effect))
+            {
+                // СОСТОЯНИЕ ИЗМЕНИЛОСЬ, НО СЕРВИС ОТКАЗАЛ (например, запись остановлена как
+                // слишком короткая): и то, и другое — правда, и в отчёте обязаны быть оба.
+                element.Effect = effect + "; отказ плеера записи: " + recordFail;
+            }
 
             // ЧЕСТНАЯ СТРОКА ЭФФЕКТА ВМЕСТО «нет изменений» (дефекты B1/B2, отчёт 13.11.2026).
             // Пустой эффект печатается как `effect=нет изменений` — «нажал и ничего не изменилось».
@@ -4523,6 +5012,16 @@ namespace KazistovVvDiagnostics
                 // экране (`Screen_Close`), — это не найденный элемент, а нажатие не туда.
                 bool located = Locate(rc) && PanelLevelMatches(rc);
                 if (!located) located = LocateShortened(rc) && PanelLevelMatches(rc);
+
+                // ОБОЛОЧКА (заказ A): список группы / верстак / ручка тулбара открываются
+                // ШТАТНЫМ ПУТЁМ ДО всякого отказа — иначе рабочие строки списка и верстака
+                // получают тихий «исчез» (их путей в закрытой панели просто не существует).
+                if (!located && KvUiSweepShellNav.IsShellPath(rc.Path))
+                {
+                    yield return OpenShellPanelStep(rc);
+                    located = Locate(rc) && PanelLevelMatches(rc);
+                }
+
                 if (!located)
                 {
                     // ЭКРАН ПАНЕЛИ НЕ ВОССТАНОВИЛСЯ — ЯВНАЯ ПРИЧИНА с именем экрана и деталью
@@ -4550,6 +5049,18 @@ namespace KazistovVvDiagnostics
                             Line("[KvUiSweep] ВТОРОЙ ПРОХОД: " + rc.Path + " — панель не открыта");
                             continue;
                         }
+                    }
+
+                    // ОБОЛОЧКА (заказ A): попытка открыть УЖЕ была — называем, что именно не
+                    // открылось. Это исключение отчёта («панель не открыта» с фактом), а не
+                    // «исчез»: «исчез» означал бы «путь не найден» и скрыл бы попытку обхода.
+                    if (KvUiSweepShellNav.IsShellPath(rc.Path))
+                    {
+                        RestoreShellState(rc);
+                        notOpen++;
+                        RecordShellNotOpen(rc);
+                        Line("[KvUiSweep] ВТОРОЙ ПРОХОД: " + rc.Path + " — панель не открыта");
+                        continue;
                     }
 
                     notFound++;
@@ -5214,6 +5725,58 @@ namespace KazistovVvDiagnostics
                 }
             }
 
+            // 2b) СПИСОК ГРУППЫ ТУЛБАРА И ОКНО ВЕРСТАКА (заказ A). Их содержимое существует
+            //     ТОЛЬКО пока панель открыта: `RebuildRows` уничтожает строки чужой группы, а
+            //     верстак пересобирает `Content` под активную вкладку. ШТATНЫЙ ПУТЬ — ровно то,
+            //     что делает оператор: ручка группы (`EnsureGroupMenuOpen`) и `Show` окна на
+            //     вкладке, записанной при сборе. Панель открывается и проверяется ФАКТОМ
+            //     (`TopInactiveAncestor == null`); если не вышло — честная «скрытая панель»
+            //     с путём ворот, а не молчаливое «исчез».
+            if (gate != null &&
+                (KvUiSweepShellNav.IsGroupMenuPath(c.Path) || KvUiSweepShellNav.IsWorkbenchPath(c.Path)))
+            {
+                if (KvUiSweepShellNav.IsGroupMenuPath(c.Path))
+                {
+                    KazistovVvUIManager shellUi = KazistovVvUIManager.Instance;
+                    KvToolbar toolbar = shellUi != null ? shellUi.Toolbar : null;
+                    if (toolbar == null)
+                    {
+                        detail = "тулбара в оболочке нет";
+                        return PrepResult.HiddenPanel;
+                    }
+                    if (c.GroupMenuBefore == null)
+                        c.GroupMenuBefore = toolbar.GroupMenuOpen ? toolbar.RowsGroupId : "";
+                    string groupId = c.GroupMenuId.Length > 0
+                        ? c.GroupMenuId
+                        : KvUiSweepShellNav.GroupIdOfPath(c.Path);
+                    toolbar.EnsureGroupMenuOpen(groupId);
+                    if (TopInactiveAncestor(target.gameObject) == null)
+                    {
+                        c.PreparedBy = "список группы тулбара";
+                        return PrepResult.Ready;
+                    }
+                }
+                else
+                {
+                    KvWorkbenchWindow workbench = KvWorkbenchWindow.Instance;
+                    if (workbench == null)
+                    {
+                        detail = "окно верстака в сцене нет";
+                        return PrepResult.HiddenPanel;
+                    }
+                    if (!workbench.Visible) c.OpenedWorkbench = true;
+                    string tab = c.WorkbenchTab.Length > 0 ? c.WorkbenchTab : workbench.ActiveKey;
+                    workbench.Show(tab);
+                    if (TopInactiveAncestor(target.gameObject) == null)
+                    {
+                        c.PreparedBy = "окно верстака (вкладка «" + workbench.ActiveKey + "»)";
+                        return PrepResult.Ready;
+                    }
+                }
+                detail = PathOf(gate);
+                return PrepResult.HiddenPanel;
+            }
+
             // 3) ОСТАЛЬНОЕ — СКРЫТАЯ ПАНЕЛЬ. СИЛОЙ НЕ ВКЛЮЧАЕМ (см. `MayActivate`): включённая
             // силой панель не перестроена под текущее состояние, и её кнопки «нажимаются»
             // впустую — так и появились ложные «нет изменений» у вкладок панели команд AR.
@@ -5322,6 +5885,95 @@ namespace KazistovVvDiagnostics
         }
 
         /// <summary>
+        /// ОТКРЫТЬ ПАНЕЛЬ ОБОЛОЧКИ ШТАТНЫМ ПУТЁМ ПЕРЕД ПОИСКОМ (заказ A, отчёт 13.11e: 21
+        /// «исчез (путь не найден)»). Три класса и три штатных входа, ровно те же, что жмёт
+        /// оператор:
+        ///   • СПИСОК ГРУППЫ ТУЛБАРА — ручкой своей группы (`KvToolbar.EnsureGroupMenuOpen`);
+        ///     строки списка пересобираются при каждом открытии, без этого собранные раньше
+        ///     пути физически не существуют;
+        ///   • ОКНО ВЕРСТАКА — своим `Show` на вкладке, записанной при сборе (содержимое окна
+        ///     живёт только на активной вкладке);
+        ///   • РУЧКА ГРУППЫ ТУЛБАРА — раскладкой, в которой её собрали (`Group_flat` есть
+        ///     только в «5 вряд»): настройка выставляется и оболочка пересобирается тем же
+        ///     путём, что и строка настроек «Раскладка тулбара».
+        /// Кадры на пересборку обязательны: путь ищется по НОВОЙ иерархии. Факт неудачи
+        /// запоминается в `c.RestoreFail` — его назовёт `ShellNotOpenDetail`.
+        /// </summary>
+        private IEnumerator OpenShellPanelStep(Candidate c)
+        {
+            KazistovVvUIManager ui = KazistovVvUIManager.Instance;
+
+            if (KvUiSweepShellNav.IsToolbarHandlePath(c.Path))
+            {
+                if (ui == null || ui.Toolbar == null)
+                {
+                    c.RestoreFail = "тулбара в оболочке нет";
+                    yield break;
+                }
+                if (c.ToolbarLayout < 0)
+                {
+                    c.RestoreFail = "раскладка тулбара при сборе неизвестна";
+                    yield break;
+                }
+                if (ui.Toolbar.LayoutMode != c.ToolbarLayout)
+                {
+                    if (c.ToolbarLayoutBefore < 0) c.ToolbarLayoutBefore = KvSettings.ToolbarLayout;
+                    if (KvSettings.ToolbarLayout != c.ToolbarLayout)
+                        KvSettings.ToolbarLayout = c.ToolbarLayout;
+                    ui.RebuildShell();
+                    yield return null;
+                    yield return null;
+                }
+                c.PreparedBy = "раскладка тулбара " +
+                               c.ToolbarLayout.ToString(CultureInfo.InvariantCulture);
+                yield break;
+            }
+
+            if (KvUiSweepShellNav.IsWorkbenchPath(c.Path))
+            {
+                KvWorkbenchWindow workbench = KvWorkbenchWindow.Instance;
+                if (workbench == null)
+                {
+                    c.RestoreFail = "окно верстака в сцене нет";
+                    yield break;
+                }
+                if (!workbench.Visible) c.OpenedWorkbench = true;
+                string tab = c.WorkbenchTab.Length > 0 ? c.WorkbenchTab : workbench.ActiveKey;
+                workbench.Show(tab);
+                yield return null;
+                yield return null;
+                if (!workbench.Visible)
+                    c.RestoreFail = "окно верстака не открылось (вкладка «" + tab + "»)";
+                else
+                    c.PreparedBy = "окно верстака (вкладка «" + workbench.ActiveKey + "»)";
+                yield break;
+            }
+
+            // СПИСОК ГРУППЫ ТУЛБАРА.
+            if (ui == null || ui.Toolbar == null)
+            {
+                c.RestoreFail = "тулбара в оболочке нет";
+                yield break;
+            }
+            if (c.GroupMenuBefore == null)
+                c.GroupMenuBefore = ui.Toolbar.GroupMenuOpen ? ui.Toolbar.RowsGroupId : "";
+            string groupId = c.GroupMenuId.Length > 0
+                ? c.GroupMenuId
+                : KvUiSweepShellNav.GroupIdOfPath(c.Path);
+            bool opened = ui.Toolbar.EnsureGroupMenuOpen(groupId);
+            yield return null;
+            yield return null;
+            if (opened)
+                c.PreparedBy = "список группы тулбара «" +
+                               KvUiSweepShellNav.TitleOfGroup(ui.Toolbar.RowsGroupId) + "»";
+            else
+                c.RestoreFail = "ручки группы «" + groupId + "» нет: панель собрана в раскладке " +
+                                ui.Toolbar.LayoutMode.ToString(CultureInfo.InvariantCulture) +
+                                ", ручек групп на панели " +
+                                ui.Toolbar.GroupCount.ToString(CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
         /// ДОКРУТИТЬ СПИСОК ПАНЕЛИ К СТРОКЕ ЭЛЕМЕНТА. Нужен, чтобы строка была не только в
         /// иерархии, но и В ВИДИМОЙ ЧАСТИ списка (иначе у виртуализированных списков её просто
         /// ещё не построили, а у обычного — оператор не увидит, что её проверяли). Лучший случай:
@@ -5418,6 +6070,128 @@ namespace KazistovVvDiagnostics
         }
 
         /// <summary>
+        /// ПОЧЕМУ ПАНЕЛЬ ОБОЛОЧКИ НЕ ОТКРЫЛАСЬ — ДЕТАЛЬ ДЛЯ ПРИЧИНЫ (заказ A). Называется
+        /// ФАКТИЧЕСКИМ состоянием (тулбар есть/нет, ручек сколько, окно открыто на какой
+        /// вкладке, список открыт/закрыт), а не догадкой: по этой строке видно, пытался ли
+        /// обход открыть панель и на чём остановился.
+        /// </summary>
+        private string ShellNotOpenDetail(Candidate c)
+        {
+            if (!string.IsNullOrEmpty(c.RestoreFail)) return c.RestoreFail;
+
+            KazistovVvUIManager ui = KazistovVvUIManager.Instance;
+
+            if (KvUiSweepShellNav.IsWorkbenchPath(c.Path))
+            {
+                KvWorkbenchWindow workbench = KvWorkbenchWindow.Instance;
+                if (workbench == null) return "окно верстака в сцене нет";
+                return workbench.Visible
+                    ? "окно открыто (вкладка «" + workbench.ActiveKey + "»), но строки в нём нет"
+                    : "окно верстака не открылось";
+            }
+
+            if (ui == null || ui.Toolbar == null) return "тулбара в оболочке нет";
+
+            if (KvUiSweepShellNav.IsToolbarHandlePath(c.Path))
+                return KvUiSweepShellNav.LayoutDetail(c.ToolbarLayout, ui.Toolbar.LayoutMode) +
+                       ", ручек групп на панели " +
+                       ui.Toolbar.GroupCount.ToString(CultureInfo.InvariantCulture);
+
+            if (!ui.Toolbar.GroupMenuOpen)
+                return "список не открылся: ручек групп на панели " +
+                       ui.Toolbar.GroupCount.ToString(CultureInfo.InvariantCulture) +
+                       ", раскладка " +
+                       ui.Toolbar.LayoutMode.ToString(CultureInfo.InvariantCulture);
+            return "список открыт (группа «" + ui.Toolbar.RowsGroupId + "», строк " +
+                   ui.Toolbar.GroupMenuRows.ToString(CultureInfo.InvariantCulture) +
+                   "), но строки в нём нет";
+        }
+
+        /// <summary>
+        /// ЗАПИСАТЬ ЭЛЕМЕНТ ОБОЛОЧКИ С ЧЕСТНОЙ ПРИЧИНОЙ «панель не открыта» (заказ A). Это
+        /// ИСКЛЮЧЕНИЕ отчёта, а не «исчез» и не «без эффекта»: панель названа, деталь — по
+        /// факту, а счётчик «исчезло» не растёт.
+        /// </summary>
+        private void RecordShellNotOpen(Candidate c)
+        {
+            string reason = KvUiSweepShellNav.NotOpenReasonFor(c.Path, ShellNotOpenDetail(c));
+            Line("[KvUiSweep] ПАНЕЛЬ ОБОЛОЧКИ НЕ ОТКРЫЛАСЬ: " + c.Path + " — " + reason);
+            Record(new KvUiSweepElement
+            {
+                Path = c.Path,
+                Kind = c.Kind,
+                Ok = false,
+                Effect = "не нажимали — панель не открыта",
+                ExemptReason = reason,
+                Method = "пропущен"
+            });
+        }
+
+        /// <summary>
+        /// ВЕРНУТЬ ОБОЛОЧКУ В ИСХОДНОЕ ПОСЛЕ ТОГО, КАК ОБХОТ ОТКРЫЛ ЕЁ САМ (заказ A): закрыть
+        /// список группы (или вернуть прежнюю группу), закрыть открытое окно верстака и
+        /// вернуть раскладку тулбара с физической пересборкой. Вызывается и из `Restore`
+        /// (после проверки), и сразу после неудачной попытки открыть — иначе открытая панель
+        /// оставалась бы в мире прогона и меняла бы состояние следующих элементов.
+        /// </summary>
+        private void RestoreShellState(Candidate c)
+        {
+            try
+            {
+                KazistovVvUIManager ui = KazistovVvUIManager.Instance;
+
+                if (c.GroupMenuBefore != null)
+                {
+                    KvToolbar toolbar = ui != null ? ui.Toolbar : null;
+                    if (toolbar != null)
+                    {
+                        if (c.GroupMenuBefore.Length == 0) toolbar.CloseGroupMenu();
+                        else toolbar.EnsureGroupMenuOpen(c.GroupMenuBefore);
+                    }
+                    c.GroupMenuBefore = null;
+                }
+
+                if (c.OpenedWorkbench)
+                {
+                    KvWorkbenchWindow workbench = KvWorkbenchWindow.Instance;
+                    if (workbench != null && workbench.Visible) workbench.Hide();
+                    c.OpenedWorkbench = false;
+                }
+
+                if (c.ToolbarLayoutBefore >= 0)
+                {
+                    int back = c.ToolbarLayoutBefore;
+                    c.ToolbarLayoutBefore = -1;
+                    if (ui != null)
+                    {
+                        if (KvSettings.ToolbarLayout != back) KvSettings.ToolbarLayout = back;
+                        ui.RebuildShell();
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[KvUiSweep] возврат оболочки после «" + c.Path + "»: " +
+                                 e.GetType().Name + ": " + e.Message);
+            }
+        }
+
+        /// <summary>
+        /// ВЕРНУТЬ ФАКТИЧЕСКОЕ СОСТОЯНИЕ ПАНЕЛИ ЛИМИТОВ СУСТАВОВ (заказ B2). Настройку
+        /// `KvSettings` возвращает `RestoreUiSettings`, а видимые кольца у суставов живут в
+        /// визуализаторе — без этого возврата следующие элементы проверялись бы с чужими
+        /// кольцами на сцене.
+        /// </summary>
+        private static void RestoreLimitsShown(KvUiSweepSnapshot before)
+        {
+            KazistovVvUIManager ui = KazistovVvUIManager.Instance;
+            if (ui == null || ui.Flow == null || ui.Flow.Workspace == null) return;
+            bool want = before.LimitsShown != 0;
+            if (ui.Flow.Workspace.JointLimitsVisible != want)
+                ui.Flow.SetJointLimitsVisible(want);
+        }
+
+        /// <summary>
         /// ВОЗВРАТ СОСТОЯНИЯ после элемента: закрыть открытую панель, выключить принудительно
         /// включённый предок, ВЕРНУТЬ СОСТОЯНИЕ DOCK-ПАНЕЛЕЙ, сбросить выделение uGUI и отменить
         /// переключения настроек, которые сделало нажатие. Без этого следующий элемент проверялся
@@ -5499,6 +6273,16 @@ namespace KazistovVvDiagnostics
                 // сохраняется в PlayerPrefs, поэтому без возврата следующий элемент проверялся бы
                 // в чужом состоянии (и мог бы «случайно» дать эффект).
                 RestoreUiSettings(before);
+
+                // ПАНЕЛЬ ЛИМИТОВ СУСТАВОВ ПО ФАКТУ (заказ B2): настройку вернул
+                // `RestoreUiSettings`, а кольца у суставов живут в визуализаторе.
+                RestoreLimitsShown(before);
+
+                // ОБОЛОЧКА, КОТОРУЮ ОТКРЫЛ САМ ОБХОД (заказ A): список группы, окно верстака
+                // и раскладка тулбара возвращаются ПОСЛЕ настроек — иначе `RestoreUiSettings`
+                // вернул бы раскладку из снимка (где уже стоит переключённая) и отменил бы
+                // возврат.
+                RestoreShellState(c);
             }
             catch (Exception e)
             {
@@ -5920,13 +6704,51 @@ namespace KazistovVvDiagnostics
                         OpensPanel = KvUiSweepTiers.OpensPanel(path, label),
                         SystemGate = KvUiSweepExemptions.IsGatePath(path),
                         PanelOwner = s.GetComponentInParent<KvXrGroupPanel>(),
-                        SettingsTab = KvUiSweepDockNav.SettingsTabFor(path, settingsRoot, settingsTab)
+                        SettingsTab = KvUiSweepDockNav.SettingsTabFor(path, settingsRoot, settingsTab),
+                        GroupMenuId = GroupMenuIdAtCollection(path),
+                        WorkbenchTab = WorkbenchTabAtCollection(path),
+                        ToolbarLayout = ToolbarLayoutAtCollection(path)
                     };
                     RecordPanelRoute(candidate);
                     into.Add(candidate);
                     if (into.Count >= MaxElements) return;
                 }
             }
+        }
+
+        /// <summary>
+        /// ГРУППА ОТКРЫТОГО СПИСКА ДЛЯ ЭЛЕМЕНТА ПРИ СБОРЕ (заказ A). Строка команды знает свою
+        /// группу из каталога; у блокиратора и `GM_Action` команды нет — им достаётся группа,
+        /// на которой список был открыт в момент сбора (единственное место, где это ещё
+        /// честно известно: после закрытия списка строка физически не существует).
+        /// </summary>
+        private static string GroupMenuIdAtCollection(string path)
+        {
+            if (!KvUiSweepShellNav.IsGroupMenuPath(path)) return "";
+            string group = KvUiSweepShellNav.GroupIdOfPath(path);
+            if (group.Length > 0) return group;
+            KazistovVvUIManager ui = KazistovVvUIManager.Instance;
+            return ui != null && ui.Toolbar != null ? ui.Toolbar.RowsGroupId : "";
+        }
+
+        /// <summary>ВКЛЯДКА ВЕРСТАКА ПРИ СБОРЕ (заказ A): содержимое окна живёт только на ней.</summary>
+        private static string WorkbenchTabAtCollection(string path)
+        {
+            if (!KvUiSweepShellNav.IsWorkbenchPath(path)) return "";
+            KvWorkbenchWindow workbench = KvWorkbenchWindow.Instance;
+            return workbench != null ? workbench.ActiveKey : "";
+        }
+
+        /// <summary>
+        /// РАСКЛАДКА ТУЛБАРА ПРИ СБОРЕ (заказ A): по ФАКТИЧЕСКОЙ панели, а не по настройке —
+        /// после элемента снимок возвращает `KvSettings.ToolbarLayout`, и настройка с панелью
+        /// расходятся (ручка `Group_flat` при этом физически есть).
+        /// </summary>
+        private static int ToolbarLayoutAtCollection(string path)
+        {
+            if (!KvUiSweepShellNav.IsToolbarHandlePath(path)) return -1;
+            KazistovVvUIManager ui = KazistovVvUIManager.Instance;
+            return ui != null && ui.Toolbar != null ? ui.Toolbar.LayoutMode : KvSettings.ToolbarLayout;
         }
 
         /// <summary>
@@ -6593,6 +7415,11 @@ namespace KazistovVvDiagnostics
             // числа эффект терялся (тулбар выглядел одинаково).
             if (ui != null && ui.Toolbar != null)
                 snapshot.ToolbarCollapsedGroups = ui.Toolbar.CollapsedGroupCount;
+
+            // ПАНЕЛЬ ЛИМИТОВ СУСТАВОВ ПО ФАКТУ (заказ B2): `IsPanelVisible("limits")` читает
+            // `Flow.Workspace.JointLimitsVisible` — то, что реально видит оператор; одна
+            // настройка `KvSettings.ShowJointLimits` этого не показывает.
+            snapshot.LimitsShown = ui != null && ui.IsPanelVisible("limits") ? 1 : 0;
         }
 
         /// <summary>Панель меню, если `KvXrStartMenu.Active` ещё не поднят: ищем по сцене.</summary>
@@ -6608,6 +7435,36 @@ namespace KazistovVvDiagnostics
                 return p;
             }
             return null;
+        }
+
+        /// <summary>
+        /// ЕСТЬ ЛИ ЗАПИСИ НА ДИСКЕ (заказ B1). Нужно причине «воспроизводить нечего: записей
+        /// нет»: `FeatureHub.TogglePlayback` при пустом списке пишет в журнал и выходит МОЛЧА —
+        /// для снимка это «нет изменений», хотя кнопка объяснилась. Ошибка чтения НЕ считается
+        /// «записей нет»: утверждать пустоту, которую не проверили, нельзя.
+        /// </summary>
+        private static bool RecordStoreHasRecords()
+        {
+            try
+            {
+                return KvRecordStore.LoadAll().Count > 0;
+            }
+            catch (Exception)
+            {
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// ЕСТЬ ЛИ В СЦЕНЕ ВИЗУАЛИЗАТОР РАБОЧЕЙ ОБЛАСТИ (заказ B2): тумблер «Панель лимитов
+        /// суставов» показывает именно ЕГО состояние (`Flow.Workspace.JointLimitsVisible`).
+        /// Визуализатора нет — тумблер физически ничего не показывает, и это честная причина,
+        /// а не «нет изменений».
+        /// </summary>
+        private static bool LimitsVisualizerPresent()
+        {
+            KazistovVvUIManager ui = KazistovVvUIManager.Instance;
+            return ui != null && ui.Flow != null && ui.Flow.Workspace != null;
         }
 
         /// <summary>ТЕКСТ СТАТУСА СЕЙЧАС — для строки эффекта «статус изменён: «…»».</summary>
@@ -7431,6 +8288,40 @@ namespace KazistovVvDiagnostics
             /// (дефект A, отчёт 13.11.2026: 72 «панель открыта, но строка не найдена»).
             /// </summary>
             public int SettingsTab = -1;
+            /// <summary>
+            /// ГРУППА СПИСКА ТУЛБАРА, КОТОРОЙ ПРИНАДЛЕЖИТ ЭЛЕМЕНТ (`""` — не список; заказ A).
+            /// Для строки `GM_<команда>` считается из её команды; у блокиратора и `GM_Action`
+            /// команды нет — группа берётся ИЗ ОТКРЫТОГО списка в момент сбора (единственное
+            /// место, где это ещё честно известно). Без неё восстановление открыло бы чужую
+            /// группу и строки в ней не оказалось бы.
+            /// </summary>
+            public string GroupMenuId = "";
+            /// <summary>
+            /// ВКЛАДКА ОКНА ВЕРСТАКА, НА КОТОРОЙ ЛЕЖИТ СТРОКА (`""` — не верстак; заказ A).
+            /// Содержимое верстака физически существует только на активной вкладке, поэтому без
+            /// этой записи путь был бы найден лишь на той вкладке, что открыта к моменту
+            /// проверки, — чаще всего НЕ на своей.
+            /// </summary>
+            public string WorkbenchTab = "";
+            /// <summary>
+            /// ФИЗИЧЕСКАЯ РАСКЛАДКА ТУЛБАРА ПРИ СБОРЕ (`−1` — не ручка тулбара; заказ A).
+            /// Считается по самой панели (`KvToolbar.LayoutMode`), а не по настройке: снимок
+            /// обхода возвращает настройку после каждого элемента, и настройка с панелью
+            /// расходятся — ручка `Group_flat` при этом существует именно в панели.
+            /// </summary>
+            public int ToolbarLayout = -1;
+            /// <summary>
+            /// ЧТО ОБОЛОЧКУ ОТКРЫЛ САМ ОБХОД И ОБЯЗАН ВЕРНУТЬ (`null` — список не трогали;
+            /// `""` — был закрыт; иначе id группы, на которой был открыт). Заказ A.
+            /// </summary>
+            public string GroupMenuBefore = null;
+            /// <summary>Обход открыл окно верстака — после проверки окно закрывается (заказ A).</summary>
+            public bool OpenedWorkbench;
+            /// <summary>
+            /// ОБХОД ПЕРЕКЛЮЧИЛ РАСКЛАДКУ ТУЛБАРА (`−1` — не переключал; заказ A). Значение
+            /// ДО переключения возвращается в `Restore` вместе с физической пересборкой.
+            /// </summary>
+            public int ToolbarLayoutBefore = -1;
             /// <summary>Элемент принадлежит панелям проекта (а не посторонней заставке/плагину).</summary>
             public bool ProjectOwned = true;
             /// <summary>ОТКРЫВАЕТ ПАНЕЛЬ/ЭКРАН — признак ЯРУСА 1 (см. `KvUiSweepTiers`).</summary>

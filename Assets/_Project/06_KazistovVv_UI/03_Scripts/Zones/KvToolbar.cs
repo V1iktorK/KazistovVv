@@ -334,9 +334,7 @@ namespace KazistovVvUI
         {
             List<KeyValuePair<KvToolbarGroup, List<string>>> result =
                 new List<KeyValuePair<KvToolbarGroup, List<string>>>();
-            KvToolbarGroup flat = new KvToolbarGroup("flat",
-                KvLoc.T("toolbar.group.all", "Все команды"), "more");
-            result.Add(new KeyValuePair<KvToolbarGroup, List<string>>(flat, visible));
+            result.Add(new KeyValuePair<KvToolbarGroup, List<string>>(KvToolbarGroups.FlatGroup(), visible));
             return result;
         }
 
@@ -518,6 +516,22 @@ namespace KazistovVvUI
         /// <summary>Сколько «ручек» групп на панели (диагностика).</summary>
         public int GroupCount { get { return groupHandles.Count; } }
 
+        /// <summary>
+        /// ФИЗИЧЕСКАЯ РАСКЛАДКА, ПОД КОТОРУЮ СОБРАНА ПАНЕЛЬ (0 авто, 1 широко, 2 «5 в ряд»).
+        ///
+        /// ЗАЧЕМ (самопрогон, заказ A): ручка `Group_flat` существует ТОЛЬКО в раскладке 2, а
+        /// `KvSettings.ToolbarLayout` после нажатия другой строки возвращается снимком обхода —
+        /// настройка и физическая панель расходятся. Восстановить ручку можно только зная, в
+        /// какой раскладке её собрали, поэтому считается она ЗДЕСЬ, а не по настройке.
+        /// </summary>
+        public int LayoutMode { get { return layoutMode; } }
+
+        /// <summary>
+        /// ГРУППА, ДЛЯ КОТОРОЙ СОБРАНЫ СТРОКИ ОТКРЫТОГО СПИСКА (`""` — список не строили).
+        /// Нужно самопрогону (заказ A): если строки уничтожили, открыть надо ИМЕННО эту группу.
+        /// </summary>
+        public string RowsGroupId { get { return groupMenu != null ? groupMenu.RowsGroupId : ""; } }
+
         /// <summary>Открыть список группы по её id (диагностика/тесты).</summary>
         public bool OpenGroupMenu(string groupId)
         {
@@ -539,6 +553,75 @@ namespace KazistovVvUI
         public void CloseGroupMenu()
         {
             if (groupMenu != null) groupMenu.Close();
+        }
+
+        /// <summary>
+        /// ОТКРЫТЬ СПИСОК ГРУППЫ ШТАТНЫМ ПУТЁМ — ТОЙ ЖЕ РУЧКОЙ, ЧТО ЖМЁТ ОПЕРАТОР (заказ A,
+        /// отчёт планшета 13.11.2026: 14 пунктов «исчез (путь не найден)»).
+        ///
+        /// ЧЕМ ПЛОХО БЫЛО. Список группы пересобирается при КАЖДОМ открытии
+        /// (`KvToolbarGroupMenu.RebuildRows` уничтожает строки чужой группы), а панель
+        /// пересобирается целиком при смене раскладки/компактности. Строки, собранные обходом
+        /// раньше, физически не существуют, пока список не открыли заново, — и рабочие пункты
+        /// получали «исчез» вместо проверки.
+        ///
+        /// ЧТО СТАЛО. Метод открывает список ГРУППЫ `groupId` и возвращает false, если это
+        /// физически нечем: ни ручки этой группы, ни единственной ручки режима «5 в ряд»
+        /// (`Group_flat` — в ней ВСЕ команды панели). Ложь — проверяемый факт для причины
+        /// «панель не открыта», а не «элемент исчез».
+        /// </summary>
+        public bool EnsureGroupMenuOpen(string groupId)
+        {
+            if (groupId == null) groupId = "";
+
+            // УЖЕ ОТКРЫТ и строки те, что нужны (своя группа либо «5 вряд» — там все команды).
+            if (groupMenu != null && groupMenu.IsOpen)
+            {
+                string open = groupMenu.RowsGroupId;
+                if (groupId.Length == 0 || open == groupId || open == KvToolbarGroups.FlatGroupId)
+                    return true;
+                groupMenu.Close();
+            }
+
+            int handleIndex = groupId.Length > 0 ? groupHandleIds.IndexOf(groupId) : -1;
+            if (handleIndex < 0 && groupId.Length > 0 &&
+                groupHandleIds.IndexOf(KvToolbarGroups.FlatGroupId) < 0)
+                return false;                       // ни своей ручки, ни «5 вряд» — открыть нечем
+            if (handleIndex < 0) handleIndex = groupHandleIds.IndexOf(KvToolbarGroups.FlatGroupId);
+            if (handleIndex < 0 && groupHandleIds.Count > 0) handleIndex = 0;
+            if (handleIndex < 0) return false;       // на панели нет ни одной ручки
+
+            string handleGroup = groupHandleIds[handleIndex];
+            if (handleGroup == KvToolbarGroups.FlatGroupId)
+            {
+                ShowGroupMenu(KvToolbarGroups.FlatGroup(), VisibleCommandIds(), null);
+            }
+            else
+            {
+                foreach (KeyValuePair<KvToolbarGroup, List<string>> pair in KvToolbarGroups.Arrange(sourceIds))
+                {
+                    if (pair.Key.Id != handleGroup) continue;
+                    ShowGroupMenu(pair.Key, pair.Value, null);
+                    break;
+                }
+            }
+            return groupMenu != null && groupMenu.IsOpen;
+        }
+
+        /// <summary>
+        /// КОМАНДЫ, КОТОРЫЕ ПАНЕЛЬ ПОКАЗЫВАЕТ В ТЕКУЩЕМ РЕЖИМЕ (те же фильтры, что при сборке:
+        /// в компактном — без «редких»). Нужен ручке «5 вряд»: в ней ВСЕ команды панели.
+        /// </summary>
+        private List<string> VisibleCommandIds()
+        {
+            var list = new List<string>();
+            foreach (string id in sourceIds)
+            {
+                if (string.IsNullOrEmpty(id)) continue;
+                if (compact && IsRare(id)) continue;
+                list.Add(id);
+            }
+            return list;
         }
 
         /// <summary>Заменить раскладку кнопок (для расширения/профилей).</summary>

@@ -134,6 +134,20 @@ namespace KazistovVvUI
             };
         }
 
+        /// <summary>
+        /// Id ЕДИНСТВЕННОЙ группы режима «5 в ряд» («Все команды»). Её нет в каталоге
+        /// `Build()` — она строится на лету при перекладке панели, поэтому и здесь она
+        /// должна называться одинаково: обход самопрогона ищет ручку именно по этому id
+        /// (заказ A: ручка `Group_flat` существует только в этой раскладке).
+        /// </summary>
+        public const string FlatGroupId = "flat";
+
+        /// <summary>Группа «Все команды» режима «5 вряд» — та же, что строит `KvToolbar`.</summary>
+        public static KvToolbarGroup FlatGroup()
+        {
+            return new KvToolbarGroup(FlatGroupId, KvLoc.T("toolbar.group.all", "Все команды"), "more");
+        }
+
         /// <summary>Группа по id (null — нет такой).</summary>
         public static KvToolbarGroup Find(string id)
         {
@@ -221,6 +235,13 @@ namespace KazistovVvUI
 
         /// <summary>Меню открыто (диагностика).</summary>
         public bool IsOpen { get { return panel != null && panel.gameObject.activeSelf; } }
+        /// <summary>
+        /// ГРУППА, ДЛЯ КОТОРОЙ СОБРАНЫ СТРОКИ (диагностика и самопрогон, заказ A).
+        /// Строки пересобираются при каждом открытии (`RebuildRows` уничтожает строки чужой
+        /// группы), поэтому «для какой группы они сейчас существуют» — единственный честный
+        /// ответ на вопрос «какую ручку открыть, чтобы строка появилась снова».
+        /// </summary>
+        public string RowsGroupId { get; private set; } = "";
         /// <summary>Сколько строк построено (диагностика).</summary>
         public int RowCount { get { return rows.Count; } }
 
@@ -253,6 +274,7 @@ namespace KazistovVvUI
         private void Open(RectTransform anchor, KvToolbarGroup group, IReadOnlyList<string> ids)
         {
             if (panel == null || anchor == null || group == null) return;
+            RowsGroupId = group.Id;
             RebuildRows(group, ids);
             Position(anchor);
             if (blocker != null)

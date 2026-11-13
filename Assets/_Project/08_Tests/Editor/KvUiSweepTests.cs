@@ -2707,5 +2707,222 @@ namespace KazistovVvTests
             Assert.AreEqual(keys[1], keys[4],
                 "подпись «123»/«456» в ключ не входит — иначе один и тот же элемент считался бы двумя");
         }
+
+        // ================== ВОССТАНОВЛЕНИЕ ПАНЕЛЕЙ ОБОЛОЧКИ ПЕРЕД ПРОВЕРКОЙ (заказ A)
+
+        /// <summary>
+        /// ПУТИ ОБОЛОЧКИ РАСПОЗНАЮТСЯ, А ГРУППА СТРОКИ ВЫВОДИТСЯ ИЗ ЕЁ КОМАНДЫ.
+        ///
+        /// ОТКУДА (планшет, отчёт Logs/uisweep_reports/_ui_sweep_ar_1311e.txt): 21 элемент
+        /// получил «исчез (путь не найден)» — 13 пунктов списка группы тулбара
+        /// (`KvToolbarGroupLayer/KvGroupMenu/GM_*`), блокиратор `KvGroupMenuBlocker`, ручка
+        /// `KvToolbar/Groups/Group_flat` и 6 строк `KvWorkbenchWindow`. Причина в устройстве
+        /// интерфейса, а не в кнопках: список группы пересобирается при каждом открытии
+        /// (`KvToolbarGroupMenu.RebuildRows` уничтожает строки чужой группы), содержимое
+        /// верстака живёт только на активной вкладке, а ручка `Group_flat` существует только в
+        /// раскладке «5 в ряд». Обход обязан УЗНАВАТЬ эти пути, чтобы открыть панель штатным
+        /// путём и проверить строку, а не записывать тихий «исчез».
+        /// </summary>
+        [Test]
+        public void ShellNav_RecognizesGroupMenuWorkbenchAndToolbarHandle()
+        {
+            const string row = "KazistovVv_UI/KazistovVvCanvas/KvToolbarGroupLayer/KvGroupMenu/GM_eta.toggle«Панель ETA»";
+            const string action = "KazistovVv_UI/KazistovVvCanvas/KvToolbarGroupLayer/KvGroupMenu/GM_Action«Свернуть группу в иконку»";
+            const string blocker = "KazistovVv_UI/KazistovVvCanvas/KvToolbarGroupLayer/KvGroupMenuBlocker";
+            const string handle = "KazistovVv_UI/KazistovVvCanvas/KvToolbar/Groups/Group_flat";
+            const string workbench = "KazistovVv_UI/KvWorkbenchWindow/Canvas/Window/Content/SegRow/Seg_Seg/Seg0«B-сплайн»";
+            const string dock = "KazistovVv_UI/KazistovVvDockCanvas/Dock_Настройки/Body/Scroll/Content/Switch_Фонарик«Фонарик»";
+            const string player = "KazistovVv_UI/KvFeatureCanvas/KvFeatureWindow/Scroll/Viewport/Content/Buttons#1/Btn0«● Записать / Стоп (R)»";
+
+            Assert.IsTrue(KvUiSweepShellNav.IsGroupMenuPath(row), "строка списка группы обязана распознаваться");
+            Assert.IsTrue(KvUiSweepShellNav.IsGroupMenuPath(action), "строка сворачивания — тоже пункт списка");
+            Assert.IsTrue(KvUiSweepShellNav.IsGroupMenuPath(blocker), "блокиратор — часть того же списка");
+            Assert.IsTrue(KvUiSweepShellNav.IsWorkbenchPath(workbench));
+            Assert.IsTrue(KvUiSweepShellNav.IsToolbarHandlePath(handle));
+            Assert.IsTrue(KvUiSweepShellNav.IsShellPath(row) && KvUiSweepShellNav.IsShellPath(workbench) &&
+                          KvUiSweepShellNav.IsShellPath(handle),
+                "все три вида обязаны считаться панелью оболочки");
+            Assert.IsFalse(KvUiSweepShellNav.IsShellPath(dock),
+                "док-панель открывается СВОИМ правилом — правило оболочки её не берёт");
+            Assert.IsFalse(KvUiSweepShellNav.IsShellPath(player),
+                "окно функций — ни верстак, ни список группы: правило узкое");
+
+            Assert.AreEqual("eta.toggle", KvUiSweepShellNav.RowCommandId(row));
+            Assert.AreEqual("misc", KvUiSweepShellNav.GroupIdOfPath(row),
+                "eta.toggle живёт в группе «Прочее» — именно её ручку надо открыть");
+            Assert.AreEqual("", KvUiSweepShellNav.GroupIdOfPath(action),
+                "GM_Action — служебная строка сворачивания, а не команда: группы у неё нет");
+            Assert.AreEqual("", KvUiSweepShellNav.GroupIdOfPath(blocker),
+                "у блокиратора команды нет — группа берётся из открытого списка при сборе");
+            Assert.AreEqual("", KvUiSweepShellNav.GroupIdOfPath(workbench));
+            Assert.AreEqual("flat", KvUiSweepShellNav.HandleIdOfPath(handle));
+        }
+
+        /// <summary>
+        /// ПРИЧИНА «ПАНЕЛЬ НЕ ОТКРЫЛАСЬ» НАЗЫВАЕТ ИМЕННО ЭТУ ПАНЕЛЬ И ФАКТ.
+        /// Тихий «исчез» ничего не говорит о кнопке; причина обязана называть список/верстак/
+        /// ручку и то, ЧТО мешает (раскладку, отсутствие окна), — по ней тестировщик видит,
+        /// пытался ли обход открыть панель и на чём остановился.
+        /// </summary>
+        [Test]
+        public void ShellNav_NotOpenReasonNamesPanelAndFact()
+        {
+            const string row = "KazistovVv_UI/KazistovVvCanvas/KvToolbarGroupLayer/KvGroupMenu/GM_eta.toggle«Панель ETA»";
+            const string workbench = "KazistovVv_UI/KvWorkbenchWindow/Canvas/Window/Content/Switch_Применять автоматически после планирования«Применять»";
+            const string handle = "KazistovVv_UI/KazistovVvCanvas/KvToolbar/Groups/Group_flat";
+
+            string group = KvUiSweepShellNav.NotOpenReasonFor(row, "ручки Group_misc при раскладке тулбара 0 нет");
+            StringAssert.Contains("панель не открыта", group, "причина — исключение отчёта, а не «исчез»: " + group);
+            StringAssert.Contains("список группы тулбара «Прочее»", group,
+                "причина обязана называть ИМЕННО этот список: " + group);
+            StringAssert.Contains("ручки Group_misc при раскладке тулбара 0 нет", group,
+                "в причине обязана быть ФАКТИЧЕСКАЯ деталь: " + group);
+
+            string wb = KvUiSweepShellNav.NotOpenReasonFor(workbench, "окно верстака в сцене нет");
+            StringAssert.Contains("верстак", wb, "причина обязана называть верстак: " + wb);
+            StringAssert.Contains("окно верстака в сцене нет", wb);
+
+            string layout = KvUiSweepShellNav.LayoutDetail(2, 0);
+            StringAssert.Contains("при раскладке тулбара 2", layout, "деталь обязана называть раскладку сборки: " + layout);
+            StringAssert.Contains("сейчас 0", layout, "деталь обязана называть ТЕКУЩУЮ раскладку: " + layout);
+
+            string hd = KvUiSweepShellNav.NotOpenReasonFor(handle, layout);
+            StringAssert.Contains("ручка группы тулбара «flat»", hd, "причина обязана называть ручку: " + hd);
+            StringAssert.Contains("при раскладке тулбара 2", hd);
+        }
+
+        // ============================= ПЛЕЕР ЗАПИСИ: ЭФФЕКТ И ЧЕСТНЫЕ ПРИЧИНЫ (заказ B1)
+
+        /// <summary>
+        /// КНОПКИ ПЛЕЕРА ЗАПИСИ НАЗЫВАЮТ СВОЁ СОСТОЯНИЕ, А НЕ «нет изменений».
+        ///
+        /// ОТКУДА (планшет, отчёт 13.11e): пять кнопок вкладки «Запись» дали `нет изменений` —
+        /// «● Записать / Стоп (R)», «▶ Проиграть / Пауза (P)», «■ Остановить», «×0.25», «×0.5».
+        /// Обработчики в коде НЕ заглушки (`FeatureHub.ToggleRecord`/`TogglePlayback` →
+        /// `KvRecordingService`), но общий снимок состояния этих признаков не читает: ни
+        /// записи/воспроизведения/паузы, ни множителя скорости в нём нет. Здесь — узкие
+        /// признаки и их честные подписи; кнопка, чьё состояние не изменилось, получает
+        /// причину по ФАКТУ, а не пустой эффект.
+        /// </summary>
+        [Test]
+        public void RecordPlayer_EffectNamesStateAndSpeed()
+        {
+            const string record = "KazistovVv_UI/KvFeatureCanvas/KvFeatureWindow/Scroll/Viewport/Content/Buttons#1/Btn0«● Записать / Стоп (R)»";
+            const string play = "KazistovVv_UI/KvFeatureCanvas/KvFeatureWindow/Scroll/Viewport/Content/Buttons#1/Btn1«▶ Проиграть / Пауза (P)»";
+            const string stop = "KazistovVv_UI/KvFeatureCanvas/KvFeatureWindow/Scroll/Viewport/Content/Buttons#1/Btn2«■ Остановить»";
+            const string slow = "KazistovVv_UI/KvFeatureCanvas/KvFeatureWindow/Scroll/Viewport/Content/Buttons#2/Btn0«×0.25»";
+            const string rowPlay = "KazistovVv_UI/KvFeatureCanvas/KvFeatureWindow/Scroll/Viewport/Content/Buttons#3/Btn1«Проиграть»";
+            const string rowDelete = "KazistovVv_UI/KvFeatureCanvas/KvFeatureWindow/Scroll/Viewport/Content/Buttons#3/Btn3«Удалить»";
+            const string toolbarRecord = "KazistovVv_UI/KazistovVvCanvas/KvToolbar/Groups/Cmd_record.toggle";
+
+            Assert.AreEqual(KvUiSweepRecordPlayer.Kind.Record, KvUiSweepRecordPlayer.KindOf(record));
+            Assert.AreEqual(KvUiSweepRecordPlayer.Kind.Play, KvUiSweepRecordPlayer.KindOf(play));
+            Assert.AreEqual(KvUiSweepRecordPlayer.Kind.Stop, KvUiSweepRecordPlayer.KindOf(stop));
+            Assert.AreEqual(KvUiSweepRecordPlayer.Kind.Speed, KvUiSweepRecordPlayer.KindOf(slow));
+            Assert.AreEqual(KvUiSweepRecordPlayer.Kind.PlayRecord, KvUiSweepRecordPlayer.KindOf(rowPlay));
+            Assert.AreEqual(KvUiSweepRecordPlayer.Kind.None, KvUiSweepRecordPlayer.KindOf(rowDelete),
+                "«Удалить» — не кнопка плеера: правило узкое");
+            Assert.AreEqual(KvUiSweepRecordPlayer.Kind.None, KvUiSweepRecordPlayer.KindOf(toolbarRecord),
+                "кнопка тулбара проверяется общим снимком, а не этим узким правилом");
+
+            var idle = new KvUiSweepRecordPlayer.State();
+            var recording = new KvUiSweepRecordPlayer.State { Recording = true };
+            string started = KvUiSweepRecordPlayer.EffectFor(idle, recording);
+            StringAssert.Contains("запись", started, "нажатие «Записать» обязано называть запись: " + started);
+            StringAssert.Contains("начата", started);
+            Assert.AreEqual("", KvUiSweepRecordPlayer.EffectFor(idle, idle),
+                "без изменения состояния выдуманного эффекта быть не должно");
+
+            var playing = new KvUiSweepRecordPlayer.State { Playing = true };
+            var paused = new KvUiSweepRecordPlayer.State { Playing = true, Paused = true };
+            string pauseEffect = KvUiSweepRecordPlayer.EffectFor(playing, paused);
+            StringAssert.Contains("воспроизведение", pauseEffect);
+            StringAssert.Contains("пауза", pauseEffect, "нажатие «Пауза» обязано называть паузу: " + pauseEffect);
+
+            string speed = KvUiSweepRecordPlayer.EffectFor(
+                new KvUiSweepRecordPlayer.State { Speed = 1f },
+                new KvUiSweepRecordPlayer.State { Speed = 0.25f });
+            StringAssert.Contains("×1.00", speed, "множитель обязан называться числами: " + speed);
+            StringAssert.Contains("×0.25", speed, "множитель обязан называться числами: " + speed);
+        }
+
+        /// <summary>
+        /// ТИХИЕ ПРЕДУСЛОВИЯ ПЛЕЕРА — ЧЕСТНАЯ ПРИЧИНА, А НЕ «нет изменений».
+        /// Отказы с текстом (`KvRecordingService.Failed`: «робот потока не готов», «записей
+        /// меньше двух сэмплов»…) приходят от самого сервиса и в это правило не входят:
+        /// здесь только случаи, когда обработчик МОЛЧА возвращает управление — воспроизводить
+        /// нечего и останавливать нечего. Причина считается ПО СОСТОЯНИЮ ДО нажатия.
+        /// </summary>
+        [Test]
+        public void RecordPlayer_NothingToDoReasons_AreFacts()
+        {
+            const string record = "KazistovVv_UI/KvFeatureCanvas/KvFeatureWindow/Scroll/Viewport/Content/Buttons#1/Btn0«● Записать / Стоп (R)»";
+            const string play = "KazistovVv_UI/KvFeatureCanvas/KvFeatureWindow/Scroll/Viewport/Content/Buttons#1/Btn1«▶ Проиграть / Пауза (P)»";
+            const string stop = "KazistovVv_UI/KvFeatureCanvas/KvFeatureWindow/Scroll/Viewport/Content/Buttons#1/Btn2«■ Остановить»";
+            const string slow = "KazistovVv_UI/KvFeatureCanvas/KvFeatureWindow/Scroll/Viewport/Content/Buttons#2/Btn0«×0.25»";
+
+            var idle = new KvUiSweepRecordPlayer.State();
+            var recording = new KvUiSweepRecordPlayer.State { Recording = true };
+            var playing = new KvUiSweepRecordPlayer.State { Playing = true };
+
+            string noRecords = KvUiSweepRecordPlayer.NothingToDoReason(play, idle, false);
+            StringAssert.Contains("записей нет", noRecords,
+                "при пустом списке записей причина обязана называть факт: " + noRecords);
+            Assert.AreEqual("", KvUiSweepRecordPlayer.NothingToDoReason(play, idle, true),
+                "записи есть — пусть играет; отказ по другим условиям назовёт сам сервис");
+            Assert.AreEqual("", KvUiSweepRecordPlayer.NothingToDoReason(play, playing, false),
+                "идёт воспроизведение — нажатие ставит паузу, причины нет");
+
+            string nothingToStop = KvUiSweepRecordPlayer.NothingToDoReason(stop, idle, false);
+            StringAssert.Contains("останавливать нечего", nothingToStop,
+                "при простое причина обязана называть факт: " + nothingToStop);
+            Assert.AreEqual("", KvUiSweepRecordPlayer.NothingToDoReason(stop, recording, false),
+                "идёт запись — «Остановить» её останавливает, причины нет");
+
+            Assert.AreEqual("", KvUiSweepRecordPlayer.NothingToDoReason(record, idle, false),
+                "«Записать» при неготовом роботе отказывает САМ сервис (Failed) — причина приходит от него");
+            Assert.AreEqual("", KvUiSweepRecordPlayer.NothingToDoReason(slow, idle, false),
+                "множитель скорости меняется всегда — причины нет");
+        }
+
+        // ================= ПАНЕЛЬ ЛИМИТОВ СУСТАВОВ: СОСТОЯНИЕ В СНИМКЕ (заказ B2)
+
+        /// <summary>
+        /// ТУМБЛЕР «ПАНЕЛЬ ЛИМИТОВ СУСТАВОВ»: ФАКТИЧЕСКОЕ СОСТОЯНИЕ В СНИМКЕ, А ЕГО ОТСУТСТВИЕ —
+        /// ПРИЧИНА С ФАКТОМ.
+        ///
+        /// ОТКУДА (планшет, отчёт 13.11e): строка дала `нет изменений`. Тумблер работает
+        /// (`KazistovVvUIManager.SetPanel("limits")` → `ApplyVisualization("vis.limits")`), но
+        /// снимок читал ТОЛЬКО настройку `KvSettings.ShowJointLimits`, а переключатель показывает
+        /// и пишет ФАКТИЧЕСКОЕ состояние визуализатора (`Flow.Workspace.JointLimitsVisible`) —
+        /// они расходятся, и настройка не менялась. Плюс: если визуализатора в сцене нет,
+        /// тумблер физически ничего не показывает — это обязано быть названо.
+        /// </summary>
+        [Test]
+        public void LimitsSwitch_StateIsInSnapshot_AndReasonNamesMissingVisualizer()
+        {
+            const string limits = "KazistovVv_UI/KazistovVvDockCanvas/Dock_Настройки/Body/Scroll/Content/Switch_Панель лимитов суставов«Панель лимитов суставов»";
+            const string metrics = "KazistovVv_UI/KazistovVvDockCanvas/Dock_Настройки/Body/Scroll/Content/Switch_Панель метрик траекторий«Панель метрик траекторий»";
+
+            Assert.IsTrue(KvUiSweepExemptions.IsLimitsSwitchPath(limits),
+                "переключатель лимитов обязан распознаваться по пути");
+            Assert.IsFalse(KvUiSweepExemptions.IsLimitsSwitchPath(metrics),
+                "правило узкое — только переключатель лимитов");
+
+            string missing = KvUiSweepExemptions.LimitsSwitchReasonFor(limits, false);
+            StringAssert.Contains("визуализатор", missing,
+                "отсутствие визуализатора обязано быть названо фактом: " + missing);
+            Assert.AreEqual("", KvUiSweepExemptions.LimitsSwitchReasonFor(limits, true),
+                "визуализатор есть — состояние меняется, причина не нужна");
+            Assert.AreEqual("", KvUiSweepExemptions.LimitsSwitchReasonFor(metrics, false),
+                "правило узкое — чужому переключателю причину не выдаём");
+
+            var before = new KvUiSweepSnapshot();
+            var after = new KvUiSweepSnapshot();
+            after.LimitsShown = 1;
+            StringAssert.Contains("панель лимитов суставов",
+                KvUiSweepDiff.Describe(before, after),
+                "фактическое состояние панели лимитов обязано попадать в строку эффекта");
+        }
     }
 }
