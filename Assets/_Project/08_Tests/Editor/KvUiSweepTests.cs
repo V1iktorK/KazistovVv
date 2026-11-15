@@ -2924,5 +2924,322 @@ namespace KazistovVvTests
                 KvUiSweepDiff.Describe(before, after),
                 "фактическое состояние панели лимитов обязано попадать в строку эффекта");
         }
+
+        // ------------------------------------------------------- вспомогательное для зонда
+
+        /// <summary>Вызвать приватный метод зонда (снимок/отчёт) — самопрогон своих API не выдаёт.</summary>
+        private static object InvokePrivate(object target, string name, params object[] args)
+        {
+            var types = new System.Type[args.Length];
+            for (int i = 0; i < args.Length; i++) types[i] = args[i].GetType();
+            MethodInfo method = target.GetType().GetMethod(name,
+                BindingFlags.Instance | BindingFlags.NonPublic, null, types, null);
+            Assert.IsNotNull(method, "метод " + name + " не найден — зонд устарел");
+            return method.Invoke(target, args);
+        }
+
+        /// <summary>Поставить приватное поле зонда.</summary>
+        private static void SetPrivateField(object target, string name, object value)
+        {
+            FieldInfo field = target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsNotNull(field, "поле " + name + " не найдено — зонд устарел");
+            field.SetValue(target, value);
+        }
+
+        /// <summary>Поставить приватный статический сеттер (например `KvXrStartMenu.Active`).</summary>
+        private static void SetPrivateStaticProperty(System.Type type, string name, object value)
+        {
+            PropertyInfo property = type.GetProperty(name, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+            Assert.IsNotNull(property, "свойство " + name + " не найдено — зонд устарел");
+            property.GetSetMethod(true).Invoke(null, new[] { value });
+        }
+
+        // ================= ОТЧЁТ: СМЕНА РЕЖИМА НЕ ЗАТИРАЕТ ОТЧЁТ ПРЕДЫДУЩЕГО (заказ A)
+
+        /// <summary>
+        /// ФАЙЛ ОТЧЁТА НЕ ПЕРЕЗАПИСЫВАЕТСЯ ЧУЖИМ ПРОГОНОМ ПРИ СМЕНЕ РЕЖИМА.
+        ///
+        /// ОТКУДА (шлем, отчёт 14.11.2026): mr-прогон начинается со строки
+        /// `РЕЖИМ: выставление mr (было vr)`, и этот ПЕРВЫЙ `Line()` уходил в файл, зафиксированный
+        /// ДО переключения (`_ui_sweep_vr.txt`) — то есть затирал отчёт уже ПРОВЕДЁННОГО vr-прогона
+        /// (факт: `_ui_sweep_vr_1411.txt` целиком содержал одну эту строку). Имя файла отчёта
+        /// обязано фиксироваться только после того, как режим определён (шапка), а строки, написанные
+        /// до этого, — ехать в файл СВОЕГО режима, а не в чужой.
+        /// </summary>
+        [Test]
+        public void ReportFile_ModeSwitchDoesNotClobberPreviousReport()
+        {
+            string vrPath = KvUiSweepRuntime.ReportPath("vr");
+            string mrPath = KvUiSweepRuntime.ReportPath("mr");
+            bool vrExisted = System.IO.File.Exists(vrPath);
+            bool mrExisted = System.IO.File.Exists(mrPath);
+            string vrBefore = vrExisted ? System.IO.File.ReadAllText(vrPath) : null;
+            string mrBefore = mrExisted ? System.IO.File.ReadAllText(mrPath) : null;
+            GameObject probe = null;
+            try
+            {
+                System.IO.File.WriteAllText(vrPath, "СТАРЫЙ ОТЧЁТ VR\n",
+                    new System.Text.UTF8Encoding(false));
+                if (System.IO.File.Exists(mrPath)) System.IO.File.Delete(mrPath);
+
+                probe = new GameObject("KvUiSweepReportProbe");
+                KvUiSweepRuntime rt = probe.AddComponent<KvUiSweepRuntime>();
+                SetPrivateField(rt, "run", new KvUiSweepRun());
+
+                InvokePrivate(rt, "SetLayout", "vr");
+                InvokePrivate(rt, "Line", "[KvUiSweep] РЕЖИМ: выставление mr (было vr)");
+                InvokePrivate(rt, "SetLayout", "mr");
+                InvokePrivate(rt, "Header");
+                InvokePrivate(rt, "Line", "[KvUiSweep] строка после шапки");
+
+                Assert.AreEqual("СТАРЫЙ ОТЧЁТ VR\n", System.IO.File.ReadAllText(vrPath),
+                    "смена режима не имеет права затирать отчёт предыдущего прогона");
+                string mrText = System.IO.File.ReadAllText(mrPath);
+                StringAssert.Contains("РЕЖИМ: выставление mr", mrText,
+                    "строки, написанные до шапки, обязаны уехать в файл СВОЕГО режима");
+                StringAssert.Contains("строка после шапки", mrText);
+            }
+            finally
+            {
+                if (probe != null) UnityEngine.Object.DestroyImmediate(probe);
+                RestoreFile(vrPath, vrBefore);
+                RestoreFile(mrPath, mrBefore);
+            }
+        }
+
+        /// <summary>Вернуть файл в исходное состояние (или убрать, если его не было).</summary>
+        private static void RestoreFile(string path, string content)
+        {
+            try
+            {
+                if (content == null)
+                {
+                    if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+                }
+                else System.IO.File.WriteAllText(path, content, new System.Text.UTF8Encoding(false));
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("KvUiSweepTests: не удалось вернуть файл «" + path + "»: " + e.Message);
+            }
+        }
+
+        // ============ СНИМОК: ПРИСВАИВАНИЯ В ПОМОЩНИКАХ Capture* НЕ ТЕРЯЮТСЯ (заказы C, D)
+
+        /// <summary>
+        /// `KvUiSweepSnapshot` — СТРУКТУРА, а помощники `CaptureUiSettings`/`CaptureArPanels`/
+        /// `CaptureStatusAndMenus`/`CaptureTreeState` принимали её ПО ЗНАЧЕНИЮ: каждое
+        /// присваивание шло в КОПИЮ и терялось. Снимок возвращался с нулями во всех полях,
+        /// которые заполняют эти помощники, и самопрогон не видел:
+        ///   • открытый раздел и показ стартового меню (MenuSec_* — «нет изменений»,
+        ///     «Закрыть»×4 и «Вернуться к работе» — «нет изменений», отчёт 14.11);
+        ///   • строку статуса, панели AR, дерево, флаги `KvSettings` и панель лимитов.
+        /// Признак обязана ловить ИМЕННО структура: поле, записанное в копию, снаружи не отличить
+        /// от незаписанного.
+        /// </summary>
+        [Test]
+        public void Snapshot_CaptureHelpersTakeSnapshotByReference()
+        {
+            string[] helpers = { "CaptureUiSettings", "CaptureArPanels", "CaptureStatusAndMenus",
+                                 "CaptureTreeState" };
+            for (int i = 0; i < helpers.Length; i++)
+            {
+                MethodInfo method = typeof(KvUiSweepRuntime).GetMethod(helpers[i],
+                    BindingFlags.Static | BindingFlags.NonPublic);
+                Assert.IsNotNull(method, helpers[i] + " не найден — правило обязано жить в коде");
+                Assert.IsTrue(method.GetParameters()[0].ParameterType.IsByRef,
+                    helpers[i] + " обязан принимать снимок по ref: иначе присваивания в него " +
+                    "теряются, и снимок возвращается с нулями (структура копируется)");
+            }
+        }
+
+        /// <summary>
+        /// ПОВЕДЕНЧЕСКАЯ ПРОВЕРКА ТОГО ЖЕ: снимок, снятый в пустой сцене с одной панелью
+        /// стартового меню, обязан НЕСТИ её состояние. До правки оба поля всегда были нулём,
+        /// и изменение раздела/показа меню было снимку не видно вовсе.
+        /// </summary>
+        [Test]
+        public void Snapshot_CaptureKeepsStartMenuAndSection()
+        {
+            GameObject panelGo = null;
+            GameObject menuGo = null;
+            GameObject probe = null;
+            KvXrStartMenu activeBefore = KvXrStartMenu.Active;
+            try
+            {
+                panelGo = new GameObject("KvXrStartMenuPanel");
+                KvXrGroupPanel panel = panelGo.AddComponent<KvXrGroupPanel>();
+                SetPrivateField(panel, "level", KvXrPanelLevel.StartMenu);
+                SetPrivateField(panel, "startSection", KvXrStartSection.Robots);
+
+                menuGo = new GameObject("KvXrStartMenu");
+                KvXrStartMenu menu = menuGo.AddComponent<KvXrStartMenu>();
+                SetPrivateField(menu, "visible", true);
+                SetPrivateStaticProperty(typeof(KvXrStartMenu), "Active", menu);
+
+                probe = new GameObject("KvUiSweepSnapshotProbe");
+                KvUiSweepRuntime rt = probe.AddComponent<KvUiSweepRuntime>();
+                var snapshot = (KvUiSweepSnapshot)InvokePrivate(rt, "Capture",
+                    new List<KvUiSweepPanelState>());
+
+                Assert.AreEqual(1, snapshot.StartMenuVisible,
+                    "снимок обязан видеть ПОКАЗАННОЕ стартовое меню — иначе «Закрыть» и " +
+                    "«Вернуться к работе» выглядят как «нет изменений»");
+                Assert.AreEqual((int)KvXrStartSection.Robots, snapshot.StartSection,
+                    "снимок обязан видеть ОТКРЫТЫЙ РАЗДЕЛ меню — иначе нажатие MenuSec_* " +
+                    "выглядит как «нет изменений», хотя раздел переключился");
+            }
+            finally
+            {
+                SetPrivateStaticProperty(typeof(KvXrStartMenu), "Active", activeBefore);
+                if (probe != null) UnityEngine.Object.DestroyImmediate(probe);
+                if (menuGo != null) UnityEngine.Object.DestroyImmediate(menuGo);
+                if (panelGo != null) UnityEngine.Object.DestroyImmediate(panelGo);
+            }
+        }
+
+        /// <summary>
+        /// НАСТРОЙКИ ОБОЛОЧКИ ТОЖЕ В СНИМКЕ: переключатель пишет `KvSettings`, а снимок обязан
+        /// читать ЭТО значение, а не ноль (до правки `RestoreUiSettings` после каждого элемента
+        /// принудительно возвращал настройки по нулевому снимку).
+        /// </summary>
+        [Test]
+        public void Snapshot_CaptureKeepsUiSettings()
+        {
+            bool before = KazistovVvUI.KvSettings.Flashlight;
+            GameObject probe = null;
+            try
+            {
+                KazistovVvUI.KvSettings.Flashlight = true;
+                probe = new GameObject("KvUiSweepSettingsProbe");
+                KvUiSweepRuntime rt = probe.AddComponent<KvUiSweepRuntime>();
+                var snapshot = (KvUiSweepSnapshot)InvokePrivate(rt, "Capture",
+                    new List<KvUiSweepPanelState>());
+                Assert.AreEqual(1, snapshot.SetFlashlight,
+                    "снимок обязан нести факт настройки «фонарик» — присваивание в " +
+                    "CaptureUiSettings не должно теряться");
+            }
+            finally
+            {
+                if (probe != null) UnityEngine.Object.DestroyImmediate(probe);
+                KazistovVvUI.KvSettings.Flashlight = before;
+            }
+        }
+
+        // ============== ОКНО ФУНКЦИЙ: СОДЕРЖИМОЕ ЖИВЁТ НА ВКЛАДКЕ (заказ E)
+
+        /// <summary>
+        /// ПУТЬ ОКНА ФУНКЦИЙ — ЭЛЕМЕНТ ОБОЛОЧКИ: его содержимое (`Content/…`) пересобирается
+        /// под активную вкладку (`KvFeatureWindow.BuildTabContent`), поэтому путь живёт только
+        /// на записанной вкладке. Такой элемент обязан ВОССТАНАВЛИВАТЬСЯ штатным `Show(tab)`
+        /// (по образцу верстака), а если вкладка не вернулась — получать «панель не открыта»
+        /// С ФАКТОМ, а не тихий «исчез» (отчёт планшета 13.11f: `Btn3«×2»`, `Btn4«×4»`,
+        /// `Switch_Писать движение ФАНТОМА…` — 3 «исчезло»).
+        /// </summary>
+        [Test]
+        public void ShellNav_FeatureWindowIsShellPanel_WithHonestReason()
+        {
+            const string feature =
+                "KazistovVv_UI/KvFeatureCanvas/KvFeatureWindow/Scroll/Viewport/Content/Buttons#2/Btn3«×2»";
+            const string toggle =
+                "KazistovVv_UI/KvFeatureCanvas/KvFeatureWindow/Scroll/Viewport/Content/ToggleRow/Switch_Писать движение ФАНТОМА, а не робота«Писать движение ФАНТОМА,…»";
+
+            Assert.IsTrue(KvUiSweepShellNav.IsRestorablePath(feature),
+                "окно функций — панель, которую обход ВОССТАНАВЛИВАЕТ перед проверкой (штатным " +
+                "Show(tab)), иначе элемент получает тихий «исчез»");
+            Assert.IsTrue(KvUiSweepShellNav.IsRestorablePath(toggle),
+                "то же для строки-переключателя той же вкладки");
+            Assert.IsFalse(KvUiSweepShellNav.IsFeatureWindowPath(
+                "KazistovVv_UI/KvWorkbenchWindow/Canvas/Window/Content/Row_1"),
+                "правило узкое: путь верстака не должен становиться путём окна функций");
+
+            string reason = KvUiSweepShellNav.NotOpenReasonFor(feature, "вкладка сейчас «Графики»");
+            StringAssert.Contains("функций", reason,
+                "причина обязана называть СВОЮ панель, а не общую «панель не открыта»: " + reason);
+            StringAssert.Contains("вкладка сейчас «Графики»", reason,
+                "причина обязана нести факт, который сообщил рантайм: " + reason);
+        }
+
+        /// <summary>Путь окна функций распознаётся сам по себе (не только через `IsShellPath`).</summary>
+        [Test]
+        public void ShellNav_FeatureWindowPathRecognized()
+        {
+            const string feature =
+                "KazistovVv_UI/KvFeatureCanvas/KvFeatureWindow/Scroll/Viewport/Content/Buttons#4/Btn4«×4»";
+            Assert.IsTrue(KvUiSweepShellNav.IsFeatureWindowPath(feature),
+                "путь окна функций обязан распознаваться по пути — иначе его вкладку " +
+                "не восстановить перед проверкой");
+            Assert.IsFalse(KvUiSweepShellNav.IsFeatureWindowPath(
+                "KazistovVv_UI/KvWorkbenchWindow/Canvas/Window/Content/Row_1"),
+                "правило узкое — чужой путь не должен становиться путём окна функций");
+        }
+
+        // ================= УРОВЕНЬ «ИКОНКИ ГРУПП» В ПРОХОДЕ ПО МЕНЮ (заказ B)
+
+        /// <summary>
+        /// ОТКУДА (шлем, отчёт 14.11.2026): 13 красных «пункт не появился» —
+        /// `Group_*` и `Screen_*` панели шЛЕМА (`KvXrStartMenu/…/KvXrGroupCanvas/…`). Эти кнопки
+        /// физически существуют ТОЛЬКО на уровне «иконки групп», а проход по стартовому меню
+        /// показывал меню и ставил раздел, то есть уводил панель на уровень StartMenu — пути там
+        /// просто нет. Элемент обязан либо получить ВОССТАНОВЛЕНИЕ базового уровня
+        /// (`RestoreBase` → `CloseScreen`/`CloseFan` → Groups), либо честную причину с ФАКТОМ
+        /// (какой уровень у панели оказался), а не тихий «пункт не появился».
+        /// </summary>
+        [Test]
+        public void StartMenuPass_RestoresBaseLevelForNonMenuItems()
+        {
+            const string group = "KvXrStartMenu/KvXrStartMenuPanel/KvXrGroupCanvas/Group_robot";
+            const string screen = "KvXrStartMenu/KvXrStartMenuPanel/KvXrGroupCanvas/Screen_HelpScreen";
+            const string section = "KvXrStartMenu/KvXrStartMenuPanel/KvXrGroupCanvas/MenuSec_1«Робот»";
+            const string close = "ПанельШлема/Стартовое меню/Закрыть";
+
+            Assert.IsTrue(KvUiSweepStartMenu.NeedsBaseLevelRestore(group),
+                "иконка группы — элемент ДРУГОГО уровня: проход обязан вернуть панель на базу");
+            Assert.IsTrue(KvUiSweepStartMenu.NeedsBaseLevelRestore(screen),
+                "иконка экрана — элемент ДРУГОГО уровня: то же правило");
+            Assert.IsFalse(KvUiSweepStartMenu.NeedsBaseLevelRestore(section),
+                "пункт раздела меню остаётся в своём уровне — ему база не нужна");
+            Assert.IsFalse(KvUiSweepStartMenu.NeedsBaseLevelRestore(close),
+                "пункт панели стартового меню остаётся в своём уровне");
+
+            string reason = KvUiSweepStartMenu.NotFoundOnLevelReason(group, "уровень панели StartMenu");
+            StringAssert.Contains("уровень панели StartMenu", reason,
+                "причина обязана нести ФАКТ уровня, а не общее «пункт не появился»: " + reason);
+        }
+
+        // ============ «ПЕРЕМЕСТИТЬ РОБОТА»: ЧЕСТНАЯ ПРИЧИНА ПО ФАКТУ ФИКСАЦИИ (заказ D)
+
+        /// <summary>
+        /// ОТКУДА (шлем, отчёт 14.11.2026): строка
+        /// «Переместить робота (сначала зафиксируйте место клавишей B)» — `нет изменений`.
+        /// Кнопка НЕ работает вслепую: `KvMrRobotPick.TryMoveRobot` отказывается, пока место не
+        /// зафиксировано клавишей B, а без компонента (не MR) и вовсе пишет «режим выбора места
+        /// не создан». Отказ обязан попасть в отчёт СЛОВАМИ факта, а не «нет изменений».
+        /// </summary>
+        [Test]
+        public void MoveRobot_HonestReasonFromPlaceFixedFact()
+        {
+            const string move =
+                "ПанельШлема/Стартовое меню/Переместить робота (сначала зафиксируйте место клавишей B)";
+            const string other = "ПанельШлема/Стартовое меню/Сменить робота";
+
+            Assert.IsTrue(KvUiSweepExemptions.IsMoveRobotPath(move),
+                "строка «переместить робота» обязана распознаваться по пути");
+            Assert.IsFalse(KvUiSweepExemptions.IsMoveRobotPath(other),
+                "правило узкое — чужая строка меню не должна получать причину про фиксацию");
+
+            string noComponent = KvUiSweepExemptions.MoveRobotReasonFor(move, false, false);
+            StringAssert.Contains("не в MR", noComponent,
+                "без компонента выбора места причина обязана называть факт: " + noComponent);
+
+            string notFixed = KvUiSweepExemptions.MoveRobotReasonFor(move, true, false);
+            StringAssert.Contains("клавиша B", notFixed,
+                "без фиксации причина обязана называть требуемую клавишу: " + notFixed);
+
+            Assert.AreEqual("", KvUiSweepExemptions.MoveRobotReasonFor(move, true, true),
+                "место зафиксировано — кнопка работает, причины нет");
+            Assert.AreEqual("", KvUiSweepExemptions.MoveRobotReasonFor(other, false, false),
+                "чужая строка не получает чужую причину");
+        }
     }
 }

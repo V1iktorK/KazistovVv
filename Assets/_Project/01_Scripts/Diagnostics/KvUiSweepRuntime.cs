@@ -1529,6 +1529,33 @@ namespace KazistovVvDiagnostics
                    (path ?? "") + "»), нажимать нечего";
         }
 
+        /// <summary>
+        /// ЭЛЕМЕНТУ НУЖЕН ВОЗВРАТ НА БАЗОВЫЙ УРОВЕНЬ ПАНЕЛИ, А НЕ ПОКАЗ МЕНЮ.
+        ///
+        /// ОТКУДА (шлем, отчёт 14.11.2026): 13 красных «пункт не появился» — `Group_*` и
+        /// `Screen_*` панели (`KvXrStartMenu/…/KvXrGroupCanvas/…`). Они отложены в проход по
+        /// стартовому меню, но физически существуют ТОЛЬКО на уровне «иконки групп», а проход
+        /// показывал меню и ставил раздел — то есть уводил панель на уровень StartMenu, где их
+        /// путей нет вовсе. Признак — СТРУКТУРНЫЙ (нет подписи пункта меню в пути), а не
+        /// догадка по словам: `MenuSec_*`/`MenuRow_*`/`Menu_start`/«Стартовое меню» остаются
+        /// в меню, всё остальное возвращается на базу (`RestoreBase` → `CloseScreen`/`CloseFan`).
+        /// </summary>
+        public static bool NeedsBaseLevelRestore(string path)
+        {
+            return !IsHelmetMenuPath(path);
+        }
+
+        /// <summary>
+        /// ПРИЧИНА «НЕ НАЙДЕН НА СВОЁМ УРОВНЕ» — С ФАКТОМ, а не тихий «пункт не появился».
+        /// `levelFact` — что реально сообщает рантайм («уровень панели StartMenu», «панели нет»).
+        /// </summary>
+        public static string NotFoundOnLevelReason(string path, string levelFact)
+        {
+            return "не нажимали — пункт не найден на своём уровне панели («" + (path ?? "") +
+                   "») — " + (string.IsNullOrEmpty(levelFact) ? "уровень панели неизвестен" : levelFact) +
+                   ", нажимать нечего";
+        }
+
         /// <summary>Причина, когда объекта меню в сцене нет вовсе.</summary>
         public const string NoMenuReason =
             "не нажимали — объекта стартового меню (KvXrStartMenu) в сцене нет";
@@ -2643,6 +2670,44 @@ namespace KazistovVvDiagnostics
         }
 
         /// <summary>
+        /// ПУТЬ — СТРОКА «ПЕРЕМЕСТИТЬ РОБОТА» СТАРТОВОГО МЕНЮ. Подпись дана владельцем
+        /// (12.11.2026) и несёт подсказку про клавишу фиксации, поэтому правило опознаётся
+        /// по ней, а не по догадке.
+        /// </summary>
+        public static bool IsMoveRobotPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            return path.IndexOf("Переместить робота", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>
+        /// ПРИЧИНА ОТКАЗА КНОПКИ «ПЕРЕМЕСТИТЬ РОБОТА» — ТОЛЬКО ПО ФАКТУ (заказ D).
+        ///
+        /// ОТКУДА (шлем, отчёт 14.11.2026): строка — `effect=нет изменений` без причины, а
+        /// кнопка объясняется САМА: `KvMrRobotPick.TryMoveRobot` отказывается двигать робота,
+        /// пока место не зафиксировано клавишей B («требуется режим выбора места»), а без
+        /// компонента (`Active == null`, приложение не в MR) обработчик пишет «режим выбора
+        /// места не создан». Оба факта читаются из самого приложения, поэтому причина
+        /// обязана называть их словами, а не «нет изменений». Место зафиксировано → `""`:
+        /// кнопка работает, и отсутствие эффекта остаётся настоящей находкой.
+        /// </summary>
+        /// <param name="path">Путь элемента.</param>
+        /// <param name="pickPresent">Компонент выбора места в сцене есть (`KvMrRobotPick.Active`).</param>
+        /// <param name="placeFixed">Место зафиксировано клавишей фиксации (`PlaceFixed`).</param>
+        public static string MoveRobotReasonFor(string path, bool pickPresent, bool placeFixed)
+        {
+            if (!IsMoveRobotPath(path)) return "";
+            if (!pickPresent)
+                return "кнопка отказала: режим выбора места робота не создан (приложение не в MR: " +
+                       "реального стола нет) — «переместить робота» ничего не двигает";
+            if (!placeFixed)
+                return "кнопка отказала: место не зафиксировано — требуется режим выбора места " +
+                       "(клавиша " + KazistovVvXr.KvMrRobotPick.ConfirmKeyName + ") — " +
+                       "«переместить робота» ничего не двигает";
+            return "";
+        }
+
+        /// <summary>
         /// ПРИЧИНА «КОМАНДА РЕЕСТРА СЕЙЧАС НЕДОСТУПНА» — ТОЛЬКО ПО ФАКТУ РЕЕСТРА.
         ///
         /// ОТКУДА (шлем, отчёт 11.11.2026: «Сменить робота» — `ok=0 effect=нет изменений` без
@@ -3388,10 +3453,39 @@ namespace KazistovVvDiagnostics
             return path.IndexOf("/KvToolbar/Groups/Group_", StringComparison.Ordinal) >= 0;
         }
 
+        /// <summary>
+        /// Путь ведёт в ОКНО ФУНКЦИЙ (`KvFeatureWindow/Scroll/Viewport/Content/…`).
+        ///
+        /// ЗАЧЕМ ОНО ЗДЕСЬ (заказ E, отчёт планшета 13.11f): содержимое окна живёт ТОЛЬКО на
+        /// активной вкладке — `BuildTabContent` при смене вкладки уничтожает строки и строит
+        /// новые (`Btn3«×2»`, `Btn4«×4»`, `Switch_Писать движение ФАНТОМА…` — 3 «исчезло»).
+        /// Путь такого элемента обязан восстанавливаться штатным `Show(tab)` по образцу
+        /// верстака, а не «исчезнуть».
+        /// </summary>
+        public static bool IsFeatureWindowPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            return path.IndexOf("/KvFeatureWindow/", StringComparison.Ordinal) >= 0;
+        }
+
         /// <summary>Путь относится к одному из трёх классов оболочки выше.</summary>
         public static bool IsShellPath(string path)
         {
             return IsGroupMenuPath(path) || IsWorkbenchPath(path) || IsToolbarHandlePath(path);
+        }
+
+        /// <summary>
+        /// ПУТЬ, ДЛЯ КОТОРОГО ОБХОД ВОССТАНАВЛИВАЕТ ПАНЕЛЬ ПЕРЕД ПРОВЕРОКОЙ.
+        ///
+        /// Это `IsShellPath` ПЛЮС окно функций (заказ E). Окно функций сюда не входит
+        /// намеренно: `IsShellPath` закреплён существующим тестом как «список/верстак/ручка»,
+        /// а восстановление ему нужно такое же, как верстаку, — `Show(tab)` на вкладке,
+        /// записанной при сборе. Отдельное имя нужно и затем, чтобы причина «панель не
+        /// открыта» называла СВОЮ панель, а не подменяла чужую.
+        /// </summary>
+        public static bool IsRestorablePath(string path)
+        {
+            return IsShellPath(path) || IsFeatureWindowPath(path);
         }
 
         /// <summary>
@@ -3477,6 +3571,11 @@ namespace KazistovVvDiagnostics
         {
             if (IsWorkbenchPath(path))
                 return KvUiSweepPanelNav.NotOpenReason("верстак", detail);
+
+            // ОКНО ФУНКЦИЙ (заказ E): своя панель и своя деталь (активная вкладка) — иначе
+            // «панель не открыта: уровень панели» ничего не говорило о том, что не вернулось.
+            if (IsFeatureWindowPath(path))
+                return KvUiSweepPanelNav.NotOpenReason("панель функций", detail);
 
             if (IsToolbarHandlePath(path))
             {
@@ -3704,6 +3803,18 @@ namespace KazistovVvDiagnostics
 
         /// <summary>Файл отчёта текущего макета (может смениться после уточнения сцены/режима).</summary>
         private string reportPath = "";
+
+        /// <summary>
+        /// ИМЯ ФАЙЛА, ЗАФИКСИРОВАННОЕ `SetLayout` ДО ШАПКИ. Режим на момент первого `Line()` ещё
+        /// не определён (`ApplyMode` переключает VR/MR ПОСЛЕ первого `SetLayout`), поэтому
+        /// открывать файл здесь значило бы первым же Line'ом затирать отчёт ПРОВЕДЁННОГО
+        /// прогона другого режима (заказ A: `_ui_sweep_vr_1411.txt` остался со строкой
+        /// «РЕЖИМ: выставление mr (было vr)»). Фактическое имя берётся в `Header`.
+        /// </summary>
+        private string reportPendingPath = "";
+
+        /// <summary>Шапка написана — файл отчёта открыт; до этого строки идут только в буфер.</summary>
+        private bool reportSealed;
 
         /// <summary>Файл уже создан и содержит накопленное (иначе первая запись — полная, не дозапись).</summary>
         private bool reportFileReady;
@@ -4169,7 +4280,7 @@ namespace KazistovVvDiagnostics
                                 continue;
                             }
                         }
-                        else if (KvUiSweepShellNav.IsShellPath(c.Path))
+                        else if (KvUiSweepShellNav.IsRestorablePath(c.Path))
                         {
                             // ОБОЛОЧКА (заказ A): список группы тулбара / окно верстака /
                             // ручка тулбара открываются ШТАТНЫМ ПУТЁМ, затем путь ищется
@@ -4283,13 +4394,23 @@ namespace KazistovVvDiagnostics
             }
 
             var beforePanels = new List<KvUiSweepPanelState>(4);
-            KvUiSweepSnapshot before = Capture(beforePanels);
+            // ПАНЕЛЬ ЭТОГО ЭЛЕМЕНТА: её меряют ОБА снимка (до и после). Мерить «первую
+            // найденную панель» нельзя — в шлеме их несколько (панель у руки и панель меню),
+            // и смена экрана одной из них снимку не видна (заказ B).
+            KvXrGroupPanel measurePanel = PanelOf(c);
+            KvUiSweepSnapshot before = Capture(beforePanels, measurePanel);
 
             // РАЗДЕЛ МЕНЮ ДО НАЖАТИЯ — для правила «раздел уже открыт» (пункт 37 шапки).
             // Сверять состояние ПОСЛЕ нельзя: после удачного нажатия раздел и так открылся бы
             // на нужном номере, и правило вычёркивало бы УСПЕШНОЕ нажатие из «сработало».
+            //
+            // ЧТО ИМЕННО ЭТО «ДО». Читается ЗДЕСЬ, то есть ПОСЛЕ подготовки (показ меню мог
+            // легитимно открыть раздел) и ДО самого нажатия — ровно как «строка уже выбрана»
+            // ниже. Панель берётся ЖИВАЯ: ссылка, записанная при сборе, могла погибнуть при
+            // пересборке, и тогда раздел читался бы не с того объекта (заказ C).
             int sectionBefore = -1;
-            KvXrGroupPanel sectionPanel = c.IsPanelIcon ? c.Panel : c.PanelOwner;
+            KvXrGroupPanel sectionPanel = c.IsPanelIcon ? c.Panel
+                : (c.PanelOwner != null ? c.PanelOwner : StartMenuPanel());
             if (sectionPanel != null) sectionBefore = (int)sectionPanel.StartSection;
 
             // СТРОКА ДЕРЕВА ВЫБРАНА ДО НАЖАТИЯ — тоже читается ДО (дефект B3). Сверять состояние
@@ -4371,7 +4492,7 @@ namespace KazistovVvDiagnostics
 
             float spent = Time.realtimeSinceStartup - t0;
             var afterPanels = new List<KvUiSweepPanelState>(4);
-            KvUiSweepSnapshot after = Capture(afterPanels);
+            KvUiSweepSnapshot after = Capture(afterPanels, measurePanel);
 
             // ГЛАЗИК И КЛАВИШИ ВВОДА — ФАКТ ПОСЛЕ НАЖАТИЯ (заказы C и D). Агрегат снимка
             // (`TreeHidden`) меряет ВСЁ дерево и в прогоне не меняется, поэтому видимость
@@ -4477,6 +4598,16 @@ namespace KazistovVvDiagnostics
                 if (honest.Length == 0 && KvUiSweepExemptions.IsLimitsSwitchPath(c.Path))
                 {
                     honest = KvUiSweepExemptions.LimitsSwitchReasonFor(c.Path, LimitsVisualizerPresent());
+                }
+                // «ПЕРЕМЕСТИТЬ РОБОТА» (заказ D): отказ САМОЙ кнопки, названный фактом —
+                // «место не зафиксировано: требуется режим выбора места (клавиша B)» либо
+                // «режим выбора места не создан». Оба факта читаются из приложения, а не
+                // додумываются; место зафиксировано — причины нет.
+                if (honest.Length == 0)
+                {
+                    KvMrRobotPick pick = KvMrRobotPick.Active;
+                    honest = KvUiSweepExemptions.MoveRobotReasonFor(
+                        c.Path, pick != null, pick != null && pick.PlaceFixed);
                 }
                 if (honest.Length > 0)
                 {
@@ -4813,7 +4944,14 @@ namespace KazistovVvDiagnostics
             // КЛЮЧ УНИКАЛЬНОСТИ — С РАЗДЕЛОМ: `MenuRow_0` разных разделов это РАЗНЫЕ пункты, и
             // схлопывать их в один (как делает общий список путей) значило бы не проверить часть.
             string identity = c.Key + "·раздел" + section.ToString(CultureInfo.InvariantCulture);
-            if (!startMenuKeys.Add(identity)) return false;
+            // УЖЕ ОТЛОЖЕН — И ЭТОТ ЭКЗЕМПЛЯР НЕ В ОБЩИЙ ПРОХОД (заказ B).
+            //
+            // ЧТО БЫЛО. Повторная сборка (`MergeFreshTargets`) приносила ВТОРОЙ экземпляр того же
+            // пункта: `startMenuKeys.Add` возвращал false, и кандидат уходил в ОБЩУЮ очередь, где
+            // нажимался среди прочего. В отчёте 14.11 тот же путь печатался ДВАЖДЫ — один раз
+            // «ok=1» в общем проходе, второй раз красным «пункт не появился» в проходе по меню.
+            // Дубль проверки — это не покрытие, а подмена: одно и то же нажатие считается дважды.
+            if (!startMenuKeys.Add(identity)) return true;
 
             // ССЫЛКА НЕ ХРАНИТСЯ: меню всё равно пересоберётся, и объект будет НОВЫЙ. Ищем по пути.
             if (!c.IsPanelIcon) c.Target = null;
@@ -5016,7 +5154,7 @@ namespace KazistovVvDiagnostics
                 // ОБОЛОЧКА (заказ A): список группы / верстак / ручка тулбара открываются
                 // ШТАТНЫМ ПУТЁМ ДО всякого отказа — иначе рабочие строки списка и верстака
                 // получают тихий «исчез» (их путей в закрытой панели просто не существует).
-                if (!located && KvUiSweepShellNav.IsShellPath(rc.Path))
+                if (!located && KvUiSweepShellNav.IsRestorablePath(rc.Path))
                 {
                     yield return OpenShellPanelStep(rc);
                     located = Locate(rc) && PanelLevelMatches(rc);
@@ -5054,7 +5192,7 @@ namespace KazistovVvDiagnostics
                     // ОБОЛОЧКА (заказ A): попытка открыть УЖЕ была — называем, что именно не
                     // открылось. Это исключение отчёта («панель не открыта» с фактом), а не
                     // «исчез»: «исчез» означал бы «путь не найден» и скрыл бы попытку обхода.
-                    if (KvUiSweepShellNav.IsShellPath(rc.Path))
+                    if (KvUiSweepShellNav.IsRestorablePath(rc.Path))
                     {
                         RestoreShellState(rc);
                         notOpen++;
@@ -5186,12 +5324,22 @@ namespace KazistovVvDiagnostics
                 if (item == null || item.Candidate == null) continue;
                 Candidate c = item.Candidate;
 
-                // 1) МЕНЮ НА ЭКРАНЕ. `Show` — штатный путь показа (`OpenStartMenu` внутри), он же
-                //    пересобирает список под текущий момент. После него ОБЯЗАТЕЛЬНЫЙ кадр: старые
-                //    объекты уничтожаются в конце кадра, и без ожидания в индексе путей оказались бы
+                // 1) МЕНЮ НА ЭКРАНЕ — ТОЛЬКО ДЛЯ ПУНКТОВ МЕНЮ (заказ B).
+                //
+                //    ЧТО БЫЛО. `Show` показывал меню и уводил панель на уровень StartMenu для
+                //    ЛЮБОГО отложенного элемента, а `Group_*`/`Screen_*` панели шлема
+                //    существуют ТОЛЬКО на уровне «иконки групп» — их путей в меню нет вовсе,
+                //    и 13 таких элементов получали красное «пункт не появился» (отчёт 14.11).
+                //    ЧТО СТАЛО: пунктам меню — прежний путь (`Show` → записанный раздел),
+                //    элементам ДРУГОГО уровня — возврат на базу (шаг 2).
+                //
+                //    `Show` — штатный путь показа (`OpenStartMenu` внутри), он же пересобирает
+                //    список под текущий момент. После него ОБЯЗАТЕЛЬНЫЙ кадр: старые объекты
+                //    уничтожаются в конце кадра, и без ожидания в индексе путей оказались бы
                 //    сразу и старый, и новый `MenuRow_0` — нажали бы уничтожаемый.
+                bool menuLevelItem = !KvUiSweepStartMenu.NeedsBaseLevelRestore(c.Path);
                 KvXrStartMenu menu = KvXrStartMenu.Active;
-                if (StartMenuNeedsShow())
+                if (menuLevelItem && StartMenuNeedsShow())
                 {
                     menu.Show();
                     yield return null;
@@ -5207,11 +5355,25 @@ namespace KazistovVvDiagnostics
                 }
 
                 // 2) РАЗДЕЛ — ТОТ ЖЕ, ЧТО ПРИ СБОРЕ (для разделов — СОСЕДНИЙ, см. ниже).
+                //    ЭЛЕМЕНТ ДРУГОГО УРОВНЯ: меню НЕ показываем и раздел НЕ ставим — панель
+                //    возвращается на БАЗУ (`RestoreBase`: `CloseScreen` → `CloseFan` → Groups),
+                //    где и лежат его иконки.
                 IReadOnlyList<string> titles = SectionTitles();
                 int wanted = item.IsSection
                     ? KvUiSweepStartMenu.DifferentSection(item.Section, titles.Count)
                     : item.Section;
-                if ((int)panel.StartSection != wanted)
+                if (!menuLevelItem)
+                {
+                    RestoreBase(panel);
+                    // ПАНЕЛЬ И ЕЁ КАНВАС ОБЯЗАНЫ БЫТЬ НА ЭКРАНЕ. `CloseScreen` у панели меню
+                    // вызывает `KvXrStartMenu.Hide()`, который ВЫКЛЮЧАЕТ сам объект панели, а
+                    // `Group_*`/`Screen_*` в выключенном объекте физически не индексируются —
+                    // путь не находился бы. Показ — тем же штатным способом, что и в `Prepare`
+                    // (`SetArVisible`), плюс сам объект, если его выключили.
+                    if (panel != null && !panel.isActiveAndEnabled) panel.gameObject.SetActive(true);
+                    if (panel != null && !panel.IsCanvasVisible) panel.SetArVisible(true);
+                }
+                else if ((int)panel.StartSection != wanted)
                 {
                     panel.SelectStartSection(wanted);
                     yield return null;                  // пересборка уничтожает объекты в конце кадра
@@ -5242,7 +5404,12 @@ namespace KazistovVvDiagnostics
                 if (!Locate(c))
                 {
                     notFound++;
-                    string why = KvUiSweepStartMenu.NotFoundReason(c.Path);
+                    // ПРИЧИНА С ФАКТОМ: элементу ДРУГОГО уровня называем, на каком уровне
+                    // оказалась панель после возврата на базу, а не общее «пункт не появился».
+                    string why = menuLevelItem
+                        ? KvUiSweepStartMenu.NotFoundReason(c.Path)
+                        : KvUiSweepStartMenu.NotFoundOnLevelReason(c.Path,
+                              "уровень панели " + panel.Level);
                     Line("[KvUiSweep] СТАРТОВОЕ МЕНЮ: " + c.Path + " — " + why);
                     Record(new KvUiSweepElement
                     {
@@ -5265,17 +5432,23 @@ namespace KazistovVvDiagnostics
                 // 5) МЕНЮ ОБРАТНО НА ЭКРАН. Нажатие строки могло его закрыть («Вернуться к работе»),
                 //    и тогда следующий пункт искать негде. Не вернулось — говорим прямо и
                 //    останавливаемся: молча «проверено 3 из 12» выглядело бы как All done.
-                yield return null;
-                menu = KvXrStartMenu.Active;
-                if (StartMenuNeedsShow()) menu.Show();
-                yield return null;
-                if (!StartMenuShown())
+                //    ЭЛЕМЕНТ ДРУГОГО УРОВНЯ: меню мы САМИ уводили на базу, поэтому его
+                //    отсутствие здесь — не сбой, а наше действие; следующий пункт покажет меню
+                //    сам (шаг 1), если он менюшный.
+                if (menuLevelItem)
                 {
-                    Line(KvUiSweepStartMenu.RestoreFailed(c.Path));
-                    Line("[KvUiSweep] СТАРТОВОЕ МЕНЮ: проверено " + checkedNow + " из " +
-                         startMenuItems.Count + ", остальные НЕ ПРОВЕРЯЛИСЬ");
-                    stopReason = KvUiSweepStartMenu.RestoreFailedReason;
-                    break;
+                    yield return null;
+                    menu = KvXrStartMenu.Active;
+                    if (StartMenuNeedsShow()) menu.Show();
+                    yield return null;
+                    if (!StartMenuShown())
+                    {
+                        Line(KvUiSweepStartMenu.RestoreFailed(c.Path));
+                        Line("[KvUiSweep] СТАРТОВОЕ МЕНЮ: проверено " + checkedNow + " из " +
+                             startMenuItems.Count + ", остальные НЕ ПРОВЕРЯЛИСЬ");
+                        stopReason = KvUiSweepStartMenu.RestoreFailedReason;
+                        break;
+                    }
                 }
             }
 
@@ -5949,6 +6122,34 @@ namespace KazistovVvDiagnostics
                 yield break;
             }
 
+            // ОКНО ФУНКЦИЙ (заказ E). Содержимое (`Content/…`) пересобирается под активную
+            // вкладку, поэтому путь возвращается штатным `Show(tab)` на вкладке, ЗАПИСАННОЙ
+            // при сборе, — тот же путь, что у верстака. Не вышло — честная деталь для причины
+            // «панель не открыта: панель функций — …», а НЕ тихий «исчез».
+            if (KvUiSweepShellNav.IsFeatureWindowPath(c.Path))
+            {
+                KvFeatureWindow feature = FeatureWindow();
+                if (feature == null)
+                {
+                    c.RestoreFail = "окна функций в сцене нет";
+                    yield break;
+                }
+                if (!feature.Visible) c.OpenedFeature = true;
+                int featureTab = c.FeatureTab >= 0 ? c.FeatureTab : feature.VisibleTab;
+                if (featureTab >= 0) feature.Show(featureTab);   // Show → SetTab → BuildTabContent
+                yield return null;
+                yield return null;
+                if (!feature.Visible)
+                    c.RestoreFail = "окно функций не открылось (вкладка " + featureTab + ")";
+                else
+                {
+                    string[] featureTabs = KvFeatureWindow.TabTitlesLocalized();
+                    int shownTab = Mathf.Clamp(feature.VisibleTab, 0, featureTabs.Length - 1);
+                    c.PreparedBy = "окно функций (вкладка «" + featureTabs[shownTab] + "»)";
+                }
+                yield break;
+            }
+
             // СПИСОК ГРУППЫ ТУЛБАРА.
             if (ui == null || ui.Toolbar == null)
             {
@@ -6090,6 +6291,17 @@ namespace KazistovVvDiagnostics
                     : "окно верстака не открылось";
             }
 
+            // ОКНО ФУНКЦИЙ (заказ E): деталь — какая вкладка открыта и что с содержимым.
+            if (KvUiSweepShellNav.IsFeatureWindowPath(c.Path))
+            {
+                KvFeatureWindow feature = FeatureWindow();
+                if (feature == null) return "окна функций в сцене нет";
+                return feature.Visible
+                    ? "окно функций открыто (вкладка " + feature.VisibleTab +
+                      "), но строки на ней нет"
+                    : "окно функций не открылось";
+            }
+
             if (ui == null || ui.Toolbar == null) return "тулбара в оболочке нет";
 
             if (KvUiSweepShellNav.IsToolbarHandlePath(c.Path))
@@ -6156,6 +6368,15 @@ namespace KazistovVvDiagnostics
                     KvWorkbenchWindow workbench = KvWorkbenchWindow.Instance;
                     if (workbench != null && workbench.Visible) workbench.Hide();
                     c.OpenedWorkbench = false;
+                }
+
+                // ОКНО ФУНКЦИЙ ОТКРЫЛ САМ ОБХОД — ЗАКРЫВАЕМ ОБРАТНО (заказ E): иначе следующие
+                // элементы проверялись бы в мире, который подготовил не они сами.
+                if (c.OpenedFeature)
+                {
+                    KvFeatureWindow feature = FeatureWindow();
+                    if (feature != null && feature.Visible) feature.Hide();
+                    c.OpenedFeature = false;
                 }
 
                 if (c.ToolbarLayoutBefore >= 0)
@@ -6707,6 +6928,7 @@ namespace KazistovVvDiagnostics
                         SettingsTab = KvUiSweepDockNav.SettingsTabFor(path, settingsRoot, settingsTab),
                         GroupMenuId = GroupMenuIdAtCollection(path),
                         WorkbenchTab = WorkbenchTabAtCollection(path),
+                        FeatureTab = FeatureTabAtCollection(path),
                         ToolbarLayout = ToolbarLayoutAtCollection(path)
                     };
                     RecordPanelRoute(candidate);
@@ -6731,12 +6953,31 @@ namespace KazistovVvDiagnostics
             return ui != null && ui.Toolbar != null ? ui.Toolbar.RowsGroupId : "";
         }
 
-        /// <summary>ВКЛЯДКА ВЕРСТАКА ПРИ СБОРЕ (заказ A): содержимое окна живёт только на ней.</summary>
+        /// <summary>ВКЛАДКА ВЕРСТАКА ПРИ СБОРЕ (заказ A): содержимое окна живёт только на ней.</summary>
         private static string WorkbenchTabAtCollection(string path)
         {
             if (!KvUiSweepShellNav.IsWorkbenchPath(path)) return "";
             KvWorkbenchWindow workbench = KvWorkbenchWindow.Instance;
             return workbench != null ? workbench.ActiveKey : "";
+        }
+
+        /// <summary>
+        /// ВКЛАДКА ОКНА ФУНКЦИЙ ПРИ СБОРЕ (заказ E): содержимое (`Content/…`) физически
+        /// существует только на активной вкладке — `BuildTabContent` пересобирает его целиком.
+        /// Поиск самого окна делается ТОЛЬКО для его путей: иначе каждый элемент сборки
+        /// платил бы за обход сцены.
+        /// </summary>
+        private static int FeatureTabAtCollection(string path)
+        {
+            if (!KvUiSweepShellNav.IsFeatureWindowPath(path)) return -1;
+            KvFeatureWindow feature = FeatureWindow();
+            return feature != null ? feature.VisibleTab : -1;
+        }
+
+        /// <summary>ЖИВОЕ ОКНО ФУНКЦИЙ ИЛИ `null` (один поиск на три места восстановления).</summary>
+        private static KvFeatureWindow FeatureWindow()
+        {
+            return UnityEngine.Object.FindAnyObjectByType<KvFeatureWindow>();
         }
 
         /// <summary>
@@ -7278,6 +7519,20 @@ namespace KazistovVvDiagnostics
         /// </summary>
         private KvUiSweepSnapshot Capture(List<KvUiSweepPanelState> intoPanels = null)
         {
+            return Capture(intoPanels, null);
+        }
+
+        /// <summary>
+        /// СНЯТЬ СОСТОЯНИЕ. `preferPanel` — панель, КОТОРУЮ ПРОВЕРЯЕТ ЭТОТ ЭЛЕМЕНТ: снимок обязан
+        /// мерить ЕЁ уровень и экран, а не «первую найденную панель» — иначе смена экрана одной
+        /// панели снимку не видна, пока рядом есть другая (шлем: панель у руки и панель меню
+        /// живут одновременно; отчёт 14.11 — «ПанельШлема/иконки групп/Справка» открыл экран
+        /// по logcat, а снимок ответил «нет изменений»). Если указанная панель погибла или
+        /// выключена — берётся активная, как и раньше.
+        /// </summary>
+        private KvUiSweepSnapshot Capture(List<KvUiSweepPanelState> intoPanels,
+            KvXrGroupPanel preferPanel)
+        {
             var s = new KvUiSweepSnapshot { Comfort = ComfortValue(), PanelLevel = -1 };
 
             KazistovVvUIManager ui = KazistovVvUIManager.Instance;
@@ -7319,7 +7574,7 @@ namespace KazistovVvDiagnostics
             s.SceneObjects = SceneObjectCount();
             s.Files = CountRecords();
 
-            KvXrGroupPanel panel = ActivePanel();
+            KvXrGroupPanel panel = preferPanel != null ? preferPanel : ActivePanel();
             if (panel != null)
             {
                 s.PanelLevel = (int)panel.Level;
@@ -7336,8 +7591,10 @@ namespace KazistovVvDiagnostics
             }
             // ФЛАГИ ОБОЛОЧКИ И ТЕМА: их меняют переключатели панели настроек, и без них эти
             // переключатели выглядели бы мёртвыми (принцип «кнопка мертва ≠ снимок не видит»).
-            CaptureUiSettings(s);
-            CaptureArPanels(s, ui);
+            // СНИМОК ПЕРЕДАЁТСЯ ПО ref: он СТРУКТУРА, и без ref каждое присваивание шло бы в
+            // копию — поля возвращались бы нулём (причина заказов C и D).
+            CaptureUiSettings(ref s);
+            CaptureArPanels(ref s, ui);
             return s;
         }
 
@@ -7348,7 +7605,7 @@ namespace KazistovVvDiagnostics
         /// нет», и это эффект. Показ сообщения/панели команд/меню AR, как и показ любой другой
         /// панели, обязан быть виден снимку, иначе рабочие кнопки попадают в дефекты.
         /// </summary>
-        private static void CaptureArPanels(KvUiSweepSnapshot snapshot, KazistovVvUIManager ui)
+        private static void CaptureArPanels(ref KvUiSweepSnapshot snapshot, KazistovVvUIManager ui)
         {
             KvArUi ar = UnityEngine.Object.FindAnyObjectByType<KvArUi>();
             if (ar != null)
@@ -7375,10 +7632,10 @@ namespace KazistovVvDiagnostics
                 snapshot.SelectedNodeHash = KvUiSweepNames.StableHash(DescribeSelectedNode(ui));
 
             // СОБСТВЕННЫЙ ТРЕКЕР ДЕРЕВА И «ГЛАЗИК» (дефект B3, отчёт 13.11.2026).
-            CaptureTreeState(snapshot);
+            CaptureTreeState(ref snapshot);
 
             CountCanvasObjects(out snapshot.UiObjectsAll, out snapshot.UiObjectsActive);
-            CaptureStatusAndMenus(snapshot, ui);
+            CaptureStatusAndMenus(ref snapshot, ui);
         }
 
         /// <summary>
@@ -7389,7 +7646,7 @@ namespace KazistovVvDiagnostics
         /// кнопки выглядят мёртвыми, хотя они работают: они честно отвечают, что действие
         /// невозможно.
         /// </summary>
-        private static void CaptureStatusAndMenus(KvUiSweepSnapshot snapshot, KazistovVvUIManager ui)
+        private static void CaptureStatusAndMenus(ref KvUiSweepSnapshot snapshot, KazistovVvUIManager ui)
         {
             if (ui != null)
             {
@@ -7403,7 +7660,14 @@ namespace KazistovVvDiagnostics
 
             KvXrStartMenu start = KvXrStartMenu.Active;
             snapshot.StartMenuVisible = start != null && start.Visible ? 1 : 0;
-            KvXrGroupPanel startPanel = start != null ? start.Panel : startPanelFromScene();
+            // ПАНЕЛЬ МЕНЮ: своя у меню, а если она ещё не собрана (`menuPanel` не присвоен) —
+            // ЖИВАЯ панель уровня StartMenu из сцены. Раньше при существующем меню с
+            // несобранной панелью раздел читался НИКОГДА (`start.Panel == null` → и поиска в
+            // сцене не было), и снимок отвечал нулём — тот же класс дефекта, что «нет
+            // изменений» у `MenuSec_*` (заказ C).
+            KvXrGroupPanel startPanel = start != null && start.Panel != null
+                ? start.Panel
+                : startPanelFromScene();
             if (startPanel != null)
             {
                 snapshot.StartSection = (int)startPanel.StartSection;
@@ -7494,7 +7758,7 @@ namespace KazistovVvDiagnostics
         /// объекта сцены — признака для этого в снимке не было ВООБСЕ, и рабочий глазик
         /// попадал в «нет изменений». Оба числа читаются из живого дерева, без него — `−1`/`0`.
         /// </summary>
-        private static void CaptureTreeState(KvUiSweepSnapshot snapshot)
+        private static void CaptureTreeState(ref KvUiSweepSnapshot snapshot)
         {
             KvTreeView tree = UnityEngine.Object.FindAnyObjectByType<KvTreeView>();
             if (tree == null)
@@ -7580,7 +7844,7 @@ namespace KazistovVvDiagnostics
         /// Каждое чтение — свойство `KvSettings`, которое пишет оператор переключателями панели
         /// настроек; без них эти переключатели выглядели бы мёртвыми.
         /// </summary>
-        private static void CaptureUiSettings(KvUiSweepSnapshot snapshot)
+        private static void CaptureUiSettings(ref KvUiSweepSnapshot snapshot)
         {
             snapshot.SetWorkspace = KvSettings.ShowWorkspace ? 1 : 0;            snapshot.SetJointLimits = KvSettings.ShowJointLimits ? 1 : 0;
             snapshot.SetMetrics = KvSettings.ShowMetrics ? 1 : 0;
@@ -7988,6 +8252,20 @@ namespace KazistovVvDiagnostics
 
         private void Header()
         {
+            // ИМЯ ФАЙЛА ОТЧЁТА ФИКСИРУЕТСЯ ЗДЕСЬ — ДО ПЕРВОЙ СТРОКИ ШАПКИ, то есть уже ПОСЛЕ
+            // уточнения сцены и переключения режима. Накопленный буфер строк (смена режима
+            // и всё, что написано до шапки) целиком уезжает в файл СВОЕГО режима, а чужой
+            // отчёт не открывается и не затирается (заказ A, тест
+            // ReportFile_ModeSwitchDoesNotClobberPreviousReport).
+            if (!reportSealed)
+            {
+                reportSealed = true;
+                reportPath = reportPendingPath.Length > 0
+                    ? reportPendingPath
+                    : ReportPath(run != null ? run.Layout : "pc");
+                reportFileReady = false;   // первый Line() запишет буфер целиком в свой файл
+            }
+
             Line("");
             Line("=== САМОПРОГОН ИНТЕРФЕЙСА (KvUiSweep) ===");
             Line("дата: " + DateTime.Now.ToString("dd.MM.yyyy HH:mm:ss", CultureInfo.InvariantCulture));
@@ -8029,6 +8307,14 @@ namespace KazistovVvDiagnostics
             if (run == null) return;
             run.Layout = layout;
             string path = ReportPath(layout);
+            // ДО ШАПКИ ФАЙЛ НЕ ОТКРЫВАЕТСЯ (заказ A): режим ещё не определён, и первый `Line()`
+            // (`ApplyMode` пишет «РЕЖИМ: выставление …») ушёл бы в файл ПРЕДЫДУЩЕГО режима,
+            // затирая его целиком. Имя только запоминается — открывает его `Header`.
+            if (!reportSealed)
+            {
+                reportPendingPath = path;
+                return;
+            }
             if (string.Equals(path, reportPath, StringComparison.OrdinalIgnoreCase)) return;
             reportPath = path;
             reportFileReady = false;   // первый Line() после смены файла перепишет его целиком
@@ -8303,6 +8589,14 @@ namespace KazistovVvDiagnostics
             /// проверки, — чаще всего НЕ на своей.
             /// </summary>
             public string WorkbenchTab = "";
+            /// <summary>
+            /// ВКЛАДКА ОКНА ФУНКЦИЙ, НА КОТОРОЙ ЛЕЖИТ ЭЛЕМЕНТ (`−1` — не окно функций; заказ E).
+            /// `KvFeatureWindow.BuildTabContent` при смене вкладки уничтожает строки `Content/`
+            /// и строит новые, поэтому путь живёт ТОЛЬКО на записанной вкладке — как у верстака.
+            /// </summary>
+            public int FeatureTab = -1;
+            /// <summary>Обход открыл окно функций — после проверки окно закрывается (заказ E).</summary>
+            public bool OpenedFeature;
             /// <summary>
             /// ФИЗИЧЕСКАЯ РАСКЛАДКА ТУЛБАРА ПРИ СБОРЕ (`−1` — не ручка тулбара; заказ A).
             /// Считается по самой панели (`KvToolbar.LayoutMode`), а не по настройке: снимок
