@@ -36,6 +36,11 @@ param(
 
 $ErrorActionPreference = 'Continue'
 
+# КОДИРОВКА КОНСОЛИ — UTF8 (добавлено тестировщиком 13.11.2026).
+# Иначе кириллица из adb (логи, отчёты) приходит мусором: совпадения вроде «ИТОГ»/«исчез»
+# молча не срабатывают, и судья выносит ЛОЖНЫЙ вердикт (замерено: match False → True).
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
 if (-not $Adb) {
     $Adb = 'C:\Program Files\Unity\Hub\Editor\6000.5.6f1\Editor\Data\PlaybackEngines\AndroidPlayer\SDK\platform-tools\adb.exe'
     if (-not (Test-Path -LiteralPath $Adb)) {

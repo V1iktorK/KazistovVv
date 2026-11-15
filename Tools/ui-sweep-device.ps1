@@ -45,6 +45,11 @@ param(
 
 $ErrorActionPreference = 'Continue'
 
+# КОДИРОВКА КОНСОЛИ — UTF8 (добавлено тестировщиком 13.11.2026).
+# Иначе кириллица из adb (логи, отчёты) приходит мусором: совпадения вроде «ИТОГ»/«исчез»
+# молча не срабатывают, и судья выносит ЛОЖНЫЙ вердикт (замерено: match False → True).
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
 if (-not $Adb) {
     $Adb = 'C:\Program Files\Unity\Hub\Editor\6000.5.6f1\Editor\Data\PlaybackEngines\AndroidPlayer\SDK\platform-tools\adb.exe'
     if (-not (Test-Path -LiteralPath $Adb)) {
@@ -130,14 +135,38 @@ while ((Get-Date) -lt $deadline) {
     if ($log -match 'FATAL EXCEPTION') { break }
 }
 
-# ЖУРНАЛ УСТРОЙСТВА — В ФАЙЛ (доказательство и для прогона, и для проверки реального стола).
+# ЖУРНАЛ УСТРОЙСТВА СОХРАНЯЕТСЯ В ФАЙЛ (доказательство и для прогона, и для проверки реального стола).
 try {
     $logDirFull = Split-Path $LogOut -Parent
     if ($logDirFull -and -not (Test-Path -LiteralPath $logDirFull)) { New-Item -ItemType Directory -Path $logDirFull -Force | Out-Null }
     [System.IO.File]::WriteAllText($LogOut, $log, (New-Object System.Text.UTF8Encoding($false)))
-    Write-Host ("  журнал устройства сохранён: " + $LogOut)
+    Write-Host "  журнал устройства сохранён: $LogOut"
 } catch {
-    Write-Host ("  журнал устройства сохранить не удалось: " + $_.Exception.Message)
+    Write-Host "  журнал устройства сохранить не удалось: " + $_.Exception.Message
+}
+
+# СУДИТЬ ПО ФАЙЛУ ОТЧЁТА НА УСТРОЙСТВЕ, А НЕ ТОЛЬКО ПО LOGCAT (переделано тестировщиком 13.11.2026).
+#
+# ЧТО БЫЛО. Приложение пишет отчёт построчно и ПОСЛЕ строки «ИТОГ» ЗАВЕРШАЕТСЯ САМО (по дизайну).
+# Хвост logcat при таком выходе теряется (асинхронный logd + переполнение буфера: каждая строка
+# пишется со стектрейсом), и прогон объявлялся «не дошёл до конца», хотя отчёт был ПОЛНЫЙ
+# (замер 13.11.2026: logcat обрывался на 91-м элементе из 140, а файл содержал «ИТОГ: 140 ·
+# сработало 92 · без эффекта 0 · исчезло 0»). Ложный вердикт хуже отсутствующего.
+# ЧТО СТАЛО. Если в logcat нет итога — забираем свежий отчёт `_ui_sweep_*.txt` с устройства:
+# он пишется ПОСТРОЧНО и не теряется. Есть «ИТОГ» в файле = прогон ДОШЁЛ ДО КОНЦА (в том числе
+# когда приложение штатно завершилось — «процесс завершился» больше не путается с убийством).
+# Logcat по-прежнему сохраняется в $LogOut как диагностика.
+if (-not $finished) {
+    $repList = Adb-Run @('shell', 'ls', '-t', ('/storage/emulated/0/Android/data/' + $Package + '/files/Reports'))
+    $repName = (@($repList -split "`n") | Where-Object { $_ -match '_ui_sweep_\w+\.txt' } | Select-Object -First 1)
+    if ($repName) {
+        $repText = Adb-Run @('shell', 'cat', ('/storage/emulated/0/Android/data/' + $Package + '/files/Reports/' + $repName.Trim()))
+        if ($repText -match '\[KvUiSweep\]\s*ИТОГ') {
+            Write-Host "  итог найден в ФАЙЛЕ отчёта на устройстве (" + $repName.Trim() + ") — судим по нему"
+            $log = $repText
+            $finished = $true
+        }
+    }
 }
 
 $problems = @()
