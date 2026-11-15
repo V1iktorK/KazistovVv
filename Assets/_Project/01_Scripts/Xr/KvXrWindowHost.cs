@@ -79,6 +79,19 @@ namespace KazistovVvXr
             get { return windows.Count > 0 ? windows[windows.Count - 1] : null; }
         }
 
+        /// <summary>
+        /// СКОЛЬКО РАЗ ОКНО ОТКРЫВАЛИ ИЛИ ПОДНИМАЛИ (`Open` — и создание нового, и поднятие уже
+        /// открытого). Зачем счётчику место в рантайме, а не в журнале: повторное открытие
+        /// ПЕРЕСТАВЛЯЕТ окно перед оператором и поднимает его наверх — это реальный эффект
+        /// нажатия, которого не видит ни число окон (`Count` не меняется), ни объекты сцены
+        /// (окно уже построено). Отчёт шлема 15.11.2026: «Объекты»/«Свойства»/«Справка» и строка
+        /// «Настройки шлема» открывали уже висящее окно и получали «нет изменений».
+        /// </summary>
+        public int RaiseCount { get; private set; }
+
+        /// <summary>ЭКРАН ПОСЛЕДНЕГО ПОДНЯТОГО ОКНА — читается вместе с <see cref="RaiseCount"/>.</summary>
+        public KvXrPanelLevel RaisedScreen { get; private set; }
+
         void Awake()
         {
             Active = this;
@@ -137,6 +150,13 @@ namespace KazistovVvXr
             window.transform.SetParent(null, false);       // окно живёт в мире, а не в риге
             window.OpenScreen(screen);
             window.gameObject.SetActive(true);
+
+            // ПОДНЯТИЕ ЗАПИСЫВАЕТСЯ ВСЕГДА — и при создании окна, и при поднятии уже открытого
+            // (там `FindOpen` вернул существующее, `windows.Count` не изменился). Метрике
+            // самопрогона нужно именно это: «нажатие подняло окно» — эффект даже без новых
+            // объектов сцены.
+            RaiseCount++;
+            RaisedScreen = screen;
 
             PlaceWindow(window, windows.IndexOf(window));
 

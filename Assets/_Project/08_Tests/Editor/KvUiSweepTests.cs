@@ -3241,5 +3241,223 @@ namespace KazistovVvTests
             Assert.AreEqual("", KvUiSweepExemptions.MoveRobotReasonFor(other, false, false),
                 "чужая строка не получает чужую причину");
         }
+
+        // ================= ЭКРАН ПАНЕЛИ В СНИМКЕ (заказы A и B)
+
+        /// <summary>
+        /// СМЕНА ЭКРАНА ПАНЕЛИ — ЭФФЕКТ, И ОН ЧИТАЕТСЯ ИМЕНЕМ («экран панели: X → Y»).
+        ///
+        /// ОТКУДА (шлем, отчёт 15.11.2026): `ПанельШлема/иконки групп/Объекты|Свойства|Справка` и
+        /// `ПанельШлема/Стартовое меню/Настройки шлема` — `ok=0 effect=нет изменений` при
+        /// реально открытом окне (лог: `ОКНО: открыто «Справка»`). Причина в том, что эти пункты
+        /// зовут `OpenWindow`: панель у руки остаётся на «иконках групп» (уровень, число иконок и
+        /// подпись — без изменений), а окно чаще уже висит и лишь поднимается — не меняется ни
+        /// число объектов сцены, ни счётчики канвасов. Поле `PanelScreen` обязано ловить и смену
+        /// экрана самой панели, и поднятие окна, иначе рабочее нажатие выглядит мёртвым.
+        /// </summary>
+        [Test]
+        public void Snapshot_PanelScreenDifference_IsAnEffect()
+        {
+            var before = new KvUiSweepSnapshot();
+            var after = new KvUiSweepSnapshot();
+            before.PanelScreen = "иконки групп · поднято окно «Свойства» (№8)";
+            after.PanelScreen = "иконки групп · поднято окно «Справка» (№9)";
+
+            string effect = KvUiSweepDiff.Describe(before, after);
+            StringAssert.Contains("экран панели", effect,
+                "смена экрана обязана попадать в строку эффекта: " + effect);
+            StringAssert.Contains("иконки групп · поднято окно «Справка» (№9)", effect,
+                "эффект обязан называть, КАКОЙ экран открылся, а не факт изменения: " + effect);
+
+            var same1 = new KvUiSweepSnapshot { PanelScreen = "иконки групп" };
+            var same2 = new KvUiSweepSnapshot { PanelScreen = "иконки групп" };
+            Assert.AreEqual("", KvUiSweepDiff.Describe(same1, same2),
+                "одинаковый экран — не эффект");
+            Assert.AreEqual("", KvUiSweepDiff.Describe(new KvUiSweepSnapshot(),
+                new KvUiSweepSnapshot()), "два пустых снимка — не эффект");
+        }
+
+        /// <summary>
+        /// ПОВЕДЕНЧЕСКАЯ ПРОВЕРКА: снимок видит СМЕНУ УРОВНЯ-ЭКРАНА измеряемой панели —
+        /// «иконки групп» → «экран «Справка»». Это тот случай, когда хоста окон нет (сцена без
+        /// рига, проверки): панель сама открывает экран, и снимок обязан назвать его имя.
+        /// </summary>
+        [Test]
+        public void Snapshot_PanelScreen_SeesPanelScreenChange()
+        {
+            GameObject panelGo = null;
+            GameObject probe = null;
+            try
+            {
+                panelGo = new GameObject("KvUiSweepScreenPanel");
+                KvXrGroupPanel panel = panelGo.AddComponent<KvXrGroupPanel>();
+                probe = new GameObject("KvUiSweepScreenProbe");
+                KvUiSweepRuntime rt = probe.AddComponent<KvUiSweepRuntime>();
+
+                KvUiSweepSnapshot before = CaptureWith(rt, panel);
+                StringAssert.Contains("иконки групп", before.PanelScreen,
+                    "снимок обязан называть текущий экран панели: «" + before.PanelScreen + "»");
+
+                SetPrivateField(panel, "level", KvXrPanelLevel.HelpScreen);
+                KvUiSweepSnapshot after = CaptureWith(rt, panel);
+                StringAssert.Contains("экран «Справка»", after.PanelScreen,
+                    "снимок обязан видеть ОТКРЫТЫЙ экран: «" + after.PanelScreen + "»");
+
+                string effect = KvUiSweepDiff.Describe(before, after);
+                StringAssert.Contains("экран панели", effect,
+                    "смена экрана панели обязана быть эффектом: " + effect);
+                StringAssert.Contains("иконки групп", effect, effect);
+                StringAssert.Contains("экран «Справка»", effect, effect);
+            }
+            finally
+            {
+                if (probe != null) UnityEngine.Object.DestroyImmediate(probe);
+                if (panelGo != null) UnityEngine.Object.DestroyImmediate(panelGo);
+            }
+        }
+
+        /// <summary>
+        /// СМЕНА ЭКРАНА ВИДНА И ПО ОКНУ — ВКЛЮЧАЯ ПОВТОРНОЕ ОТКРЫТИЕ УЖЕ ВИСЯЩЕГО ОКНА.
+        ///
+        /// ОТКУДА (шлем, отчёт 15.11): нажатие «Справка» вызывало `ОКНО: открыто «Справка»`, а
+        /// отчёт отвечал «нет изменений»: окно уже висело (`Count` не изменился), новых объектов
+        /// сцены не появилось, панель у руки уровня не меняла. Поднятие окна пишется в
+        /// `KvXrWindowHost.RaiseCount`/`RaisedScreen` и обязано быть видно снимку.
+        /// </summary>
+        [Test]
+        public void Snapshot_PanelScreen_SeesWindowRaiseIncludingRepeat()
+        {
+            GameObject camGo = null;
+            GameObject panelGo = null;
+            GameObject probe = null;
+            KvXrWindowHost host = null;
+            KvXrWindowHost activeBefore = KvXrWindowHost.Active;
+            var opened = new List<KvXrGroupPanel>();
+            try
+            {
+                camGo = new GameObject("KvUiSweepWindowCam");
+                Camera camera = camGo.AddComponent<Camera>();
+                host = KvXrWindowHost.Ensure(camera);
+                host.logOnOpen = false;
+                // `Awake` в EditMode не вызывается — активный хост ставится руками (Грабли 5).
+                SetPrivateStaticProperty(typeof(KvXrWindowHost), "Active", host);
+                int raisedBefore = host.RaiseCount;
+
+                panelGo = new GameObject("KvUiSweepWindowPanel");
+                KvXrGroupPanel panel = panelGo.AddComponent<KvXrGroupPanel>();
+                probe = new GameObject("KvUiSweepWindowProbe");
+                KvUiSweepRuntime rt = probe.AddComponent<KvUiSweepRuntime>();
+
+                opened.Add(host.Open(KvXrPanelLevel.SettingsScreen, "Настройки"));
+                opened.Add(host.Open(KvXrPanelLevel.HelpScreen, "Справка"));
+
+                KvUiSweepSnapshot before = CaptureWith(rt, panel);
+                StringAssert.Contains("иконки групп", before.PanelScreen,
+                    "панель у руки осталась на «иконках групп»: «" + before.PanelScreen + "»");
+                StringAssert.Contains("поднято окно «Справка» (№" + (raisedBefore + 2) + ")",
+                    before.PanelScreen, "снимок обязан видеть ЭКРАН открытого окна: «" +
+                    before.PanelScreen + "»");
+
+                // РОВНО ТО, ЧТО ДЕЛАЕТ НАЖАТИЕ, КОГДА ОКНО УЖЕ ВИСИТ: поднять и переставить.
+                // Новых объектов сцены нет, `Count` не меняется — раньше это была
+                // «нет изменений» (отчёт шлема 15.11: Объекты/Свойства/Справка).
+                int objectsBefore = CountSceneObjects();
+                opened.Add(host.Open(KvXrPanelLevel.HelpScreen, "Справка"));
+                KvUiSweepSnapshot after = CaptureWith(rt, panel);
+
+                Assert.AreEqual(objectsBefore, CountSceneObjects(),
+                    "повторное открытие окна не создаёт объектов — метрика не должна ждать их");
+                Assert.AreEqual(before.PanelLevel, after.PanelLevel,
+                    "панель у руки уровня не меняла — менялось только окно");
+                StringAssert.Contains("поднято окно «Справка» (№" + (raisedBefore + 3) + ")",
+                    after.PanelScreen, "поднятие обязано быть видно снимку: «" + after.PanelScreen + "»");
+
+                string effect = KvUiSweepDiff.Describe(before, after);
+                StringAssert.Contains("экран панели", effect,
+                    "поднятие окна обязано быть эффектом: " + effect);
+            }
+            finally
+            {
+                SetPrivateStaticProperty(typeof(KvXrWindowHost), "Active", activeBefore);
+                for (int i = 0; i < opened.Count; i++)
+                    if (opened[i] != null) UnityEngine.Object.DestroyImmediate(opened[i].gameObject);
+                if (probe != null) UnityEngine.Object.DestroyImmediate(probe);
+                if (panelGo != null) UnityEngine.Object.DestroyImmediate(panelGo);
+                if (host != null) UnityEngine.Object.DestroyImmediate(host.gameObject);
+                if (camGo != null) UnityEngine.Object.DestroyImmediate(camGo);
+            }
+        }
+
+        /// <summary>Сколько объектов в активной сцене (голая проверка «ничего не создали»).</summary>
+        private static int CountSceneObjects()
+        {
+            UnityEngine.SceneManagement.Scene scene =
+                UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+            if (!scene.IsValid()) return 0;
+            int total = 0;
+            GameObject[] roots = scene.GetRootGameObjects();
+            for (int i = 0; i < roots.Length; i++)
+                if (roots[i] != null) total += CountTransforms(roots[i].transform);
+            return total;
+        }
+
+        /// <summary>Сколько трансформов в поддереве (включая корень).</summary>
+        private static int CountTransforms(Transform root)
+        {
+            int total = 1;
+            for (int i = 0; i < root.childCount; i++) total += CountTransforms(root.GetChild(i));
+            return total;
+        }
+
+        /// <summary>Снять снимок у измеряемой панели (та же связка, что в обходе: до и после).</summary>
+        private static KvUiSweepSnapshot CaptureWith(KvUiSweepRuntime rt, KvXrGroupPanel panel)
+        {
+            return (KvUiSweepSnapshot)InvokePrivate(rt, "Capture",
+                new List<KvUiSweepPanelState>(), panel);
+        }
+
+        // ============ УРНА БЕЗ ОБЪЕКТОВ: ЧЕСТНАЯ ПРИЧИНА И СВОЙ УРОВЕНЬ (заказ C)
+
+        /// <summary>
+        /// ОТКУДА (шлем, отчёт 15.11.2026): `MenuDelete_0`/`MenuDelete_1` — «не нажимали — пункт
+        /// не найден на своём уровне панели, уровень Groups». Урну панель меню строит ТОЛЬКО у
+        /// строк существующих объектов, а объектов в разделе нет (прогон сам нажал «Сброс сцены») —
+        /// пункта в меню физически нет. Причина обязана быть ФАКТОМ («нет объектов для
+        /// удаления»), а сам путь — ПУТЁМ МЕНЮ, иначе проход ведёт панель на базу, где урны нет
+        /// вовсе, и пункт никогда не проверяется.
+        /// </summary>
+        [Test]
+        public void StartMenu_DeleteRowReason_NamesNoObjectsFact()
+        {
+            const string urn = "KvXrStartMenu/KvXrStartMenuPanel/KvXrGroupCanvas/MenuDelete_0";
+            const string create =
+                "KvXrStartMenu/KvXrStartMenuPanel/KvXrGroupCanvas/MenuRow_1«Добавить 6-осевой робот»";
+
+            Assert.IsTrue(KvUiSweepStartMenu.IsDeleteRowPath(urn),
+                "урна распознаётся по последнему отрезку пути");
+            Assert.IsFalse(KvUiSweepStartMenu.IsDeleteRowPath(create),
+                "правило узкое — строка создания не урна");
+
+            Assert.IsTrue(KvUiSweepStartMenu.IsHelmetMenuPath(urn),
+                "урна физически живёт в панели меню — путь обязан вести в меню, а не на базу");
+            Assert.IsFalse(KvUiSweepStartMenu.NeedsBaseLevelRestore(urn),
+                "проход обязан ПОКАЗАТЬ меню и поставить раздел, а не уводить панель на Groups");
+
+            string reason = KvUiSweepStartMenu.DeleteRowReason(urn,
+                (int)KvXrStartSection.Tables, 0);
+            StringAssert.Contains("нет объектов для удаления", reason,
+                "причина обязана называть факт: " + reason);
+            StringAssert.Contains("Стол", reason,
+                "причина обязана называть РАЗДЕЛ, в котором нечего удалять: " + reason);
+            StringAssert.Contains("не показываются", reason,
+                "причина обязана объяснять, почему урны нет: " + reason);
+
+            Assert.AreEqual("", KvUiSweepStartMenu.DeleteRowReason(urn,
+                    (int)KvXrStartSection.Tables, 2),
+                "объекты ЕСТЬ — урна обязана была найтись, готовая причина не выдаётся");
+            Assert.AreEqual("", KvUiSweepStartMenu.DeleteRowReason(create,
+                    (int)KvXrStartSection.Tables, 0),
+                "чужому элементу причина про урны не выдаётся");
+        }
     }
 }

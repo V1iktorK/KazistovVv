@@ -998,6 +998,21 @@ namespace KazistovVvDiagnostics
         /// Нужна, чтобы «нажатие изменило только подпись или страницу» тоже считалось эффектом.
         /// </summary>
         public int PanelStateHash;
+        /// <summary>
+        /// ЭКРАН, КОТОРЫЙ ПАНЕЛЬ ПОКАЗЫВАЕТ СЕЙЧАС: имя уровня ИЗМЕРЯЕМОЙ панели («иконки групп»,
+        /// «веер», «стартовое меню», «экран «Справка»») плюс ПОСЛЕДНЕЕ ПОДНЯТОЕ ОКНО панели
+        /// (`KvXrWindowHost`: «поднято окно «Справка» (№14)»).
+        ///
+        /// ЗАЧЕМ ОТДЕЛЬНОЕ ПОЛЕ, ХОТЯ УРОВЕНЬ УЖЕ ЕСТЬ (шлем, отчёт 15.11.2026): «Объекты»,
+        /// «Свойства», «Справка» на иконках групп и строка «Настройки шлема» зовут `OpenWindow`,
+        /// то есть открывают МИРОВОЕ ОКНО, а панель у руки остаётся на «иконках групп» — её
+        /// уровень, число иконок и подпись не меняются ВООБЕ. Окно к тому же чаще уже висит
+        /// (повторное открытие только поднимает и переставляет его), поэтому не меняется ни
+        /// число объектов сцены, ни счётчики канвасов — и рабочее нажатие получало
+        /// `ok=0 effect=нет изменений`. Смена ЭКРАНА обязана быть видна снимку — в том числе
+        /// смена экрана, показанного окном.
+        /// </summary>
+        public string PanelScreen;
 
         // ---------------------------------------------------------------- настройки оболочки
         //
@@ -1423,7 +1438,14 @@ namespace KazistovVvDiagnostics
             if (path.IndexOf("Стартовое меню", StringComparison.OrdinalIgnoreCase) >= 0) return true;
             if (path.IndexOf("MenuSec_", StringComparison.OrdinalIgnoreCase) >= 0) return true;
             if (path.IndexOf("MenuRow_", StringComparison.OrdinalIgnoreCase) >= 0) return true;
-            return path.IndexOf("Menu_start", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (path.IndexOf("Menu_start", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            // УРНА УДАЛЕНИЯ ОБЪЕКТА (задача 7 владельца) — тоже пункт меню: её строит сама панель
+            // меню (`BuildStartMenuLevel` → `AddRowDeleteButton`) на уровне StartMenu, путь лежит в
+            // том же `KvXrStartMenu/…/KvXrGroupCanvas/`, что и строки. Без этого признака проход
+            // вёл панель на базу (`RestoreBase` → Groups), где урны физически нет, и пункт
+            // получал «пункт не найден на своём уровне панели» вместо проверки (отчёт шлема 15.11:
+            // `MenuDelete_0`/`MenuDelete_1`).
+            return path.IndexOf("MenuDelete_", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         /// <summary>
@@ -1554,6 +1576,41 @@ namespace KazistovVvDiagnostics
             return "не нажимали — пункт не найден на своём уровне панели («" + (path ?? "") +
                    "») — " + (string.IsNullOrEmpty(levelFact) ? "уровень панели неизвестен" : levelFact) +
                    ", нажимать нечего";
+        }
+
+        /// <summary>
+        /// УРНА УДАЛЕНИЯ ОБЪЕКТА (`MenuDelete_N`) — признак СТРУКТУРНЫЙ, по последнему отрезку
+        /// пути: такую кнопку панель меню строит только у строк СУЩЕСТВУЮЩИХ объектов
+        /// (`BuildStartMenuLevel` → `ExistingObjectRows`).
+        /// </summary>
+        public static bool IsDeleteRowPath(string path)
+        {
+            return LastSegment(path).StartsWith("MenuDelete_", StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// ЧЕСТНАЯ ПРИЧИНА ДЛЯ УРНЫ, КОТОРОЙ НЕЧЕГО УДАЛЯТЬ (заказ C, отчёт шлема 15.11.2026:
+        /// `MenuDelete_0`/`MenuDelete_1` — «не нажимали — пункт не найден на своём уровне панели»).
+        ///
+        /// ФАКТ, а не обвинение: урна не «пропала» и нажатие не «не сработало» — пункта в меню
+        /// НЕТ, потому что объектов в разделе нет (прогон сам нажал «Сброс сцены»). Обход обязан
+        /// называть это словами «нет объектов для удаления», а не «нет изменений» и не «исчез».
+        /// Пустая строка означает «объекты в разделе ЕСТЬ»: тогда урна обязана была найтись, и
+        /// разбор идёт общим путём — молча выдать причину про объекты нельзя, это уже другой дефект.
+        /// </summary>
+        /// <param name="path">Путь элемента.</param>
+        /// <param name="section">Номер раздела, в котором лежит пункт (`KvXrStartSection`).</param>
+        /// <param name="existing">Сколько объектов ЭТОГО раздела видит меню сейчас.</param>
+        public static string DeleteRowReason(string path, int section, int existing)
+        {
+            if (!IsDeleteRowPath(path)) return "";
+            if (existing != 0) return "";
+
+            string title = section >= 0 && section < KvXrStartMenuLayout.SectionCount
+                ? "«" + KvXrStartMenuLayout.SectionTitle(section) + "»"
+                : "№" + section.ToString(CultureInfo.InvariantCulture);
+            return "не нажимали — нет объектов для удаления: в разделе " + title +
+                   " 0 строк — урны в меню не показываются";
         }
 
         /// <summary>Причина, когда объекта меню в сцене нет вовсе.</summary>
@@ -1749,6 +1806,10 @@ namespace KazistovVvDiagnostics
             Append(sb, "файлов записи", before.Files, after.Files);
             Append(sb, "уровень панели шлема", before.PanelLevel, after.PanelLevel);
             Append(sb, "иконок на панели", before.PanelIcons, after.PanelIcons);
+            // ЭКРАН ПАНЕЛИ ИМЕНЕМ, А НЕ ЧИСЛОМ (заказ A/B): смена экрана — это «иконки групп →
+            // экран «Справка»» или «… → поднято окно «Настройки» (№15)», а не номер уровня,
+            // который у панели у руки не меняется вовсе (`OpenWindow` открывает мировое окно).
+            AppendText(sb, "экран панели", before.PanelScreen, after.PanelScreen);
             // Изменение подписи панели шлема и состояния доков тоже эффект — иначе «нажатие
             // сменило только вид панели» выглядело бы как мёртвая кнопка.
             Append(sb, "подпись панели шлема", before.PanelStateHash, after.PanelStateHash);
@@ -1822,6 +1883,19 @@ namespace KazistovVvDiagnostics
             if (sb.Length > 0) sb.Append("; ");
             sb.Append(name).Append(": ").Append(before.ToString(CultureInfo.InvariantCulture))
               .Append("→").Append(after.ToString(CultureInfo.InvariantCulture));
+        }
+
+        /// <summary>
+        /// ТО ЖЕ ДЛЯ СТРОК («экран панели»): различие обязано читаться ИМЕНЕМ экрана, а не
+        /// хешем или номером — тестировщик по строке отчёта должен видеть, КАКОЙ экран открылся.
+        /// </summary>
+        private static void AppendText(StringBuilder sb, string name, string before, string after)
+        {
+            string from = before ?? "";
+            string to = after ?? "";
+            if (from == to) return;
+            if (sb.Length > 0) sb.Append("; ");
+            sb.Append(name).Append(": ").Append(from).Append("→").Append(to);
         }
     }
 
@@ -5406,10 +5480,23 @@ namespace KazistovVvDiagnostics
                     notFound++;
                     // ПРИЧИНА С ФАКТОМ: элементу ДРУГОГО уровня называем, на каком уровне
                     // оказалась панель после возврата на базу, а не общее «пункт не появился».
-                    string why = menuLevelItem
-                        ? KvUiSweepStartMenu.NotFoundReason(c.Path)
-                        : KvUiSweepStartMenu.NotFoundOnLevelReason(c.Path,
-                              "уровень панели " + panel.Level);
+                    //
+                    // УРНА БЕЗ ОБЪЕКТОВ (заказ C, отчёт шлема 15.11: `MenuDelete_0`/`MenuDelete_1`).
+                    // Урна строится только у строки СУЩЕСТВУЮЩЕГО объекта, а объектов в разделе
+                    // нет — пункта в меню физически нет. Это называется СЛОВАМИ ФАКТА («нет
+                    // объектов для удаления»), а не «пункт не найден»/«нет изменений». Объекты
+                    // ЕСТЬ — урна обязана была найтись, и причина остаётся пустой: разбор идёт
+                    // общим путём, потому что это уже другой дефект.
+                    int existing = wanted == (int)KvXrStartSection.Tables ? panel.StartTableCount
+                        : wanted == (int)KvXrStartSection.Robots ? panel.StartRobotCount
+                        : 0;
+                    string urn = KvUiSweepStartMenu.DeleteRowReason(c.Path, wanted, existing);
+                    string why = urn.Length > 0
+                        ? urn
+                        : (menuLevelItem
+                            ? KvUiSweepStartMenu.NotFoundReason(c.Path)
+                            : KvUiSweepStartMenu.NotFoundOnLevelReason(c.Path,
+                                  "уровень панели " + panel.Level));
                     Line("[KvUiSweep] СТАРТОВОЕ МЕНЮ: " + c.Path + " — " + why);
                     Record(new KvUiSweepElement
                     {
@@ -5417,6 +5504,9 @@ namespace KazistovVvDiagnostics
                         Kind = c.Kind,
                         Ok = false,
                         Effect = why,
+                        // ПРИЧИНА-ИСКЛЮЧЕНИЕ: ненажатый элемент обязан идти в исключения со
+                        // своей причиной, а не в «без эффекта» (правило D3).
+                        ExemptReason = urn.Length > 0 ? urn : "",
                         Method = "пропущен"
                     });
                     item.Done = true;
@@ -7589,6 +7679,13 @@ namespace KazistovVvDiagnostics
                     panel.FanPageIndex.ToString(CultureInfo.InvariantCulture) + "|" +
                     (panel.Status ?? ""));
             }
+
+            // ЭКРАН ПАНЕЛИ (заказ A/B, отчёт шлема 15.11): смена экрана ОБЯЗАНА быть видна
+            // снимку — и смена экрана самой панели, и поднятие окна, в котором панель этот
+            // экран показывает (`OpenWindow` — штатный путь иконок «Объекты/Свойства/Справка»
+            // и строки «Настройки шлема»).
+            s.PanelScreen = PanelScreenOf(panel);
+
             // ФЛАГИ ОБОЛОЧКИ И ТЕМА: их меняют переключатели панели настроек, и без них эти
             // переключатели выглядели бы мёртвыми (принцип «кнопка мертва ≠ снимок не видит»).
             // СНИМОК ПЕРЕДАЁТСЯ ПО ref: он СТРУКТУРА, и без ref каждое присваивание шло бы в
@@ -7596,6 +7693,44 @@ namespace KazistovVvDiagnostics
             CaptureUiSettings(ref s);
             CaptureArPanels(ref s, ui);
             return s;
+        }
+
+        /// <summary>
+        /// ЭКРАН, КОТОРЫЙ ПАНЕЛЬ ПОКАЗЫВАЕТ СЕЙЧАС: имя уровня измеряемой панели и — если окна
+        /// панели хоть раз открывались — ЭКРАН ПОСЛЕДНЕГО ПОДНЯТОГО ОКНА со счётчиком поднятий.
+        ///
+        /// ПОЧЕМУ СЧЁТЧИК, А НЕ ТОЛЬКО ИМЯ (заказ A/B). Иконки «Объекты/Свойства/Справка» и строка
+        /// «Настройки шлема» зовут `KvXrGroupPanel.OpenWindow`: если хост окон есть, панель у руки
+        /// НЕ меняет своего уровня, а окно чаще уже висит — `KvXrWindowHost.Open` в этом случае
+        /// только поднимает и переставляет его (`Count`, объекты сцены, подписи — без изменений).
+        /// Счётчик поднятий растёт при КАЖДОМ таком вызове, поэтому смена экрана видна всегда,
+        /// даже когда то же окно открыто повторно. Работает и без хоста (сцены без рига, проверки):
+        /// тогда строка — один уровень панели, и смена экрана видна по нему.
+        /// </summary>
+        private static string PanelScreenOf(KvXrGroupPanel panel)
+        {
+            string title = OwnScreenTitle(panel);
+
+            KvXrWindowHost host = KvXrWindowHost.Active;
+            if (host == null || host.RaiseCount <= 0) return title;
+
+            string window = "поднято окно «" + KvXrGroupPanel.ScreenTitle(host.RaisedScreen) +
+                            "» (№" + host.RaiseCount.ToString(CultureInfo.InvariantCulture) + ")";
+            return title.Length == 0 ? window : title + " · " + window;
+        }
+
+        /// <summary>
+        /// ИМЯ ЭКРАНА САМОЙ ПАНЕЛИ: «иконки групп», «веер», «стартовое меню», «экран «Справка»»,
+        /// «окно компьютера» (для уровня `DesktopWindow` подпись берётся у самого уровня — у окна
+        /// свой ряд вкладок, а не страница панели у руки).
+        /// </summary>
+        private static string OwnScreenTitle(KvXrGroupPanel panel)
+        {
+            if (panel == null) return "";
+            KvXrPanelLevel level = panel.Level;
+            if (level == KvXrPanelLevel.DesktopWindow) return "окно компьютера";
+            string screen = KvXrGroupPanel.IsScreen(level) ? KvXrGroupPanel.ScreenTitle(level) : "";
+            return KvUiSweepPanelNav.LevelTitle(level, screen);
         }
 
         /// <summary>
