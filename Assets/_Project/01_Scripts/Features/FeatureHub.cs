@@ -1641,19 +1641,11 @@ namespace KazistovVvFeatures
             {
                 Id = "tool.grid",
                 Title = "Сетка рабочей зоны",
-                Description = "Плоская сетка на столешнице: шаг подбирается по размеру области",
+                Description = "Плоская сетка на столешнице: шаг подбирается по размеру области. " +
+                              "Переключатель: сетка есть — повторное нажатие её снимает",
                 Icon = "workspace",
                 MenuPath = "Сервис/Инструменты/Сетка рабочей зоны",
-                Execute = delegate
-                {
-                    // Размер области берётся с текущей видимой рабочей зоны; если её нет —
-                    // используется типовой стол оператора (1,0 × 0,7 м, решение [D7]).
-                    // Размер области — типовой стол оператора (1,0 × 0,7 м, решение [D7]);
-                    // центр — точка прицела, а если луч никуда не попал, то место перед оператором.
-                    Vector3 origin;
-                    if (!hub.TryAim(out origin)) origin = new Vector3(0f, 0.78f, 0f);
-                    hub.ShowWorkspaceGrid(1.0f, 0.7f, origin);
-                }
+                Execute = delegate { hub.ToggleWorkspaceGrid(); }
             });
 
             KvCommands.Register(new KvCommand
@@ -1767,6 +1759,34 @@ namespace KazistovVvFeatures
             Debug.Log("[Grid] " + line + " · проведено линий " + drawn);
         }
 
+        /// <summary>СЕТКА СЕЙЧАС ПОСТРОЕНА? (признак для переключателя `tool.grid`).</summary>
+        public bool GridShown { get { return gridLines.Count > 0; } }
+
+        /// <summary>Сколько линий сетки сейчас в сцени (диагностика и тесты).</summary>
+        public int GridLineCount { get { return gridLines.Count; } }
+
+        /// <summary>
+        /// ПЕРЕКЛЮЧАТЕЛЬ СЕТКИ (`tool.grid`) — есть сетка → снять, нет → построить.
+        ///
+        /// ЧТО БЫЛО. Каждое нажатие рисовало НОВЫЕ линии поверх старых: повторное нажатие
+        /// удваивало сетку, линии копились до лимита 4000, и снять их можно было только
+        /// отдельной командой `tool.grid.clear` — оператор, нажавший «Сетка» дважды, получал
+        /// двойную сетку и не понимал, почему. Область и центр — прежние: типовой стол
+        /// оператора (1,0 × 0,7 м, решение [D7]), центр — точка прицела, а если луч никуда
+        /// не попал, то место перед оператором.
+        /// </summary>
+        public void ToggleWorkspaceGrid()
+        {
+            if (GridShown)
+            {
+                ClearWorkspaceGrid();   // сам печатает «сетка убрана · линий N»
+                return;
+            }
+            Vector3 origin;
+            if (!TryAim(out origin)) origin = new Vector3(0f, 0.78f, 0f);
+            ShowWorkspaceGrid(1.0f, 0.7f, origin);
+        }
+
         /// <summary>
         /// Провести линии сетки вдоль одного направления. Отдельным методом — чтобы «сколько
         /// линий провели» считалось в одном месте, а не в двух копиях цикла.
@@ -1795,9 +1815,10 @@ namespace KazistovVvFeatures
         /// </summary>
         private LineRenderer DrawLine(Vector3 from, Vector3 to)
         {
+            GameObject go = null;
             try
             {
-                var go = new GameObject("KvGridLine");
+                go = new GameObject("KvGridLine");
                 go.transform.SetParent(gridRoot != null ? gridRoot : null, false);
                 var line = go.AddComponent<LineRenderer>();
                 line.useWorldSpace = true;
@@ -1809,14 +1830,23 @@ namespace KazistovVvFeatures
                 Material material = KazistovVvFeatures.KvRenderPipelineShaders.CreateLine(
                     "Материал_сетки", new Color(0.5f, 0.75f, 1f, 0.55f));
                 if (material != null) line.material = material;
-                if (gridLines.Count < 4000) gridLines.Add(go);
+                TrackGridLine(go);
                 return line;
             }
             catch (System.Exception e)
             {
+                // ОБЪЕКТ УЖЕ СОЗДАН — он обязан быть учтён: незарегистрированную линию нельзя
+                // снять ни `tool.grid.clear`, ни переключателем, и она копилась бы молча.
+                if (go != null) TrackGridLine(go);
                 Debug.LogWarning("[Grid] линия сетки не нарисована: " + e.GetType().Name + ": " + e.Message);
                 return null;
             }
+        }
+
+        /// <summary>Учесть линию в списке снятия (лимит 4000 — как и было).</summary>
+        private void TrackGridLine(GameObject go)
+        {
+            if (go != null && gridLines.Count < 4000) gridLines.Add(go);
         }
 
         private Transform gridRoot;
@@ -1828,7 +1858,12 @@ namespace KazistovVvFeatures
         {
             for (int i = 0; i < gridLines.Count; i++)
             {
-                if (gridLines[i] != null) UnityEngine.Object.Destroy(gridLines[i]);
+                if (gridLines[i] == null) continue;
+                // В редакторе (`Application.isPlaying == false`) `Destroy` запрещён Unity и даёт
+                // ошибку в журнале, которую тесты читают как поломку, — снимаем через
+                // `DestroyImmediate`. В игре поведение прежнее.
+                if (Application.isPlaying) UnityEngine.Object.Destroy(gridLines[i]);
+                else UnityEngine.Object.DestroyImmediate(gridLines[i]);
             }
             int removed = gridLines.Count;
             gridLines.Clear();

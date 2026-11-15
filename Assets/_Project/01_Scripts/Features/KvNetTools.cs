@@ -869,6 +869,16 @@ namespace KazistovVvFeatures
     /// кнопки интерфейса (аварийная остановка, переезд домой, выбор варианта, пуск/пауза).
     /// В ответ на `STATUS`/`PING` уходит компактная строка состояния — так планшет видит,
     /// что происходит на роботе.
+    ///
+    /// АУТЕНТИФИКАЦИЯ (15.11.2026, волна A). КАК БЫЛО. Канал принимал команду с ЛЮБОГО адреса
+    /// сети, где открыт порт: `STOP` останавливал робота, `HOME` вёл его в позу — без единого
+    /// признака того, кто отправил пакет. ЧЕМ ПЛОХО: аварийная остановка и переезд — действия,
+    /// которые не должен диктовать чужой пакет в той же подсети. ЧТО СТАЛО. При включении
+    /// выдаётся токен (`IssueToken`), он печатается в журнал и виден в статусе вкладки
+    /// «Сеть» (`Status`), и каждая команда обязана начинаться с него: `<токен> STOP`.
+    /// Без токена — отказ с названной причиной и без токена в ответе. Совместимость
+    /// сохранена именно так: токен не надо искать по коду, он в журнале и в статусе сразу
+    /// при включении; старые клиенты получают честный отказ вместо молчаливого выполнения.
     /// </summary>
     public class KvCompanionServer
     {
@@ -888,11 +898,41 @@ namespace KazistovVvFeatures
         private int port = DefaultPort;
         private int commands;
         private string lastCommand = "";
+        private string token = "";
 
         public bool Running { get { return running; } }
         public int Port { get { return port; } }
         public int Commands { get { return commands; } }
         public string LastCommand { get { return lastCommand; } }
+
+        /// <summary>Текущий токен (пусто, пока пульт выключен — тогда команды не принимаются).</summary>
+        public string Token { get { return token; } }
+
+        /// <summary>
+        /// ВЫДАТЬ НОВЫЙ ТОКЕН. Зовётся при включении пульта (`Start`), поэтому токен ротируется
+        /// каждым включением: прошлый клиент при отключении перестаёт быть валидным. Публичен,
+        /// чтобы поведение проверялось без открытия сокета (тест не ходит в сеть).
+        /// </summary>
+        public string IssueToken()
+        {
+            token = Guid.NewGuid().ToString("N").Substring(0, 16);
+            return token;
+        }
+
+        /// <summary>
+        /// СТРОКА СОСТОЯНИЯ для вкладки «Сеть» и статуса: порт, токен, счётчик команд.
+        /// Токен показывается ЗДЕСЬ (и в журнале при включении) — оператор собирает команду
+        /// `<токен> STOP` сразу, не вскрывая код.
+        /// </summary>
+        public string Status()
+        {
+            string text = running
+                ? "порт " + port + " · команд принято " + commands +
+                  (string.IsNullOrEmpty(lastCommand) ? "" : " · последняя: " + lastCommand)
+                : "выключено";
+            if (!string.IsNullOrEmpty(token)) text += " · токен: " + token;
+            return text;
+        }
 
         public void Bind(TrajectoryFlowController controller, FeatureHub hub, KvStageHub3 hub3)
         {
@@ -914,9 +954,14 @@ namespace KazistovVvFeatures
             {
                 socket = new UdpClient(port);
                 running = true;
+                // ТОКЕН ВЫДАЁТСЯ ПРИ ВКЛЮЧЕНИИ и печатается сразу: без него в журнале и в
+                // статусе оператор не смог бы собрать команду `<токен> STOP`.
+                IssueToken();
                 thread = new Thread(Loop) { IsBackground = true, Name = "KvCompanion" };
                 thread.Start();
-                Report("мобильный пульт слушает порт " + port + " (команды PING/STOP/HOME/SELECT n/STATUS)");
+                Report("мобильный пульт слушает порт " + port + " · токен: " + token +
+                       " (команда: «" + token + " STOP») · команды PING/STOP/HOME/SELECT n/STATUS " +
+                       "принимаются только с токеном");
                 return true;
             }
             catch (Exception e)
@@ -934,6 +979,9 @@ namespace KazistovVvFeatures
             socket = null;
             if (thread != null && thread.IsAlive) thread.Join(200);
             thread = null;
+            // ТОКЕН СНИМАЕТСЯ ВМЕСТЕ С ВКЛЮЧЕНИЕМ: пока пульт выключен, команды не принимаются,
+            // и прошлый клиент с прежним токеном получает отказ «пульт выключен».
+            token = "";
             Report("мобильный пульт остановлен");
         }
 
@@ -977,10 +1025,34 @@ namespace KazistovVvFeatures
             }
         }
 
-        private string Execute(string raw)
+        /// <summary>
+        /// ВЫПОЛНИТЬ ВХОДЯЩУЮ КОМАНДУ (в главном потоке) — С ПРОВЕРКОЙ ТОКЕНА.
+        ///
+        /// Формат: `&lt;токен&gt; &lt;команда&gt;`, например `9f3c… STOP`. Публичен, чтобы отказ без
+        /// токена проверялся тестом напрямую, без сокета и без сети.
+        /// </summary>
+        public string Execute(string raw)
         {
-            string command = raw.Trim();
-            string upper = command.ToUpperInvariant();
+            string command = raw == null ? "" : raw.Trim();
+            if (command.Length == 0) return "ERR|пустая команда";
+
+            // --- АУТЕНТИФИКАЦИЯ. Первое слово — токен, выданный при включении пульта.
+            // Проверка идёт ПЕРЕД разбором (и для PING/STATUS тоже): иначе «прочитать состояние
+            // робота» мог бы любой пакет в сети, а отказ обязан называть причину, а не молчать.
+            int space = command.IndexOf(' ');
+            string given = space < 0 ? command : command.Substring(0, space);
+            string body = space < 0 ? "" : command.Substring(space + 1).Trim();
+
+            if (string.IsNullOrEmpty(token))
+                return "ERR|пульт выключен: токена нет — включите пульт (токен печатается в " +
+                       "журнале и в статусе вкладки «Сеть»)";
+            if (!string.Equals(given, token, StringComparison.Ordinal))
+                return "ERR|нет токена: команда отклонена; формат «<токен> STOP» — токен " +
+                       "печатается при включении пульта";
+            if (body.Length == 0)
+                return "ERR|нет команды после токена: формат «<токен> STOP»";
+
+            string upper = body.ToUpperInvariant();
 
             if (upper == "PING") return "PONG|" + State();
             if (upper == "STATUS") return State();
@@ -1018,7 +1090,7 @@ namespace KazistovVvFeatures
             if (upper.StartsWith("SELECT"))
             {
                 int index;
-                string tail = command.Length > 6 ? command.Substring(6).Trim() : "";
+                string tail = body.Length > 6 ? body.Substring(6).Trim() : "";
                 if (int.TryParse(tail, out index))
                 {
                     bool ok = flow.SelectCandidateByIndex(index - 1);
@@ -1028,7 +1100,7 @@ namespace KazistovVvFeatures
                 }
                 return "ERR|формат: SELECT 3";
             }
-            return "ERR|неизвестная команда: " + command;
+            return "ERR|неизвестная команда: " + body;
         }
 
         /// <summary>Переезд в домашнюю позу штатным планировщиком (та же логика, что кнопка ДОМОЙ).</summary>
@@ -1199,14 +1271,14 @@ namespace KazistovVvFeatures
                 });
             kit.Info(delegate
             {
-                return companion.Running
-                    ? "порт " + companion.Port + " · команд принято " + companion.Commands +
-                      (string.IsNullOrEmpty(companion.LastCommand)
-                          ? "" : " · последняя: " + companion.LastCommand)
-                    : T("net.role.off", "выключено");
+                // При включении — статус с токеном (его видно сразу, пока он выдан); при
+                // выключении — прежняя локализованная строка.
+                return companion.Running ? companion.Status() : T("net.role.off", "выключено");
             }, KvTheme.TextMain);
             kit.Note(T("mobile.info",
-                "Канал команд: `PING`, `STOP`, `HOME`, `SELECT 3`, `STATUS`. Ответ — состояние робота. " +
+                "Канал команд: `<токен> PING`, `<токен> STOP`, `<токен> HOME`, `<токен> SELECT 3`, " +
+                "`<токен> STATUS`. Токен выдаётся при включении пульта и печатается в журнал и в эту " +
+                "строку статуса — команды без него отклоняются с причиной. Ответ — состояние робота. " +
                 "Команды выполняются теми же обработчиками, что кнопки интерфейса."), KvTheme.TextDim);
         }
 

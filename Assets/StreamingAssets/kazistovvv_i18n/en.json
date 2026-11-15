@@ -561,6 +561,14 @@
       "text": "Same as Esc: clears point, trajectories, phantoms"
     },
     {
+      "key": "cmd.workspace.clear",
+      "text": "Clear workspace"
+    },
+    {
+      "key": "cmd.workspace.clear.desc",
+      "text": "Remove no-go zones, waypoints, comparison and post-processing caches — the same as New Project"
+    },
+    {
       "key": "cmd.robot.switch",
       "text": "Switch robot"
     },

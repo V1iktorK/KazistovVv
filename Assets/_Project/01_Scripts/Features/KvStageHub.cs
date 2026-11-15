@@ -18,9 +18,17 @@ namespace KazistovVvFeatures
     ///
     /// ГОРЯЧИЕ КЛАВИШИ (проверено по проекту — свободны):
     ///   F8  — скриншот, F10 — старт/стоп записи видео, F11 — пульт,
-    ///   F12 — мониторинг состояния, Ctrl+F8 — сингулярности, Ctrl+F10 — динамические
+    ///   Ctrl+F11 — мониторинг состояния, Ctrl+F8 — сингулярности, Ctrl+F10 — динамические
     ///   препятствия. Существующие бинды (W A S D Q E Z X G F TAB Esc Enter Shift R P V H J
     ///   F5 F6 F7 Ctrl+Z/Ctrl+Y, ЛКМ/колесо/СКМ) не тронуты и не добавлены.
+    ///
+    /// ПОЧЕМУ МОНИТОРИНГ НЕ НА F12 (конфликт 15.11.2026, волна B). F12 был занят сразу в двух
+    /// местах: здесь `ToggleHealth()` и в `KazistovVvUIManager` — `ToggleHotkeys()` (окно
+    /// горячих клавиш). Одно нажатие открывало оба окна, а в окне F12 конфликт не был виден,
+    /// потому что бинд мониторинга в `KvBindings` не был зарегистрирован. Лечение: F12 отдан
+    /// окну горячих клавиш (привычка владельца — F12 открывает справочник биндов), мониторинг
+    /// переехал на свободный Ctrl+F11 — модификатор уже используется в этом хабе (Ctrl+F8,
+    /// Ctrl+F10), и без Ctrl F11 по-прежнему открывает пульт.
     /// </summary>
     [DefaultExecutionOrder(-40)]
     public class KvStageHub : MonoBehaviour
@@ -230,8 +238,13 @@ namespace KazistovVvFeatures
                 if (ctrl) ToggleObstacles();
                 else ToggleVideo();
             }
-            if (Down(KeyCode.F11)) TogglePendant();
-            if (Down(KeyCode.F12)) ToggleHealth();
+            // F11 — пульт; Ctrl+F11 — мониторинг состояния (F12 отдан окну горячих клавиш:
+            // обе команды на одной клавише открывали два окна сразу — конфликт 15.11.2026).
+            if (Down(KeyCode.F11))
+            {
+                if (ctrl) ToggleHealth();
+                else TogglePendant();
+            }
         }
 
         /// <summary>
@@ -751,7 +764,9 @@ namespace KazistovVvFeatures
                 Id = "health.toggle",
                 Title = "Мониторинг состояния",
                 Description = "Графики в реальном времени: температура, ток, скорость, износ суставов",
-                Hotkey = "F12",
+                // Ctrl+F11, а НЕ F12: F12 открывает окно горячих клавиш (KazistovVvUIManager),
+                // и обе команды на F12 срабатывали одним нажатием (конфликт 15.11.2026, волна B).
+                Hotkey = "Ctrl+F11",
                 Icon = "health",
                 MenuPath = "Вид/Мониторинг состояния",
                 Execute = delegate { hub.ToggleHealth(); },

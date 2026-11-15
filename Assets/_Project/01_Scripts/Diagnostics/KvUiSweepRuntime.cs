@@ -3292,13 +3292,28 @@ namespace KazistovVvDiagnostics
             return KindOf(path) != Kind.None;
         }
 
-        /// <summary>СОСТОЯНИЕ С ЖИВОГО ХАБА (хаба/сервиса нет — состояние «простой»).</summary>
-        public static State Capture()
+        /// <summary>
+        /// СОСТОЯНИЕ С ЖИВОГО ХАБА (хаба/сервиса нет — состояние «простой»).
+        ///
+        /// `source` — объект НАЖАТОЙ КНОПКИ: скорость читается из окна, которому она принадлежит
+        /// (дефект 15.11.2026: синглтон `FeatureHub.Instance` в прогоне был пуст в момент
+        /// нажатия «×0.25»/«×0.5», метрика видела константу 1.00 и честную работу кнопки
+        /// печатала как «нет изменений»). Флаги записи/воспроизведения — по-прежнему из
+        /// синглтона: сервис у хаба один, а вот скорость у окна и у синглтона в прогоне
+        /// расходились — поэтому читается она из окна.
+        /// </summary>
+        public static State Capture(GameObject source = null)
         {
             var state = new State { Speed = 1f };
+
+            KvFeatureWindow window = source != null
+                ? source.GetComponentInParent<KvFeatureWindow>()
+                : null;
+            if (window != null) state.Speed = window.PlaybackSpeed;
+
             FeatureHub hub = FeatureHub.Instance;
             if (hub == null) return state;
-            state.Speed = hub.playbackSpeed;
+            if (window == null) state.Speed = hub.playbackSpeed;
             KvRecordingService service = hub.Recording;
             if (service == null) return state;
             state.Recording = service.IsRecording;
@@ -4511,7 +4526,7 @@ namespace KazistovVvDiagnostics
             // запись не давала эффект посторонним элементам.
             bool recordPlayer = KvUiSweepRecordPlayer.IsPlayerPath(c.Path);
             KvUiSweepRecordPlayer.State recordBefore = recordPlayer
-                ? KvUiSweepRecordPlayer.Capture()
+                ? KvUiSweepRecordPlayer.Capture(c.Target != null ? c.Target.gameObject : null)
                 : new KvUiSweepRecordPlayer.State();
             bool recordHasRecords = recordPlayer && RecordStoreHasRecords();
             string recordFail = "";
@@ -4611,7 +4626,8 @@ namespace KazistovVvDiagnostics
             // что изменилось в самом плеере; отказы сервиса добавляются к эффекту отдельно ниже.
             if (recordPlayer)
             {
-                KvUiSweepRecordPlayer.State recordAfter = KvUiSweepRecordPlayer.Capture();
+                KvUiSweepRecordPlayer.State recordAfter = KvUiSweepRecordPlayer.Capture(
+                    c.Target != null ? c.Target.gameObject : null);
                 string playerEffect = KvUiSweepRecordPlayer.EffectFor(recordBefore, recordAfter);
                 if (playerEffect.Length > 0)
                     effect = effect.Length > 0 ? effect + "; " + playerEffect : playerEffect;

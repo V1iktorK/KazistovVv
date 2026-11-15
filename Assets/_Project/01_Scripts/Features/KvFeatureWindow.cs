@@ -166,6 +166,33 @@ namespace KazistovVvFeatures
         }
         public bool RecordSourcePhantom;
 
+        /// <summary>
+        /// МНОЖИТЕЛЬ СКОРОСТИ ЭТОГО ОКНА (читается здесь, а не из синглтона `FeatureHub.Instance`).
+        ///
+        /// ЗАЧЕМ. Самопрогон 15.11.2026 мерил скорость через `FeatureHub.Instance`, а в прогоне
+        /// синглтон был пуст в момент нажатия «×0.25»/«×0.5» — кнопки меняли скорость хаба
+        /// ЭТОГО окна, метрика видела константу 1.00, и обе строки получили «нет изменений»,
+        /// хотя работа была сделана (те же кнопки «×2»/«×4» после переоткрытия окна отработали).
+        /// `ReferenceEquals`, а не `hub != null`: компонент может быть уничтожен сценой, но поле
+        /// живо — именно его меняют кнопки.
+        /// </summary>
+        public float PlaybackSpeed
+        {
+            get { return ReferenceEquals(hub, null) ? 1f : hub.playbackSpeed; }
+        }
+
+        /// <summary>Поставить множитель скорости и СРАЗУ показать его подпись в окне.</summary>
+        private void SetPlaybackSpeed(float value)
+        {
+            if (ReferenceEquals(hub, null)) return;
+            hub.playbackSpeed = value;
+            if (hub.Recording != null) hub.Recording.SpeedMultiplier = value;
+            // Строка «Текущий множитель: ×…» пересобирается только при обновлении окна: без
+            // этого оператор менял скорость и не видел ни подписи, ни эффекта до следующего
+            // открытия вкладки. Остальные кнопки плеера обновляются так же.
+            RequestRefresh();
+        }
+
         // ================================================================== сборка
 
         /// <summary>Собрать окно (идемпотентно: повторный вызов ничего не ломает).</summary>
@@ -626,13 +653,13 @@ namespace KazistovVvFeatures
 
             Buttons("Множитель скорости",
                 new[] { "×0.25", "×0.5", "×1", "×2", "×4" },
-                new[]
+                new[] 
                 {
-                    (Action)delegate { hub.playbackSpeed = 0.25f; hub.Recording.SpeedMultiplier = 0.25f; },
-                    delegate { hub.playbackSpeed = 0.5f; hub.Recording.SpeedMultiplier = 0.5f; },
-                    delegate { hub.playbackSpeed = 1f; hub.Recording.SpeedMultiplier = 1f; },
-                    delegate { hub.playbackSpeed = 2f; hub.Recording.SpeedMultiplier = 2f; },
-                    delegate { hub.playbackSpeed = 4f; hub.Recording.SpeedMultiplier = 4f; }
+                    (Action)delegate { SetPlaybackSpeed(0.25f); },
+                    delegate { SetPlaybackSpeed(0.5f); },
+                    delegate { SetPlaybackSpeed(1f); },
+                    delegate { SetPlaybackSpeed(2f); },
+                    delegate { SetPlaybackSpeed(4f); }
                 });
             Row(delegate { return "Текущий множитель: ×" + hub.playbackSpeed.ToString("0.00"); }, KvTheme.Accent);
 

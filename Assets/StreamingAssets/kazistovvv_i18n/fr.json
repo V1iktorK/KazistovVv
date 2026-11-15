@@ -561,6 +561,14 @@
       "text": "Comme Échap : efface point, trajectoires, fantômes"
     },
     {
+      "key": "cmd.workspace.clear",
+      "text": "Vider l'espace de travail"
+    },
+    {
+      "key": "cmd.workspace.clear.desc",
+      "text": "Supprime zones interdites, points intermédiaires, comparaisons et caches de post-traitement — comme Nouveau projet"
+    },
+    {
       "key": "cmd.robot.switch",
       "text": "Changer de robot"
     },

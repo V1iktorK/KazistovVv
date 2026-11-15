@@ -561,6 +561,14 @@
       "text": "Wie Esc: Punkt, Trajektorien, Phantome löschen"
     },
     {
+      "key": "cmd.workspace.clear",
+      "text": "Arbeitsbereich leeren"
+    },
+    {
+      "key": "cmd.workspace.clear.desc",
+      "text": "Verbotszonen, Zwischenpunkte, Vergleiche und Nachbearbeitungs-Caches entfernen — dasselbe wie Neues Projekt"
+    },
+    {
       "key": "cmd.robot.switch",
       "text": "Roboter wechseln"
     },

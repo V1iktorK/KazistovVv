@@ -561,6 +561,14 @@
       "text": "等同 Esc：清除目标点、轨迹与幻影"
     },
     {
+      "key": "cmd.workspace.clear",
+      "text": "清空工作区"
+    },
+    {
+      "key": "cmd.workspace.clear.desc",
+      "text": "移除禁区、中途点、比较和后处理缓存——与「新建项目」相同"
+    },
+    {
       "key": "cmd.robot.switch",
       "text": "切换机器人"
     },

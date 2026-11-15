@@ -561,6 +561,14 @@
       "text": "Esc と同じ：点・軌道・ファントムを消去"
     },
     {
+      "key": "cmd.workspace.clear",
+      "text": "ワークスペースをクリア"
+    },
+    {
+      "key": "cmd.workspace.clear.desc",
+      "text": "制限ゾーン・中間点・比較・後処理キャッシュを削除（「新規プロジェクト」と同じ）"
+    },
+    {
       "key": "cmd.robot.switch",
       "text": "ロボット切替"
     },

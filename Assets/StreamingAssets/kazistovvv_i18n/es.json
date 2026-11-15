@@ -561,6 +561,14 @@
       "text": "Igual que Esc: borra punto, trayectorias y fantasmas"
     },
     {
+      "key": "cmd.workspace.clear",
+      "text": "Limpiar el espacio de trabajo"
+    },
+    {
+      "key": "cmd.workspace.clear.desc",
+      "text": "Elimina zonas prohibidas, puntos intermedios, comparación y cachés de posprocesado — lo mismo que Proyecto nuevo"
+    },
+    {
       "key": "cmd.robot.switch",
       "text": "Cambiar de robot"
     },
