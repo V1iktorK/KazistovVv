@@ -19,6 +19,7 @@
 //    4) в VR виртуальные стенды НЕ гасятся (владелец 16.10.2026: «столов или роботов не видно»).
 // ================================================================================================
 
+using System.Reflection;
 using KazistovVvXr;
 using NUnit.Framework;
 using UnityEngine;
@@ -90,36 +91,77 @@ namespace KazistovVvTests
         // ---------------------------------------------------------------- 3. ПРАВДА О MR
 
         /// <summary>
-        /// `MrActive` ТРЕБУЕТ ФАКТИЧЕСКОГО РЕЖИМА, А НЕ ТОЛЬКО НАСТРОЙКИ.
+        /// `MrActive` ТРЕБУЕТ ОБОИХ УСЛОВИЙ: НАСТРОЙКИ ОПЕРАТОРА И ФАКТИЧЕСКОГО РЕЖИМА.
         ///
-        /// Проверяется по исходнику, потому что свойство читает `PlayerPrefs` и статический режим —
-        /// без сцены и шлема его значение не задать. Здесь важно УБЕДИТЬСЯ, что в коде есть ВТОРОЕ
-        /// условие: без него настройка снова станет единственным источником правды.
+        /// ЧТО БЫЛО. Свойство читало ТОЛЬКО тумблер `KvXrSettings.GetPassthrough()` (это
+        /// НАСТРОЙКА, а не факт): при включённом тумблере без сквозного вида приложение считало
+        /// себя в MR, гасило виртуальные стенды и ставило робота «на реальный стол» — оператор
+        /// видел ПУСТУЮ КОМНАТУ. Ровно этот класс дефекта был в §28.
+        ///
+        /// КАК ПРОВЕРЯЕТСЯ (P4-3). Раньше тест грепал ТЕКСТ `KvXrMrRoom.cs` на наличие строк
+        /// `KvXrPlatformModeSelector.Current`, `KvXrPlatformMode.Mr` и `GetPassthrough` — то есть
+        /// «строка есть», а не «поведение верное»: условие, стоящее ВНЕ get-блока, он бы не
+        /// заметил, а от переформулировки комментария ломался. Теперь задаётся САМ ФАКТ
+        /// (сеттер `Current` — он пишется только стартом рига) и настройка штатным
+        /// `KvXrSettings.SetPassthrough`, а читается свойство: все сочетания обязаны дать
+        /// правильный ответ.
         /// </summary>
         [Test]
         public void MrActiveConsultsActualMode()
         {
-            string path = FindSource("KvXrMrRoom.cs");
-            Assert.IsNotNull(path, "не найден KvXrMrRoom.cs");
+            KvXrPlatformMode originalMode = KvXrPlatformModeSelector.Current;
+            bool hadKey = PlayerPrefs.HasKey(KvXrSettings.KeyPassthrough);
+            bool originalPassthrough = KvXrSettings.GetPassthrough();
 
-            string text = System.IO.File.ReadAllText(path);
+            // Комната ВЫКЛЮЧЕНА: OnEnable подписал бы её на смену настроек, а тест меняет
+            // настройку только ради чтения свойства — лишних эффектов в сцене быть не должно.
+            GameObject host = new GameObject("KvMrActiveTruth_Room");
+            host.SetActive(false);
+            try
+            {
+                KvXrMrRoom room = host.AddComponent<KvXrMrRoom>();
+                Assert.IsNotNull(room, "KvXrMrRoom не создался — читать MrActive нечего");
 
-            // Найти get-блок свойства MrActive.
-            int index = text.IndexOf("public bool MrActive", System.StringComparison.Ordinal);
-            Assert.Greater(index, 0, "в KvXrMrRoom.cs нет свойства MrActive");
+                // MR + включённая комната: оба условия выполнены.
+                SetPlatformMode(KvXrPlatformMode.Mr);
+                KvXrSettings.SetPassthrough(true);
+                Assert.IsTrue(room.MrActive,
+                    "MR с включённой настройкой не даёт MrActive — приложение не включит слои MR " +
+                    "и не поставит робота на реальный стол");
 
-            string tail = text.Substring(index, System.Math.Min(1200, text.Length - index));
+                // Режим не MR: одна настройка не должна делать приложение «MR».
+                SetPlatformMode(KvXrPlatformMode.Vr);
+                Assert.IsFalse(room.MrActive,
+                    "настройка включена, но фактический режим VR — приложение не вправе считать " +
+                    "себя в MR: оператор получил бы пустую комнату вместо виртуальной лаборатории");
 
-            Assert.IsTrue(tail.Contains("KvXrPlatformModeSelector.Current"),
-                "MrActive НЕ смотрит на фактический режим устройства — только на настройку. " +
-                "При включённом тумблере без сквозного вида приложение спрячет стенды и робота, " +
-                "а оператор увидит пустую комнату");
+                // Оператор осознанно выключил комнату: режим есть, а MR не включаем.
+                SetPlatformMode(KvXrPlatformMode.Mr);
+                KvXrSettings.SetPassthrough(false);
+                Assert.IsFalse(room.MrActive,
+                    "режим MR, но оператор выключил комнату в настройках — его выбор игнорируется");
+            }
+            finally
+            {
+                SetPlatformMode(originalMode);
+                if (hadKey) KvXrSettings.SetPassthrough(originalPassthrough);
+                else PlayerPrefs.DeleteKey(KvXrSettings.KeyPassthrough);
+                PlayerPrefs.Save();
+                Object.DestroyImmediate(host);
+            }
+        }
 
-            Assert.IsTrue(tail.Contains("KvXrPlatformMode.Mr"),
-                "MrActive не различает, КАКОЙ режим выбран — сравнения с MR нет");
-
-            Assert.IsTrue(tail.Contains("GetPassthrough"),
-                "MrActive не смотрит на настройку оператора — тогда его выбор игнорируется");
+        /// <summary>Задать ФАКТИЧЕСКИЙ режим устройства (`Current` пишется только стартом рига).</summary>
+        private static void SetPlatformMode(KvXrPlatformMode mode)
+        {
+            PropertyInfo property = typeof(KvXrPlatformModeSelector).GetProperty("Current",
+                BindingFlags.Public | BindingFlags.Static);
+            Assert.IsNotNull(property,
+                "нет свойства KvXrPlatformModeSelector.Current — проверка не о том состоянии");
+            MethodInfo setter = property.GetSetMethod(true);
+            Assert.IsNotNull(setter,
+                "у KvXrPlatformModeSelector.Current нет сеттера — задать режим в EditMode нельзя");
+            setter.Invoke(null, new object[] { mode });
         }
 
         // ---------------------------------------------------------------- 4. САМОПРОВЕРКА
@@ -143,15 +185,15 @@ namespace KazistovVvTests
                 "правило постановки робота непостоянно");
         }
 
-        private static string FindSource(string fileName)
+        /// <summary>ПУСТАЯ СЦЕНА ПОСЛЕ КАЖДОГО ТЕСТА: комнату тест создаёт в памяти.</summary>
+        [TearDown]
+        public void TearDown()
         {
-            string root = System.IO.Path.Combine(Application.dataPath, "_Project");
-            if (!System.IO.Directory.Exists(root)) return null;
-            foreach (string file in System.IO.Directory.GetFiles(root, fileName,
-                         System.IO.SearchOption.AllDirectories))
-                return file;
-            return null;
+            foreach (Transform t in Object.FindObjectsByType<Transform>(
+                         FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+                if (t != null && t.name.StartsWith("KvMrActiveTruth_"))
+                    Object.DestroyImmediate(t.gameObject);
         }
+
     }
 }
-

@@ -18,15 +18,13 @@
 //    • A, C, D — НА ЖИВОМ КОДЕ (объекты создаются в памяти, сцена не нужна): отказ пульта без
 //      токена, повторное нажатие сетки, команда в реестре с обработчиком. Это поведение, а не
 //      текст исходника.
-//    • B — наполовину поведение (окно горячих клавиш строится в памяти и подсвечивает
-//      конфликт), наполовину разбор: у команды нет центрального слоя биндов, и её `Hotkey`
-//      живёт в тексте регистрации (`KvStageHub`, `KazistovVvUIManager`), поэтому сверяются
-//      ОБА источника и их согласованность с реестром `KvBindings`.
-//    • E — разбор по исходникам (как `KvXrMenuCoverageTests`): команды регистрируются в
-//      рантайме менеджером, в EditMode реестр пуст, и проверка по `KvCommands.All` была бы
-//      зелёной на пустоте. Важно: разбор признаёт ВСЕ ФОРМЫ регистрации — `KvCommands.Register(
-//      new KvCommand { Id = … })`, краткую `KvCommands.Register("id", …)` и помощника хабов
-//      `Command("id", …)` (ИМЕННО им регистрируются все 16 id из разбора — см. тест ниже).
+//    • B, E — НА ЖИВОМ РЕЕСТРЕ КОМАНД. Раньше обе проверки ЧИТАЛИ ТЕКСТ ИСХОДНИКОВ (regex по
+//      `KvCommands.Register`): такой тест ломается от переформулировки комментария и ПРОХОДИТ
+//      на неправильном поведении — он проверяет «строка есть», а не «поведение верное» (P4-3).
+//      Теперь тест сам выполняет ШТАТНУЮ регистрацию (`KvCommands` заполняется тем же вызовом,
+//      что в приложении) и сверяет ПОЛЯ реестра: у пары клавиш — `Hotkey` обеих команд плюс
+//      подпись бинда в `KvBindings`, у окон шлема — факт регистрации каждого id. Анти-вакуум
+//      на месте: реестр обязан быть заполнен, иначе «всё зарегистрировано» ничего не доказывает.
 //
 //  ГРАНИЦА ЧЕСТНОСТИ. Тесты не запускают игру, не открывают сцены и не ходят в сеть: пульту
 //  подаётся команда напрямую в `Execute`, сетка считается по объектам в памяти, реестр
@@ -34,8 +32,7 @@
 // ================================================================================================
 
 using System.Collections.Generic;
-using System.IO;
-using System.Text.RegularExpressions;
+using System.Reflection;
 using KazistovVvDiagnostics;
 using KazistovVvFeatures;
 using KazistovVvUI;
@@ -53,102 +50,66 @@ namespace KazistovVvTests
         // ---------------------------------------------------------------- вспомогательное
 
         /// <summary>
-        /// ПРОЧИТАТЬ ИСХОДНИК. Намеренно через `StreamReader`, а не через греп-хелпер чтения
-        /// файлов: храповик P4-3 считает такие файлы и не даёт набору тестов, читающих
-        /// исходники, расти (порог в гейте).
+        /// СНИМОК РЕЕСТРА ДО штатной регистрации (снимается один раз, возвращается TearDown'ом).
+        ///
+        /// ЗАЧЕМ. `KvCommands` — общий на весь прогон статик: регистрация наполняет его сотней
+        /// команд с обработчиками, которые считают состояние, в EditMode недоступное. Оставить
+        /// такое следующим фикстурам нельзя — у них свои представления о реестре (см. `KvCommands.
+        /// Clear` в шапке теста B и уборку в `KvRobotCatalogCoverageTests`). Снимок и есть
+        /// «пустая сцена» для реестра: тесты работают на полном реестре, набор остаётся как был.
         /// </summary>
-        private static string ReadSource(params string[] parts)
-        {
-            string path = Application.dataPath;
-            foreach (string part in parts) path = Path.Combine(path, part);
-            Assert.IsTrue(File.Exists(path), "нет исходника " + path);
-            using (var reader = new StreamReader(path)) return reader.ReadToEnd();
-        }
-
-        /// <summary>Кэш всех исходников проекта (чтение одно, проверок много).</summary>
-        private static List<string> sources;
-
-        private static List<string> AllSources()
-        {
-            if (sources != null) return sources;
-            sources = new List<string>();
-            string root = Path.Combine(Application.dataPath, "_Project");
-            foreach (string file in Directory.GetFiles(root, "*.cs", SearchOption.AllDirectories))
-            {
-                string name = Path.GetFileName(file);
-                if (name.Contains("Tests")) continue;    // тесты — не объявления команд
-                try
-                {
-                    using (var reader = new StreamReader(file)) sources.Add(reader.ReadToEnd());
-                }
-                catch (IOException) { }
-            }
-            Assert.Greater(sources.Count, 100,
-                "исходники не прочитаны (" + sources.Count + " файлов) — разбор бессмысленен");
-            return sources;
-        }
-
-        /// <summary>Hotkey команды, объявленный в её регистрации (`Id = "…"` → `Hotkey = "…"`).</summary>
-        private static string HotkeyOf(string commandId, params string[] parts)
-        {
-            string source = ReadSource(parts);
-            foreach (Match block in Regex.Matches(source,
-                         @"KvCommands\.Register\s*\(\s*new\s+KvCommand\s*\{(.*?)\}\s*\)\s*;",
-                         RegexOptions.Singleline))
-            {
-                if (!Regex.IsMatch(block.Groups[1].Value,
-                        @"\bId\s*=\s*""" + Regex.Escape(commandId) + @"""")) continue;
-                Match key = Regex.Match(block.Groups[1].Value, @"\bHotkey\s*=\s*""([^""]*)""");
-                Assert.IsTrue(key.Success,
-                    "у команды «" + commandId + "» нет поля Hotkey — сверять нечего");
-                return key.Groups[1].Value;
-            }
-            Assert.Fail("команда «" + commandId + "» не найдена в регистрациях — проверка клавиш " +
-                        "ничего не доказывает");
-            return "";
-        }
+        private static List<KvCommand> registrySnapshot;
 
         /// <summary>
-        /// ID КОМАНД, ЗАРЕГИСТРИРОВАННЫХ В ИСХОДНИКАХ (кэш: E проверяет пятьдесят id).
-        /// Три формы, которыми пользуется проект:
-        ///   1) блок `KvCommands.Register(new KvCommand { … Id = «имя» … });`
-        ///   2) краткая перегрузка `KvCommands.Register("id", …)`
-        ///   3) помощник хабов `Command("id", …)` → `KvCommands.Register` (KvStageHub4)
-        /// Форма 3 — та самая, которой регистрируются все 16 id из разбора: разбор, видящий
-        /// только первую форму, объявляет их мёртвыми, хотя они живы.
+        /// ШТАТНАЯ РЕГИСТРАЦИЯ КОМАНД В `KvCommands` — ТОТ ЖЕ ВЫЗОВ, ЧТО В ПРИЛОЖЕНИИ.
+        ///
+        /// ЗАЧЕМ ОНА ЗДЕСЬ (P4-3). Раньше проверки B и E грепали ТЕКСТЫ ИСХОДНИКОВ: regex по
+        /// `KvCommands.Register` не видел помощника хабов `Command("id", …)`, ломался от
+        /// переформулировки комментария и ПРОХОДИЛ на неправильном поведении — он проверял
+        /// «строка есть», а не «поведение верное». Храповик в гейте (Tools/acceptance-gate.ps1)
+        /// считает такие файлы и не даёт набору расти.
+        ///
+        /// ЧТО ВЫПОЛНЯЕТСЯ. `KazistovVvUIManager.RegisterCommands()` — метод шелла: он очищает
+        /// реестр, регистрирует команды менеджера (включая `help.hotkeys`) и в конце зовёт
+        /// `FeatureHub.RegisterCommands`, `KvStageHub.RegisterCommands` и `KvStageHub2/3/4` —
+        /// то есть все шесть источников регистрации проекта одним вызовом. Метод приватный, а
+        /// в EditMode шелл не собирается, поэтому вызывается отражением; вся работа — постановка
+        /// команд в реестр, объекты живут на `host` и снимаются TearDown'ом.
         /// </summary>
-        private static HashSet<string> registeredIds;
 
+        private static void RegisterAllCommands(GameObject host)
+        {
+            if (registrySnapshot == null)
+            {
+                registrySnapshot = new List<KvCommand>();
+                foreach (KvCommand command in KvCommands.All) registrySnapshot.Add(command);
+            }
+
+            KazistovVvUIManager ui = host.AddComponent<KazistovVvUIManager>();
+            MethodInfo register = typeof(KazistovVvUIManager).GetMethod("RegisterCommands",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsNotNull(register,
+                "у KazistovVvUIManager больше нет RegisterCommands() — штатная регистрация " +
+                "недоступна, проверка по реестру ничего не доказывает");
+            try
+            {
+                register.Invoke(ui, null);
+            }
+            catch (TargetInvocationException error)
+            {
+                Assert.Fail("штатная регистрация команд упала: " + error.InnerException);
+            }
+        }
+
+        /// <summary>ID всех команд, РЕАЛЬНО лежащих в реестре `KvCommands` (не в тексте исходников).</summary>
         private static HashSet<string> RegisteredIds()
         {
-            if (registeredIds != null) return registeredIds;
-            registeredIds = new HashSet<string>();
-            foreach (string text in AllSources())
-            {
-                foreach (Match block in Regex.Matches(text,
-                             @"KvCommands\.Register\s*\(\s*new\s+KvCommand\s*\{(.*?)\}\s*\)\s*;",
-                             RegexOptions.Singleline))
-                {
-                    Match id = Regex.Match(block.Groups[1].Value, @"\bId\s*=\s*""([^""]+)""");
-                    if (id.Success) registeredIds.Add(id.Groups[1].Value);
-                }
-                foreach (Match m in Regex.Matches(text, @"KvCommands\.Register\s*\(\s*""([^""]+)"""))
-                {
-                    int lineStart = text.LastIndexOf('\n', m.Index) + 1;
-                    string prefix = text.Substring(lineStart, m.Index - lineStart);
-                    if (prefix.Contains("//") || prefix.Contains("*")) continue;
-                    registeredIds.Add(m.Groups[1].Value);
-                }
-                foreach (Match m in Regex.Matches(text, @"\bCommand\s*\(\s*""([^""]+)"""))
-                {
-                    int lineStart = text.LastIndexOf('\n', m.Index) + 1;
-                    string prefix = text.Substring(lineStart, m.Index - lineStart);
-                    if (prefix.Contains("//") || prefix.Contains("*")) continue;
-                    registeredIds.Add(m.Groups[1].Value);
-                }
-            }
-            return registeredIds;
+            var ids = new HashSet<string>();
+            foreach (KvCommand command in KvCommands.All)
+                if (command != null && !string.IsNullOrEmpty(command.Id)) ids.Add(command.Id);
+            return ids;
         }
+
 
         /// <summary>Все «KvGridLine» в сцене — их оставляет сетка (TearDown обязан вернуть пустую сцена).</summary>
         private static void DestroyGridLines()
@@ -167,6 +128,19 @@ namespace KazistovVvTests
         [TearDown]
         public void TearDown()
         {
+            // Штатная регистрация команд строит `KvFeatureWindow`, который кладёт себя на пояс
+            // окон: убитое окно не должно пережить тест, иначе следующая фикстура увидит ссылку
+            // на уничтоженный объект.
+            KvWindowBelt.Unregister(KvFeatureWindow.WindowId);
+            // Реестр команд — общий статик прогона: возвращаем снимок, снятый ДО штатной
+            // регистрации. Иначе следующие фикстуры увидят сотню команд с обработчиками, которые
+            // считают состояние, в EditMode недоступное (правка B и E ничего об этом не знает).
+            if (registrySnapshot != null)
+            {
+                KvCommands.Clear();
+                foreach (KvCommand command in registrySnapshot) KvCommands.Register(command);
+                registrySnapshot = null;
+            }
             foreach (Transform t in Object.FindObjectsByType<Transform>(
                          FindObjectsInactive.Exclude, FindObjectsSortMode.None))
                 if (t != null && t.name.StartsWith("KvGapClosure_"))
@@ -273,32 +247,53 @@ namespace KazistovVvTests
         /// ЧТО СТАЛО. Мониторинг перенесён на свободную комбинацию (F1–F12 заняты, Ctrl+F8 и
         /// Ctrl+F10 заняты — см. `KvStageHub`), его бинд зарегистрирован в `KvBindings` с той же
         /// подписью, что `Hotkey` команды: окно показывает ровно то, что делает код.
+        ///
+        /// КАК ПРОВЕРЯЕТСЯ (P4-3). Раньше `Hotkey` вытаскивался regex'ом из ТЕКСТА регистрации —
+        /// тест проверял «строка есть», а не поведение, и ломался от правки комментария. Теперь
+        /// выполняется штатная регистрация (`RegisterAllCommands`) и сверяются ПОЛЯ реестра
+        /// `KvCommands`: `Hotkey` обеих команд, их неравенство, отсутствие F12 у мониторинга и
+        /// совпадение подписи бинда `KvBindings` с полем команды.
         /// </summary>
         [Test]
         public void HealthAndHotkeysWindow_HaveDifferentKeysAndBothAreRegistered()
         {
-            string healthKey = HotkeyOf("health.toggle",
-                "_Project", "01_Scripts", "Features", "KvStageHub.cs");
-            string hotkeysKey = HotkeyOf("help.hotkeys",
-                "_Project", "06_KazistovVv_UI", "03_Scripts", "Core", "KazistovVvUIManager.cs");
+            GameObject host = new GameObject("KvGapClosure_CommandRegistry");
+            try
+            {
+                RegisterAllCommands(host);
 
-            Assert.IsNotEmpty(healthKey, "у health.toggle пустая горячая клавиша — команде нечем управлять");
-            Assert.AreNotEqual(hotkeysKey, healthKey,
-                "конфликт F12 остался: health.toggle = «" + healthKey + "», help.hotkeys = «" +
-                hotkeysKey + "» — одно нажатие открывает два окна");
-            Assert.AreNotEqual("F12", healthKey,
-                "мониторинг остался на F12 — окно горячих клавиш по-прежнему открывается вместе с ним");
+                KvCommand healthCommand = KvCommands.Get("health.toggle");
+                Assert.IsNotNull(healthCommand,
+                    "health.toggle не попала в реестр — команде нечем управлять");
+                KvCommand hotkeysCommand = KvCommands.Get("help.hotkeys");
+                Assert.IsNotNull(hotkeysCommand,
+                    "help.hotkeys не попала в реестр — окно горячих клавиш не откроется");
 
-            // Подпись в окне горячих клавиш обязана совпадать с командой, иначе справочник врёт.
-            KvBindEntry health = null;
-            foreach (KvBindEntry entry in KvBindings.All())
-                if (entry != null && entry.CommandId == "health.toggle") { health = entry; break; }
-            Assert.IsNotNull(health,
-                "health.toggle не зарегистрирован в KvBindings — окно F12 его не покажет и конфликт " +
-                "не подсветит (ровно то, что описано в Docs/ДЕРЕВЬЯ_КНОПОК_ПК.md)");
-            Assert.AreEqual(healthKey, health.Keys,
-                "подпись бинда мониторинга «" + health.Keys + "» не совпадает с Hotkey команды «" +
-                healthKey + "» — справочник и код разошлись");
+                string healthKey = healthCommand.Hotkey;
+                string hotkeysKey = hotkeysCommand.Hotkey;
+
+                Assert.IsNotEmpty(healthKey, "у health.toggle пустая горячая клавиша — команде нечем управлять");
+                Assert.AreNotEqual(hotkeysKey, healthKey,
+                    "конфликт F12 остался: health.toggle = «" + healthKey + "», help.hotkeys = «" +
+                    hotkeysKey + "» — одно нажатие открывает два окна");
+                Assert.AreNotEqual("F12", healthKey,
+                    "мониторинг остался на F12 — окно горячих клавиш по-прежнему открывается вместе с ним");
+
+                // Подпись в окне горячих клавиш обязана совпадать с командой, иначе справочник врёт.
+                KvBindEntry bind = null;
+                foreach (KvBindEntry entry in KvBindings.All())
+                    if (entry != null && entry.CommandId == "health.toggle") { bind = entry; break; }
+                Assert.IsNotNull(bind,
+                    "health.toggle не зарегистрирован в KvBindings — окно F12 его не покажет и конфликт " +
+                    "не подсветит (ровно то, что описано в Docs/ДЕРЕВЬЯ_КНОПОК_ПК.md)");
+                Assert.AreEqual(healthKey, bind.Keys,
+                    "подпись бинда мониторинга «" + bind.Keys + "» не совпадает с Hotkey команды «" +
+                    healthKey + "» — справочник и код разошлись");
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
         }
 
         /// <summary>
@@ -445,10 +440,15 @@ namespace KazistovVvTests
         ///
         /// ЧЕМ ОПАСНА ЛОЖЬ ТАКОЙ КАРТОЧКИ. `KvXrGroupPanel.InvokeCommand` первым делом ищет команду
         /// в реестре и молча выходит, если её нет, — то есть карточка описывает мёртвое окно. Но
-        /// если разбор просто НЕ ВИДИТ форму регистрации, лечение «зарегистрируй ещё раз» плодит
-        /// дубли. Поэтому здесь признаются все три формы (`RegisteredIds`), а не только та, которой
-        /// пользуется карточка. Если команда НЕ должна существовать — её место в `unavailable`
-        /// с причиной, а не молчаливое исключение.
+        /// если проверка НЕ ВИДИТ форму регистрации, лечение «зарегистрируй ещё раз» плодит дубли.
+        ///
+        /// КАК ПРОВЕРЯЕТСЯ (P4-3). Раньше id собирались грепом ТЕКСТОВ исходников (три формы
+        /// `Register`/`Command`) — разбор мог не увидеть регистрацию, а тест жил от правки
+        /// комментария. Теперь выполняется ШТАТНАЯ регистрация (`RegisterAllCommands`: менеджер +
+        /// FeatureHub + KvStageHub1–4 — ровно то, что зовёт приложение), и каждый id таблицы
+        /// ищется в РЕЕСТРЕ `KvCommands`: живая команда либо явная пометка `unavailable` с
+        /// причиной. Анти-вакуум: реестр обязан быть заполнен, иначе проверка «всё
+        /// зарегистрировано» проходила бы на пустоте.
         /// </summary>
         [Test]
         public void WindowCommands_EveryIdIsRegisteredOrMarkedUnavailable()
@@ -474,21 +474,31 @@ namespace KazistovVvTests
                 "id из разбора исчезли из таблицы окон: " + string.Join(", ", notInTable.ToArray()) +
                 " — либо таблицу изменили, либо проверка не о том");
 
-            HashSet<string> registered = RegisteredIds();
-            Assert.Greater(registered.Count, 40,
-                "разбор нашёл всего " + registered.Count + " зарегистрированных команд — сломан сам " +
-                "разбор, а не проект");
+            GameObject host = new GameObject("KvGapClosure_WindowRegistry");
+            try
+            {
+                RegisterAllCommands(host);
 
-            var missing = new List<string>();
-            foreach (string id in ids)
-                if (!registered.Contains(id) && !unavailable.ContainsKey(id)) missing.Add(id);
-            missing.Sort();
-            Assert.AreEqual(0, missing.Count,
-                "id окон БЕЗ регистрации и без честной пометки (" + missing.Count + " шт): " +
-                string.Join(", ", missing.ToArray()) +
-                ". Такое окно в шлеме не откроется: `KvXrGroupPanel.InvokeCommand` первым делом " +
-                "ищет команду в реестре и молча выходит. Зарегистрируйте команду или добавьте id " +
-                "в `unavailable` с причиной");
+                HashSet<string> registered = RegisteredIds();
+                Assert.Greater(registered.Count, 40,
+                    "в реестре всего " + registered.Count + " команд — штатная регистрация не " +
+                    "выполнена, и проверка «всё зарегистрировано» ничего не доказывала бы");
+
+                var missing = new List<string>();
+                foreach (string id in ids)
+                    if (!registered.Contains(id) && !unavailable.ContainsKey(id)) missing.Add(id);
+                missing.Sort();
+                Assert.AreEqual(0, missing.Count,
+                    "id окон БЕЗ регистрации и без честной пометки (" + missing.Count + " шт): " +
+                    string.Join(", ", missing.ToArray()) +
+                    ". Такое окно в шлеме не откроется: `KvXrGroupPanel.InvokeCommand` первым делом " +
+                    "ищет команду в реестре и молча выходит. Зарегистрируйте команду или добавьте id " +
+                    "в `unavailable` с причиной");
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
         }
 
         // ================================================================ F. ПОДПИСЬ СКОРОСТИ
