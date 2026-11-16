@@ -478,8 +478,8 @@ if ($SkipUnity) {
     for ($e2eTry = 1; $e2eTry -le 2; $e2eTry++) {
         if (Test-Path $e2eLog) { Remove-Item $e2eLog -Force }
         if (Test-Path $e2eRep) { Remove-Item $e2eRep -Force }
-        $code = Invoke-Unity @('-batchmode', '-projectPath', ('\"' + $ProjectPath + '\"'),
-            '-executeMethod', 'KvE2eSettingsDiag.Run', '-logFile', ('\"' + $e2eLog + '\"')) 25
+        $code = Invoke-Unity @('-batchmode', '-projectPath', ('"' + $ProjectPath + '"'),
+            '-executeMethod', 'KvE2eSettingsDiag.Run', '-logFile', ('"' + $e2eLog + '"')) 25
         $e2eVerdict = Get-E2eVerdict -ReportPath $e2eRep -LogPath $e2eLog -Code $code -Note $e2eNote
         if (-not $e2eVerdict.Retry) { break }
         # Причина первого отказа не теряется: она печатается в консоль гейта до повтора.
