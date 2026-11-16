@@ -709,5 +709,242 @@ namespace KazistovVvTests
                 Object.DestroyImmediate(host);
             }
         }
+
+        // ========================== H. КНОПКИ «ОБНОВИТЬ»: МЕТРИКА ИЛИ ЧЕСТНАЯ ПРИЧИНА
+
+        /// <summary>Путь кнопки «Обновить» вкладки «Замер» — ровно тот, что красным в отчёте AR.</summary>
+        private const string PerfRefreshPath =
+            "KazistovVv_UI/KvFeatureCanvas/KvFeatureWindow/Scroll/Viewport/Content/Buttons/Btn0«Обновить»";
+
+        /// <summary>Путь кнопки «Обновить список» вкладки «Сессии» (второй проход отчёта AR).</summary>
+        private const string SessionsRefreshPath =
+            "KazistovVv_UI/KvFeatureCanvas/KvFeatureWindow/Scroll/Viewport/Content/Buttons#1/Btn2«Обновить список»";
+
+        /// <summary>
+        /// МОДУЛЬ ЗАМЕРА ХАБУ: в EditMode `Awake` не вызывается (Грабли 5), поэтому тест ставит
+        /// его отражением в ТЕ ЖЕ свойство, что читает приложение, — подделка состояния, а не
+        /// обход проверки (тот же приём, что у плеера записи в секции G).
+        /// </summary>
+        private static void SetPerformance(FeatureHub hub, KvPlannerPerformance performance)
+        {
+            PropertyInfo property = typeof(FeatureHub).GetProperty("Performance");
+            Assert.IsNotNull(property, "у FeatureHub нет свойства Performance — факт замера не подделать");
+            MethodInfo setter = property.GetSetMethod(true);
+            Assert.IsNotNull(setter, "у FeatureHub нет сеттера Performance — факт замера не подделать");
+            setter.Invoke(hub, new object[] { performance });
+        }
+
+        /// <summary>МЕНЕДЖЕР СЕССИЙ ХАБУ — той же отражением, что и модуль замера.</summary>
+        private static void SetSessions(FeatureHub hub, KvSessionManager sessions)
+        {
+            PropertyInfo property = typeof(FeatureHub).GetProperty("Sessions");
+            Assert.IsNotNull(property, "у FeatureHub нет свойства Sessions — факт сессий не подделать");
+            MethodInfo setter = property.GetSetMethod(true);
+            Assert.IsNotNull(setter, "у FeatureHub нет сеттера Sessions — факт сессий не подделать");
+            setter.Invoke(hub, new object[] { sessions });
+        }
+
+        /// <summary>ДОБАВИТЬ ЗАМЕР В ИСТОРИЮ: список приватный, тест кладёт строку отражением.</summary>
+        private static void AddRun(KvPlannerPerformance performance, string created)
+        {
+            FieldInfo field = typeof(KvPlannerPerformance).GetField("history",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsNotNull(field, "у KvPlannerPerformance нет поля history — замер не подделать");
+            var list = (System.Collections.IList)field.GetValue(performance);
+            list.Add(new KvPlanRun { created = created, seconds = 0.42f, requested = 4, produced = 4 });
+        }
+
+        /// <summary>ДОБАВИТЬ СЕССИЮ В СПИСОК: тот же приватный список, что читает окно.</summary>
+        private static void AddSession(KvSessionManager sessions)
+        {
+            FieldInfo field = typeof(KvSessionManager).GetField("sessions",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsNotNull(field, "у KvSessionManager нет поля sessions — сессию не подделать");
+            var list = (System.Collections.IList)field.GetValue(sessions);
+            list.Add(new KvSession { name = "Сессия H" });
+        }
+
+        /// <summary>
+        /// H. КНОПКА «ОБНОВИТЬ» ВКЛАДКИ «ЗАМЕР» ПРИ ЕСТЬ ЧТО ОБНОВЛЯТЬ — МЕТРИКА, А НЕ ПРИЧИНА.
+        ///
+        /// ОТКУДА. Последняя красная строка самопрогона AR (Logs/device-ar-final2.logcat.txt,
+        /// APK с коммитом 07487d4): `KvFeatureWindow/…/Buttons/Btn0«Обновить»` с
+        /// `ok=0 effect=нет изменений exempt=-`. Обработчик молча звал `RequestRefresh()`:
+        /// снимок пересобранный вкладки не видит (текст — не признак снимка), поэтому
+        /// работающая кнопка выглядела мёртвой, а причины у неё не было вовсе.
+        ///
+        /// ЧТО ОБЯЗАНО БЫТЬ (принцип самопрогона: строка либо срабатывает, либо объясняется):
+        ///   1) замер ЕСТЬ — работает МЕТРИКА: обновление даёт снимку строку состояния с
+        ///      счётчиком замеров и МЕТКОЙ ВРЕМЕНИ последнего замера, исключения нет;
+        ///   2) замеров НЕТ — нажатие даёт ПРИЧИНУ-ИСКЛЮЧЕНИЕ (`ExemptReason`) с фактом,
+        ///      а не «нет изменений» и не «исчез».
+        ///
+        /// ФАКТ читается ИЗ ТОГО ЖЕ ОКНА, где нажата кнопка (`KvFeatureWindow.PerfRunCount`):
+        /// синглтон `FeatureHub.Instance` в прогоне пуст (урок 5363a19).
+        /// </summary>
+        [Test]
+        public void PerfRefresh_WithRuns_MetricNamesTheRun_NoExemption()
+        {
+            GameObject host = new GameObject("KvGapClosure_PerfWindow");
+            GameObject button = new GameObject("KvGapClosure_PerfButton");
+            try
+            {
+                FeatureHub hub = host.AddComponent<FeatureHub>();
+                SetPerformance(hub, new KvPlannerPerformance());
+                AddRun(hub.Performance, "2026-11-16 09:15:41");
+
+                KvFeatureWindow window = host.AddComponent<KvFeatureWindow>();
+                window.Build(hub);
+                button.transform.SetParent(host.transform, false);
+
+                // АНТИ-ВАКУУМ: факт обязан прийти из ОКНА нажатой кнопки, а не из пустого синглтона.
+                Assert.IsNull(FeatureHub.Instance,
+                    "синглтон FeatureHub не пуст — факт взят бы не из окна");
+                Assert.AreEqual(1, window.PerfRunCount,
+                    "окно не видит свой замер — метрике не из чего считаться");
+
+                // 1) ПРИЧИНЫ НЕТ: есть что обновлять — работает метрика.
+                Assert.AreEqual("",
+                    KvUiSweepRefresh.NothingToRefreshReason(PerfRefreshPath, window.PerfRunCount),
+                    "замер есть — работать должна метрика, а не причина-исключение");
+
+                // 2) МЕТРИКА ВИДНА СНИМКУ: строка состояния со счётом и меткой времени замера.
+                string status = KvFeatureWindow.PerfRefreshStatus(
+                    window.PerfRunCount, window.PerfLastCreated);
+                StringAssert.Contains("замер обновлён", status,
+                    "кнопка обязана назвать оператору, что именно обновлено: «" + status + "»");
+                StringAssert.Contains("прогонов 1", status,
+                    "в строке обязан быть счётчик замеров: «" + status + "»");
+                StringAssert.Contains("09:15:41", status,
+                    "метка времени последнего замера обязана попасть в строку: «" + status + "»");
+            }
+            finally
+            {
+                KazistovVvXr.KvWindowBelt.Unregister(KvFeatureWindow.WindowId);
+                Object.DestroyImmediate(button);
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        /// <summary>
+        /// H. КНОПКА «ОБНОВИТЬ» ПРИ ПУСТОЙ ИСТОРИИ — ПРИЧИНА-ИСКЛЮЧЕНИЕ С ФАКТОМ, А НЕ «нет
+        /// изменений». Плюс УЗКОСТЬ правила: другим кнопкам (в том числе «Обновить список»
+        /// вкладки «Сессии» и скорости плеера) своя причина не подсовывается, а непрочитанный
+        /// факт (`-1`) причиной не выдумывается.
+        /// </summary>
+        [Test]
+        public void PerfRefresh_NoRuns_HonestReason_NotNoChange()
+        {
+            const string slow =
+                "KazistovVv_UI/KvFeatureCanvas/KvFeatureWindow/Scroll/Viewport/Content/Buttons#2/Btn0«×0.25»";
+            GameObject host = new GameObject("KvGapClosure_NoPerfWindow");
+            GameObject button = new GameObject("KvGapClosure_NoPerfButton");
+            try
+            {
+                FeatureHub hub = host.AddComponent<FeatureHub>();
+                SetPerformance(hub, new KvPlannerPerformance());   // история пуста
+
+                KvFeatureWindow window = host.AddComponent<KvFeatureWindow>();
+                window.Build(hub);
+                button.transform.SetParent(host.transform, false);
+
+                Assert.AreEqual(0, window.PerfRunCount,
+                    "история пуста — но окно это не видит, правило не о чём");
+
+                // 1) ПРИЧИНА РОВНО ЗАКАЗАННАЯ И С ФАКТОМ.
+                string reason = KvUiSweepRefresh.NothingToRefreshReason(
+                    PerfRefreshPath, window.PerfRunCount);
+                Assert.AreEqual(KvUiSweepRefresh.PerfNothingReason, reason,
+                    "причина обязана быть ровно той, что названа в задаче: «" + reason + "»");
+                StringAssert.Contains("нечего обновлять", reason);
+                StringAssert.Contains("прогонов планировщика не было", reason);
+
+                // 2) ПРАВИЛО УЗКОЕ И ЧЕСТНОЕ О ФАКТЕ.
+                Assert.AreEqual("", KvUiSweepRefresh.NothingToRefreshReason(PerfRefreshPath, 3),
+                    "замеры есть — причина не выдаётся, работает метрика");
+                Assert.AreEqual(KvUiSweepRefresh.SessionsNothingReason,
+                    KvUiSweepRefresh.NothingToRefreshReason(SessionsRefreshPath, 0),
+                    "«Обновить список» обязан называть свои сессии, а не замер");
+                Assert.AreEqual("", KvUiSweepRefresh.NothingToRefreshReason(slow, 0),
+                    "правило не трогает кнопки скорости — у них своё правило плеера");
+                Assert.AreEqual("", KvUiSweepRefresh.NothingToRefreshReason(PerfRefreshPath, -1),
+                    "прочитать не удалось — причину не выдумываем (урок RecordStoreHasRecords)");
+
+                // 3) ПРИЧИНА — ИСКЛЮЧЕНИЕ ОТЧЁТА: не «нет изменений» и не «исчез».
+                var element = new KvUiSweepElement
+                {
+                    Path = PerfRefreshPath,
+                    Ok = false,
+                    Effect = reason,
+                    ExemptReason = reason,
+                    Method = "uGUI"
+                };
+                Assert.IsTrue(element.IsExempt, "причина не помечена как исключение (ExemptReason)");
+                string line = element.Line;
+                StringAssert.Contains("exempt=" + reason, line, "причина не попала в строку отчёта");
+                StringAssert.DoesNotContain("нет изменений", line,
+                    "с причиной строка обязана быть объяснением, а не «нет изменений»");
+                StringAssert.DoesNotContain("исчез", line,
+                    "это не исчезновение: кнопка найдена и нажата, объяснение — про замеры");
+            }
+            finally
+            {
+                KazistovVvXr.KvWindowBelt.Unregister(KvFeatureWindow.WindowId);
+                Object.DestroyImmediate(button);
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        /// <summary>
+        /// H. МИНИ-АУДИТ, ВТОРАЯ КНОПКА ТОГО ЖЕ КЛАССА: «Обновить список» вкладки «Сессии» —
+        /// тот же тихий обработчик (`Reload` + пересборка, снимок изменений не видит).
+        /// Причина-исключение, когда сессий нет, и метрика, когда есть.
+        /// </summary>
+        [Test]
+        public void SessionsRefresh_NoSessions_HonestReason_WithSessions_Metric()
+        {
+            GameObject host = new GameObject("KvGapClosure_SessionsWindow");
+            GameObject button = new GameObject("KvGapClosure_SessionsButton");
+            try
+            {
+                FeatureHub hub = host.AddComponent<FeatureHub>();
+                SetSessions(hub, new KvSessionManager());   // Awake не зовётся: списка нет
+
+                KvFeatureWindow window = host.AddComponent<KvFeatureWindow>();
+                window.Build(hub);
+                button.transform.SetParent(host.transform, false);
+
+                // 1) СЕССИЙ НЕТ — ЧЕСТНАЯ ПРИЧИНА С ФАКТОМ (свой текст, не про замер).
+                Assert.AreEqual(0, window.SessionCount, "сессий нет — но окно это не видит");
+                string reason = KvUiSweepRefresh.NothingToRefreshReason(
+                    SessionsRefreshPath, window.SessionCount);
+                Assert.AreEqual(KvUiSweepRefresh.SessionsNothingReason, reason,
+                    "причина обязана быть ровно той, что названа в задаче: «" + reason + "»");
+                StringAssert.Contains("нечего обновлять", reason);
+                StringAssert.Contains("сессий нет", reason);
+
+                // 2) СЕССИЯ ЕСТЬ — МЕТРИКА: строка состояния, которую видит снимок.
+                AddSession(hub.Sessions);
+                Assert.AreEqual(1, window.SessionCount, "окно не видит свою сессию");
+                Assert.AreEqual("",
+                    KvUiSweepRefresh.NothingToRefreshReason(SessionsRefreshPath, window.SessionCount),
+                    "сессия есть — работать должна метрика, а не причина-исключение");
+                string status = KvFeatureWindow.SessionRefreshStatus(window.SessionCount);
+                StringAssert.Contains("сессий: 1", status,
+                    "в строке обязан быть счётчик: «" + status + "»");
+                StringAssert.Contains("перечитан", status,
+                    "строка обязана назвать действие: «" + status + "»");
+
+                // 3) УЗКОСТЬ: вкладке «Замер» сессии своей причиной не подсовываются.
+                Assert.AreEqual("", KvUiSweepRefresh.NothingToRefreshReason(PerfRefreshPath, 1),
+                    "чужая кнопка при чужом факте своей причины не получает");
+            }
+            finally
+            {
+                KazistovVvXr.KvWindowBelt.Unregister(KvFeatureWindow.WindowId);
+                Object.DestroyImmediate(button);
+                Object.DestroyImmediate(host);
+            }
+        }
     }
 }

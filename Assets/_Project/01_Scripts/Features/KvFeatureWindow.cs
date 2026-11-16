@@ -196,6 +196,78 @@ namespace KazistovVvFeatures
             get { return ReferenceEquals(hub, null) ? null : hub.Recording; }
         }
 
+        /// <summary>
+        /// СКОЛЬКО ЗАМЕРОВ (ПРОГОНОВ ПЛАНИРОВЩИКА) ЗНАЕТ ХАБ ЭТОГО ОКНА (`-1` — окно построено
+        /// без хаба или модуль замера не создан).
+        ///
+        /// ЗАЧЕМ. Кнопка «Обновить» вкладки «Замер» — тихий обработчик: пересборка вкладки
+        /// меняет только текст, которого снимок прогона не меряет, поэтому в прогоне AR
+        /// 16.11.2026 строка получила `ok=0 effect=нет изменений` БЕЗ причины. Факт «есть ли
+        /// что обновлять» читается отсюда — из того же окна, где нажата кнопка (урок 5363a19:
+        /// синглтон `FeatureHub.Instance` в прогоне пуст).
+        /// </summary>
+        public int PerfRunCount
+        {
+            get
+            {
+                return ReferenceEquals(hub, null) || hub.Performance == null
+                    ? -1
+                    : hub.Performance.History.Count;
+            }
+        }
+
+        /// <summary>Метка времени последнего замера (`""` — замеров нет или окно без хаба).</summary>
+        public string PerfLastCreated
+        {
+            get
+            {
+                if (ReferenceEquals(hub, null) || hub.Performance == null) return "";
+                KvPlanRun last = hub.Performance.Last;
+                return last != null ? last.created : "";
+            }
+        }
+
+        /// <summary>
+        /// СКОЛЬКО СОХРАНЁННЫХ СЕССИЙ ЗНАЕТ ХАБ ЭТОГО ОКНА (`-1` — окно без хаба).
+        /// Тот же класс факта, что <see cref="PerfRunCount"/>: мини-аудит 16.11.2026 нашёл у
+        /// «Обновить список» вкладки «Сессии» тот же тихий обработчик без причины.
+        /// </summary>
+        public int SessionCount
+        {
+            get
+            {
+                return ReferenceEquals(hub, null) || hub.Sessions == null
+                    ? -1
+                    : hub.Sessions.All.Count;
+            }
+        }
+
+        /// <summary>
+        /// СТРОКА СОСТОЯНИЯ ПОСЛЕ ОБНОВЛЕНИЯ ЗАМЕРА (чистая — её же проверяет тест).
+        ///
+        /// ЗАЧЕМ ОНА. Снимок прогона меряет ТЕКСТ СТРОКИ СОСТОЯНИЯ, а не содержимое вкладки:
+        /// без этой строки обновление для снимка неотличимо от бездействия, и рабочая кнопка
+        /// снова напечатает «нет изменений». Оператор при этом видит счётчик замеров и
+        /// МЕТКУ ВРЕМЕНИ последнего — то, ради чего нажатие и делается.
+        /// </summary>
+        public static string PerfRefreshStatus(int runCount, string lastCreated)
+        {
+            return "замер обновлён: прогонов " + runCount + " · последний " + Stamp(lastCreated);
+        }
+
+        /// <summary>То же для кнопки «Обновить список» вкладки «Сессии».</summary>
+        public static string SessionRefreshStatus(int count)
+        {
+            return "сессий: " + count + " · список перечитан";
+        }
+
+        /// <summary>Метка времени в том же виде, что её показывает вкладка: последние 8 знаков.</summary>
+        private static string Stamp(string created)
+        {
+            if (string.IsNullOrEmpty(created)) return "—";
+            return created.Length > 8 ? created.Substring(created.Length - 8) : created;
+        }
+
         /// <summary>Поставить множитель скорости и СРАЗУ показать его подпись в окне.</summary>
         private void SetPlaybackSpeed(float value)
         {
@@ -1126,7 +1198,27 @@ namespace KazistovVvFeatures
                        hub.Performance.History.Count + ")";
             }, KvTheme.Accent);
 
-            Buttons(null, new[] { "Обновить" }, new[] { (Action)delegate { RequestRefresh(); } });
+            Buttons(null, new[] { "Обновить" }, new[] { (Action)delegate { RefreshPerf(); } });
+        }
+
+        /// <summary>
+        /// ВКЛАДКА «ЗАМЕР»: ОБНОВИТЬ ПО ДЕЛУ ИЛИ ПОМОЛЧАТЬ С ЧЕСТНОЙ ПРИЧИНОЙ.
+        ///
+        /// ТИХИЙ ОБРАБОТЧИК БЕЗ ПРИЧИНЫ — И ЕГО ЖЕ ПОСЛЕДНЯЯ КРАСНАЯ СТРОКА САМОПРОГОНА AR
+        /// 16.11.2026 (`ok=0 effect=нет изменений exempt=-`): `RequestRefresh()` пересобирает
+        /// вкладку, а снимок прогона меряет не текст вкладки, но строку состояния. Поэтому:
+        ///   • замеров НЕТ — молчим (обновлять нечего), честную причину с фактом по тому же
+        ///     предусловию считает прогон (`KvUiSweepRefresh.NothingToRefreshReason`);
+        ///   • замер ЕСТЬ — пересобираем и НАЗЫВАЕМ оператору счётчик с меткой времени
+        ///     последнего замера: это и есть метрика, которую видит снимок.
+        /// Предусловие считается ДО нажатия — после нажатия оно вычёркивало бы удачное.
+        /// </summary>
+        private void RefreshPerf()
+        {
+            int runs = PerfRunCount;
+            if (runs <= 0) return;
+            RequestRefresh();
+            KazistovVvUIManager.SetPlanStatus(PerfRefreshStatus(runs, PerfLastCreated), KvTheme.Ok);
         }
 
         // ---- вкладка 7: ЖУРНАЛ (этап 13)
@@ -1259,7 +1351,7 @@ namespace KazistovVvFeatures
                         else hub.Sessions.Load(newest);
                         RequestRefresh();
                     },
-                    delegate { hub.Sessions.Reload(); RequestRefresh(); }
+                    delegate { RefreshSessions(); }
                 });
 
             Header("Сохранённые сессии (" + sessions.Count + ")");
@@ -1281,6 +1373,21 @@ namespace KazistovVvFeatures
                         delegate { hub.Sessions.Delete(session); RequestRefresh(); }
                     });
             }
+        }
+
+        /// <summary>
+        /// ВКЛАДКА «СЕССИИ»: ТОТ ЖЕ ПАТТЕРН, ЧТО «Обновить» вкладки «Замер» (мини-аудит
+        /// 16.11.2026). `Reload` + пересборка списка для снимка прогона неотличимы от
+        /// бездействия, поэтому: сессий НЕТ — молчим (причину с фактом даёт прогон),
+        /// сессии ЕСТЬ — перечитываем список и называем оператору счётчик в строке состояния.
+        /// </summary>
+        private void RefreshSessions()
+        {
+            int count = SessionCount;
+            if (count <= 0) return;
+            hub.Sessions.Reload();
+            RequestRefresh();
+            KazistovVvUIManager.SetPlanStatus(SessionRefreshStatus(SessionCount), KvTheme.Ok);
         }
 
         // ================================================================== кадровое обновление

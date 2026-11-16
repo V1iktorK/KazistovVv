@@ -3445,6 +3445,109 @@ namespace KazistovVvDiagnostics
         }
     }
 
+    // ============================== КНОПКИ «ОБНОВИТЬ»-КЛАССА (мини-аудит 16.11.2026)
+
+    /// <summary>
+    /// КНОПКИ «ОБНОВИТЬ» ОКНА ФУНКЦИЙ: ЧЕСТНАЯ ПРИЧИНА, КОГДА ОБНОВЛЯТЬ НЕЧЕГО.
+    ///
+    /// ОТКУДА. Последняя красная строка самопрогона AR (16.11.2026, 474 элемента):
+    /// `KvFeatureWindow/…/Buttons/Btn0«Обновить»` вкладки «Замер» — `ok=0 effect=нет
+    /// изменений exempt=-`. Обработчик молча звал `RequestRefresh()`: пересборка вкладки
+    /// меняет ТОЛЬКО текст, а текст снимок не меряет, поэтому работающая кнопка выглядела
+    /// мёртвой и осталась без объяснения вовсе. Мини-аудит класса «обновить» нашёл вторую
+    /// такую же кнопку — «Обновить список» вкладки «Сессии» (`Reload` + пересборка): тот же
+    /// тихий обработчик без причины.
+    ///
+    /// ЧТО ЗДЕСЬ. УЗКИЕ правила: путь окна функций И подпись ровно одной из двух кнопок;
+    /// факт — СКОЛЬКО ДАННЫХ знает ОКО нажатой кнопки (замеры планировщика / сохранённые
+    /// сессии), прочитанный ДО нажатия (состояние ПОСЛЕ вычёркивало бы удачное нажатие).
+    /// Данных нет → причина с фактом (`ExemptReason` в строке отчёта, не «нет изменений» и
+    /// не «исчез»); данные есть → причин нет, работает МЕТРИКА (`KvFeatureWindow.
+    /// PerfRefreshStatus`/`SessionRefreshStatus` — строка состояния со счётом и меткой
+    /// времени, её как раз и видит снимок). Непрочитанный факт (`-1`) причиной не считается:
+    /// утверждать пустоту, которую не проверили, нельзя (урок `RecordStoreHasRecords`).
+    /// </summary>
+    public static class KvUiSweepRefresh
+    {
+        /// <summary>Что делает кнопка (по подписи внутри окна функций).</summary>
+        public enum Kind
+        {
+            /// <summary>Не кнопка «Обновить»-класса — правило не действует.</summary>
+            None = 0,
+            /// <summary>«Обновить» вкладки «Замер» — замеры планировщика.</summary>
+            Perf = 1,
+            /// <summary>«Обновить список» вкладки «Сессии» — сохранённые сессии.</summary>
+            Sessions = 2
+        }
+
+        /// <summary>Причина: данных замера нет — прогонов планировщика не было.</summary>
+        public const string PerfNothingReason =
+            "нечего обновлять: данных замера нет — прогонов планировщика не было";
+
+        /// <summary>Причина: сохранённых сессий нет.</summary>
+        public const string SessionsNothingReason =
+            "нечего обновлять: сохранённых сессий нет";
+
+        /// <summary>
+        /// КНОПКА «ОБНОВИТЬ»-КЛАССА? Правило узкое: окно функций (`KvFeatureWindow`) И подпись
+        /// ровно одной из двух кнопок. «Обновить список файлов», «Обновить метки титров» и
+        /// «Обновить список» вкладок ВЕРСТАКА — другое окно и другой факт, им своё правило;
+        /// чужим кнопкам эта причина не подсовывается.
+        /// </summary>
+        public static Kind KindOf(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return Kind.None;
+            if (path.IndexOf("KvFeatureWindow", StringComparison.Ordinal) < 0) return Kind.None;
+            string label = LabelOf(path);
+            if (label == "Обновить") return Kind.Perf;
+            if (label == "Обновить список") return Kind.Sessions;
+            return Kind.None;
+        }
+
+        /// <summary>
+        /// ПРИЧИНА, ПОЧЕМУ КНОПКА ЗАКОННО НИЧЕГО НЕ ОБНОВИЛА (`""` — причин нет: есть что
+        /// обновлять, пусть работает метрика). `count` — факт ДО нажатия: `0` — данных нет,
+        /// `>0` — есть что обновлять, `-1` — прочитать не удалось (причина не выдумывается).
+        /// </summary>
+        public static string NothingToRefreshReason(string path, int count)
+        {
+            Kind kind = KindOf(path);
+            if (kind == Kind.None) return "";
+            if (count != 0) return "";
+            return kind == Kind.Perf ? PerfNothingReason : SessionsNothingReason;
+        }
+
+        /// <summary>
+        /// СКОЛЬКО ДАННЫХ ЗНАЕТ ОКО НАЖАТОЙ КНОПКИ (`-1` — окно или факт недоступны).
+        /// Читается ИЗ ОКНА, а не из синглтона: в прогоне `FeatureHub.Instance` пуст
+        /// (урок 5363a19) — правило из глобала не увидело бы ни замеров, ни сессий.
+        /// </summary>
+        public static int CountOf(GameObject source, Kind kind)
+        {
+            if (kind == Kind.None) return -1;
+            KvFeatureWindow window = source != null
+                ? source.GetComponentInParent<KvFeatureWindow>()
+                : null;
+            if (window == null) return -1;
+            switch (kind)
+            {
+                case Kind.Perf: return window.PerfRunCount;
+                case Kind.Sessions: return window.SessionCount;
+                default: return -1;
+            }
+        }
+
+        /// <summary>Подпись кнопки между «…» в конце пути (`""` — подписи нет).</summary>
+        private static string LabelOf(string path)
+        {
+            int open = path.LastIndexOf('«');
+            if (open < 0) return "";
+            int close = path.IndexOf('»', open);
+            if (close < 0) return "";
+            return path.Substring(open + 1, close - open - 1);
+        }
+    }
+
     /// <summary>
     /// РЕШЕНИЕ ПО ВОЗВРАТУ ВИДИМОСТИ ОБОЛОЧКИ (`ui.toggle` → `Restore`).
     ///
@@ -4581,6 +4684,16 @@ namespace KazistovVvDiagnostics
             bool recordHasRecords = recordPlayer && RecordStoreHasRecords();
             string recordFail = "";
 
+            // КНОПКИ «ОБНОВИТЬ»-КЛАССА (мини-аудит 16.11.2026): факт ДО нажатия — сколько данных
+            // знает ОКО нажатой кнопки (замеры планировщика / сохранённые сессии). Состояние
+            // ПОСЛЕ вычёркивало бы удачное нажатие (урок B3), а синглтон в прогоне пуст
+            // (урок 5363a19) — оттуда факт не берётся. Узкость — в `KvUiSweepRefresh.KindOf`:
+            // для чужих кнопок счётчик не считается вовсе.
+            KvUiSweepRefresh.Kind refreshKind = KvUiSweepRefresh.KindOf(c.Path);
+            int refreshCount = refreshKind != KvUiSweepRefresh.Kind.None
+                ? KvUiSweepRefresh.CountOf(c.Target != null ? c.Target.gameObject : null, refreshKind)
+                : -1;
+
             float t0 = Time.realtimeSinceStartup;
 
             // ОПАСНЫЕ ЭЛЕМЕНТЫ НЕ НАЖИМАЕМ: «Выход из приложения» завершает прогон раньше
@@ -4750,6 +4863,11 @@ namespace KazistovVvDiagnostics
                     honest = KvUiSweepExemptions.MoveRobotReasonFor(
                         c.Path, pick != null, pick != null && pick.PlaceFixed);
                 }
+                // КНОПКИ «ОБНОВИТЬ» (мини-аудит 16.11.2026): обновлять нечего — по ФАКТУ ДО
+                // нажатия (пустая история замеров / нет сохранённых сессий). Причина узкая:
+                // `refreshCount` считается только для этих двух кнопок, чужим она не достаётся.
+                if (honest.Length == 0)
+                    honest = KvUiSweepRefresh.NothingToRefreshReason(c.Path, refreshCount);
                 if (honest.Length > 0)
                 {
                     if (string.IsNullOrEmpty(element.ExemptReason)) element.ExemptReason = honest;
