@@ -3293,14 +3293,15 @@ namespace KazistovVvDiagnostics
         }
 
         /// <summary>
-        /// СОСТОЯНИЕ С ЖИВОГО ХАБА (хаба/сервиса нет — состояние «простой»).
+        /// СОСТОЯНИЕ ПЛЕЕРА: скорость И флаги записи/воспроизведения — из ОКНА нажатой кнопки
+        /// (окна нет — как раньше, из синглтона `FeatureHub.Instance`).
         ///
-        /// `source` — объект НАЖАТОЙ КНОПКИ: скорость читается из окна, которому она принадлежит
-        /// (дефект 15.11.2026: синглтон `FeatureHub.Instance` в прогоне был пуст в момент
-        /// нажатия «×0.25»/«×0.5», метрика видела константу 1.00 и честную работу кнопки
-        /// печатала как «нет изменений»). Флаги записи/воспроизведения — по-прежнему из
-        /// синглтона: сервис у хаба один, а вот скорость у окна и у синглтона в прогоне
-        /// расходились — поэтому читается она из окна.
+        /// ОТКУДА (дефект 15.11.2026, остаток самопрогона AR). Скорость уже читалась из окна:
+        /// синглтон в прогоне был пуст в момент нажатия «×0.25»/«×0.5», метрика видела
+        /// константу 1.00 и честную работу кнопки печатала как «нет изменений». ФЛАГИ при этом
+        /// брались из того же пустого синглтона, поэтому любое правило «идёт ли воспроизведение»
+        /// видело бы простой даже во время игры. Сервис у окна и у синглтона в приложении один,
+        /// а в прогоне живым был только он — поэтому всё и читается оттуда.
         /// </summary>
         public static State Capture(GameObject source = null)
         {
@@ -3311,10 +3312,14 @@ namespace KazistovVvDiagnostics
                 : null;
             if (window != null) state.Speed = window.PlaybackSpeed;
 
-            FeatureHub hub = FeatureHub.Instance;
-            if (hub == null) return state;
-            if (window == null) state.Speed = hub.playbackSpeed;
-            KvRecordingService service = hub.Recording;
+            KvRecordingService service = window != null ? window.RecordingService : null;
+            if (service == null)
+            {
+                FeatureHub hub = FeatureHub.Instance;
+                if (hub == null) return state;
+                if (window == null) state.Speed = hub.playbackSpeed;
+                service = hub.Recording;
+            }
             if (service == null) return state;
             state.Recording = service.IsRecording;
             state.Playing = service.IsPlaying;
@@ -3375,6 +3380,51 @@ namespace KazistovVvDiagnostics
             if (kind == Kind.Stop)
                 return (!state.Recording && !state.Playing) ? NothingToStopReason : "";
             return "";
+        }
+
+        /// <summary>
+        /// Причина: множитель скорости — настройка ВОСПРОИЗВЕДЕНИЯ, и вне воспроизведения
+        /// нажатие не даёт оператору ничего заметного.
+        /// </summary>
+        public const string SpeedIdleReason =
+            "скорость воспроизведения меняется только во время воспроизведения (сейчас ничего не играет)";
+
+        /// <summary>
+        /// ЧЕСТНАЯ ПРИЧИНА ДЛЯ КНОПКИ СКОРОСТИ, КОГДА НИЧЕГО НЕ ИГРАЕТ (`""` — играет: работает
+        /// метрика, исключение не нужно).
+        ///
+        /// ОТКУДА (остаток самопрогона AR 15.11.2026): «×0.25»/«×0.5» в прогоне без `-CleanState`
+        /// печатались `ok=0 effect=нет изменений`. Множитель меняет скорость ВОСПРОИЗВЕДЕНИЯ:
+        /// пока запись не играет, оператор не видит ничего, а «нет изменений» без причины —
+        /// провал по принятому принципу (строка обязана либо сработать, либо объясниться).
+        ///
+        /// ФАКТ «идёт ли воспроизведение» — `state.Playing`, прочитанный `Capture` ИЗ ТОГО ЖЕ
+        /// ОКНА, где нажата кнопка: в прогоне синглтон `FeatureHub.Instance` пуст (урок 5363a19),
+        /// и правило из глобала видело бы простой даже во время игры. Причина считается ДО
+        /// нажатия — после нажатия она вычёркивала бы удачный старт воспроизведения.
+        /// </summary>
+        public static string SpeedIdleReasonFor(string path, State state)
+        {
+            if (KindOf(path) != Kind.Speed) return "";
+            return state.Playing ? "" : SpeedIdleReason;
+        }
+
+        /// <summary>
+        /// ВСЯ ЧЕСТНАЯ ПРИЧИНА НЕИЗМЕНЕНИЯ ДЛЯ КНОПКИ ПЛЕЕРА (`""` — причин нет, пусть работает).
+        /// Приоритет сверху вниз:
+        ///   1) отказ САМОГО сервиса (`KvRecordingService.Failed`) — его слова главнее любых
+        ///      правил обхода: «робот потока не готов», «в записи меньше двух сэмплов»…;
+        ///   2) тихие предусловия (`NothingToDoReason`: «записей нет», «останавливать нечего»);
+        ///   3) скорость при неграющей записи (`SpeedIdleReasonFor`).
+        /// `hasRecords` — есть ли записи на диске (нужен только правилу «Проиграть»).
+        /// </summary>
+        public static string HonestReasonFor(string path, State state, string serviceFailure,
+            bool hasRecords)
+        {
+            if (!string.IsNullOrEmpty(serviceFailure)) return "отказ плеера записи: " + serviceFailure;
+            string quiet = NothingToDoReason(path, state, hasRecords);
+            if (quiet.Length > 0) return quiet;
+            return SpeedIdleReasonFor(path, state);
         }
 
         /// <summary>Подпись воспроизведения для строки эффекта.</summary>
@@ -4681,9 +4731,10 @@ namespace KazistovVvDiagnostics
                 string honest = "";
                 if (recordPlayer)
                 {
-                    honest = recordFail.Length > 0
-                        ? "отказ плеера записи: " + recordFail
-                        : KvUiSweepRecordPlayer.NothingToDoReason(c.Path, recordBefore, recordHasRecords);
+                    // Порядок причин — внутри `HonestReasonFor`: отказ сервиса → тихие предусловия
+                    // → скорость при неграющей записи (остаток самопрогона AR 15.11.2026).
+                    honest = KvUiSweepRecordPlayer.HonestReasonFor(
+                        c.Path, recordBefore, recordFail, recordHasRecords);
                 }
                 if (honest.Length == 0 && KvUiSweepExemptions.IsLimitsSwitchPath(c.Path))
                 {

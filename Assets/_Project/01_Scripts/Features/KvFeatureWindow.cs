@@ -181,6 +181,21 @@ namespace KazistovVvFeatures
             get { return ReferenceEquals(hub, null) ? 1f : hub.playbackSpeed; }
         }
 
+        /// <summary>
+        /// ПЛЕЕР ЗАПИСИ ЭТОГО ОКНА (`null` — окно построено без хаба).
+        ///
+        /// ЗАЧЕМ ОТДЕЛЬНЫЙ ДОСТУП. Прогон 15.11.2026 мерил состояние плеера через синглтон
+        /// `FeatureHub.Instance`, а в момент нажатий он был пуст: окно работает со СВОИМ хабом
+        /// (см. `PlaybackSpeed`), и любое правило про «идёт ли воспроизведение», прочитанное из
+        /// глобала, видело бы простой даже во время игры. Факт обязан читаться отсюда — из того же
+        /// окна, где нажата кнопка: у окна и у синглтона в прогоне одна и та же правда, но
+        /// доказана только эта.
+        /// </summary>
+        public KvRecordingService RecordingService
+        {
+            get { return ReferenceEquals(hub, null) ? null : hub.Recording; }
+        }
+
         /// <summary>Поставить множитель скорости и СРАЗУ показать его подпись в окне.</summary>
         private void SetPlaybackSpeed(float value)
         {

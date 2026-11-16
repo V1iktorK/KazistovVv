@@ -561,5 +561,153 @@ namespace KazistovVvTests
                 Object.DestroyImmediate(host);
             }
         }
+
+        // ==================================== G. СКОРОСТЬ: МЕТРИКА ИЛИ ЧЕСТНАЯ ПРИЧИНА
+
+        /// <summary>
+        /// G. КНОПКА СКОРОСТИ («×0.25»/«×0.5»): ДВА СЦЕНАРИЯ ОСТАТКА САМОПРОГОНА AR 15.11.2026.
+        ///
+        /// ОТКУДА. Последние две красные строки прогона (474 элемента) —
+        /// `KvFeatureWindow/…/Buttons#2/Btn0«×0.25»` и `Btn1«×0.5»` с `ok=0 effect=нет изменений`
+        /// в прогоне БЕЗ `-CleanState` (с чистым состоянием они проходили). Множитель — настройка
+        /// ВОСПРОИЗВЕДЕНИЯ: пока запись не играет, нажатие не даёт оператору ничего заметного.
+        ///
+        /// ЧТО ОБЯЗАНО БЫТЬ (принцип самопрогона: каждая строка либо даёт эффект, либо называет
+        /// честную причину):
+        ///   1) запись ИГРАЕТ — работает МЕТРИКА: смена скорости видна снимку, исключения нет;
+        ///   2) ничего не играет — нажатие даёт ПРИЧИНУ-ИСКЛЮЧЕНИЕ (`ExemptReason`) с точной
+        ///      формулировкой, а не «нет изменений» и не «исчез».
+        ///
+        /// ФАКТ «идёт ли воспроизведение» читается из ТОГО ЖЕ ОКНА (`KvFeatureWindow` → его хаб →
+        /// `KvRecordingService`): в прогоне синглтон `FeatureHub.Instance` пуст (урок 5363a19),
+        /// и правило, прочитанное из глобала, видело бы простой даже во время игры.
+        /// </summary>
+        [Test]
+        public void RecordPlayer_SpeedWhilePlaying_MetricSeesIt_NoExemption()
+        {
+            const string slow =
+                "KazistovVv_UI/KvFeatureCanvas/KvFeatureWindow/Scroll/Viewport/Content/Buttons#2/Btn0«×0.25»";
+            GameObject host = new GameObject("KvGapClosure_PlayingWindow");
+            GameObject button = new GameObject("KvGapClosure_PlayingSpeedButton");
+            try
+            {
+                FeatureHub hub = host.AddComponent<FeatureHub>();
+                hub.playbackSpeed = 1f;
+
+                // Плеер ОКНА в состоянии «воспроизведение идёт». В EditMode `Awake` не вызывается
+                // (Грабли 5), поэтому сервис и флаг ставятся отражением в ТЕ ЖЕ поля, что читает
+                // приложение: тест подделывает состояние, а не обходит проверку.
+                var service = new KvRecordingService();
+                MethodInfo setter = typeof(FeatureHub).GetProperty("Recording").GetSetMethod(true);
+                Assert.IsNotNull(setter,
+                    "у FeatureHub нет сеттера Recording — плеер окна недоступен, правило не о чём");
+                setter.Invoke(hub, new object[] { service });
+                FieldInfo playing = typeof(KvRecordingService).GetField("playing",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.IsNotNull(playing,
+                    "у KvRecordingService нет поля playing — факт воспроизведения не подделать");
+                playing.SetValue(service, new KvTrajectoryRecord { name = "Тест G1" });
+
+                KvFeatureWindow window = host.AddComponent<KvFeatureWindow>();
+                window.Build(hub);
+                button.transform.SetParent(host.transform, false);
+
+                // АНТИ-ВАКУУМ: синглтон пуст — состояние самого проблемного прогона.
+                Assert.IsNull(FeatureHub.Instance,
+                    "синглтон FeatureHub не пуст — факт взят бы не из окна");
+                Assert.IsNotNull(window.RecordingService,
+                    "окно не отдаёт свой плеер — правило не может читать факт из окна");
+
+                KvUiSweepRecordPlayer.State before = KvUiSweepRecordPlayer.Capture(button);
+                Assert.IsTrue(before.Playing,
+                    "факт воспроизведения НЕ прочитан из окна нажатой кнопки (пустой синглтон его теряет)");
+
+                hub.playbackSpeed = 0.25f;   // ровно то, что делает кнопка «×0.25»
+                KvUiSweepRecordPlayer.State after = KvUiSweepRecordPlayer.Capture(button);
+                string effect = KvUiSweepRecordPlayer.EffectFor(before, after);
+                StringAssert.Contains("множитель скорости", effect,
+                    "при играющей записи смена скорости обязана быть видна снимку: «" + effect + "»");
+
+                // Работающая кнопка НЕ получает причину-исключение: это «сработало», а не «пропущено».
+                Assert.AreEqual("", KvUiSweepRecordPlayer.HonestReasonFor(slow, before, "", false),
+                    "идёт воспроизведение — работать должна метрика, а не причина-исключение");
+            }
+            finally
+            {
+                // Окно регистрируется на поясе окон при построении — снимаем регистрацию,
+                // иначе следующие фикстуры увидят уничтоженное окно.
+                KazistovVvXr.KvWindowBelt.Unregister(KvFeatureWindow.WindowId);
+                Object.DestroyImmediate(button);
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        /// <summary>
+        /// G. НИЧЕГО НЕ ИГРАЕТ — ПРИЧИНА-ИСКЛЮЧЕНИЕ С ТОЧНОЙ ФОРМУЛИРОВКОЙ, А НЕ «нет изменений».
+        /// </summary>
+        [Test]
+        public void RecordPlayer_SpeedWhenNothingPlays_ExemptReasonNotNoChange()
+        {
+            const string slow =
+                "KazistovVv_UI/KvFeatureCanvas/KvFeatureWindow/Scroll/Viewport/Content/Buttons#2/Btn0«×0.25»";
+            const string half =
+                "KazistovVv_UI/KvFeatureCanvas/KvFeatureWindow/Scroll/Viewport/Content/Buttons#2/Btn1«×0.5»";
+            const string play =
+                "KazistovVv_UI/KvFeatureCanvas/KvFeatureWindow/Scroll/Viewport/Content/Buttons#1/Btn1«▶ Проиграть / Пауза (P)»";
+            GameObject host = new GameObject("KvGapClosure_IdleWindow");
+            GameObject button = new GameObject("KvGapClosure_IdleSpeedButton");
+            try
+            {
+                FeatureHub hub = host.AddComponent<FeatureHub>();  // Awake не зовётся: плеера нет
+                hub.playbackSpeed = 1f;
+                KvFeatureWindow window = host.AddComponent<KvFeatureWindow>();
+                window.Build(hub);
+                button.transform.SetParent(host.transform, false);
+
+                Assert.IsNull(FeatureHub.Instance,
+                    "синглтон FeatureHub не пуст — проверка не о состоянии прогона");
+                KvUiSweepRecordPlayer.State before = KvUiSweepRecordPlayer.Capture(button);
+                Assert.IsFalse(before.Playing, "ничего не играет — но состояние прочитано не так");
+
+                // 1) ПРИЧИНА НАЗВАНА И РОВНО ТА, ЧТО ЗАКАЗАНА В ЗАДАЧЕ.
+                string reason = KvUiSweepRecordPlayer.HonestReasonFor(slow, before, "", false);
+                Assert.AreEqual(KvUiSweepRecordPlayer.SpeedIdleReason, reason,
+                    "причина обязана быть ровно той, что названа в задаче: «" + reason + "»");
+                StringAssert.Contains("только во время воспроизведения", reason);
+                StringAssert.Contains("ничего не играет", reason);
+
+                // 2) ПРАВИЛО УЗКОЕ: другие кнопки плеера свои причины считают сами, а отказ САМОГО
+                //    сервиса (`Failed`) главнее — его слова не подменяются правилом скорости.
+                Assert.AreEqual(KvUiSweepRecordPlayer.NoRecordsReason,
+                    KvUiSweepRecordPlayer.HonestReasonFor(play, before, "", false),
+                    "«Проиграть» при пустом списке обязан называть записи, а не скорость");
+                StringAssert.Contains("робот потока не готов",
+                    KvUiSweepRecordPlayer.HonestReasonFor(slow, before, "робот потока не готов", false),
+                    "отказ сервиса главнее правила скорости");
+
+                // 3) ПРИЧИНА — ИСКЛЮЧЕНИЕ ОТЧЁТА: не «нет изменений» и не «исчез».
+                var element = new KvUiSweepElement
+                {
+                    Path = half,
+                    Ok = false,
+                    Effect = reason,
+                    ExemptReason = reason,
+                    Method = "uGUI"
+                };
+                Assert.IsTrue(element.IsExempt, "причина не помечена как исключение (ExemptReason)");
+                string line = element.Line;
+                StringAssert.Contains("exempt=" + reason, line, "причина не попала в строку отчёта");
+                StringAssert.DoesNotContain("нет изменений", line,
+                    "с причиной строка обязана быть объяснением, а не «нет изменений»");
+                StringAssert.DoesNotContain("исчез", line,
+                    "это не исчезновение: кнопка найдена и нажата, объяснение — про воспроизведение");
+            }
+            finally
+            {
+                KazistovVvXr.KvWindowBelt.Unregister(KvFeatureWindow.WindowId);
+                Object.DestroyImmediate(button);
+                Object.DestroyImmediate(host);
+            }
+        }
     }
 }
