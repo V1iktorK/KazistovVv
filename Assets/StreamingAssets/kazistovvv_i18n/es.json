@@ -569,6 +569,14 @@
       "text": "Elimina zonas prohibidas, puntos intermedios, comparación y cachés de posprocesado — lo mismo que Proyecto nuevo"
     },
     {
+      "key": "cmd.ar.place.marker",
+      "text": "Colocar por marcador"
+    },
+    {
+      "key": "cmd.ar.place.marker.desc",
+      "text": "Colocar la mesa y el robot por el código QR de la mesa: pose a partir de los cuatro bordes del código, sin planos de ARCore"
+    },
+    {
       "key": "cmd.robot.switch",
       "text": "Cambiar de robot"
     },

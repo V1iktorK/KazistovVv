@@ -194,6 +194,14 @@ namespace KazistovVvAr
             "поверхность должна быть с текстурой и без бликов";
 
         /// <summary>
+        /// ПОДСКАЗКА О ЗАПАСНОМ ПУТИ ПОСТАНОВКИ (16.11.2026): при нулевых плоскостях (устройство
+        /// без ARCore-сертификации) стол всё равно можно поставить — по QR-маркеру на столешнице.
+        /// Добавляется ТОЛЬКО К ТЕКСТУ (правило волны): существующие подстроки и точные проверки
+        /// строк в тестах не меняются.
+        /// </summary>
+        public const string MarkerPlacementHint = " · доступна постановка по маркеру";
+
+        /// <summary>
         /// ПОДСКАЗКА, КОГДА ПОТЕРЯН САМ ТРЕКИНГ. Здесь бесполезно советовать «поводите над столом»:
         /// пока ARCore не держит позу, он не строит карту вовсе (журнал планшета 07.11.2026:
         /// `VIO_OUTPUT_NOT_TRACKING`), и лечится это светом, текстурой и плавным движением.
@@ -1246,7 +1254,10 @@ namespace KazistovVvAr
                            " · трекинг " + trackingState +
                            " · ждём " + SecondsText(secondsWithoutPlanes) + " с" +
                            poseCulprit +
-                           " · что делать: " + SurfaceHint;
+                           " · что делать: " + SurfaceHint +
+                           // ЗАПАСНОЙ ПУТЬ: при нулевых плоскостях постановка возможна по
+                           // QR-маркеру — оператору сказано, что делать дальше (только текст).
+                           MarkerPlacementHint;
             }
         }
 
@@ -1275,7 +1286,7 @@ namespace KazistovVvAr
             line += " · плоскостей: " + planeCount;
             if (!string.IsNullOrEmpty(notTrackingReason))
                 line += " · причина нетрекинга: " + notTrackingReason;
-            line += " · что делать: " + SurfaceHint;
+            line += " · что делать: " + SurfaceHint + MarkerPlacementHint;
             return line;
         }
 

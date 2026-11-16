@@ -569,6 +569,14 @@
       "text": "Supprime zones interdites, points intermédiaires, comparaisons et caches de post-traitement — comme Nouveau projet"
     },
     {
+      "key": "cmd.ar.place.marker",
+      "text": "Placer par marqueur"
+    },
+    {
+      "key": "cmd.ar.place.marker.desc",
+      "text": "Placer la table et le robot par le code QR de la table : pose à partir des quatre coins du code, sans plans ARCore"
+    },
+    {
       "key": "cmd.robot.switch",
       "text": "Changer de robot"
     },

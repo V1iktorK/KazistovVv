@@ -129,7 +129,10 @@ namespace KazistovVvUI
                 new KvToolbarGroup("misc", "Прочее", "more",
                     "eta.toggle", "presentation.toggle", "log.open", "demo.quick",
                     "obstacle.evaluate", "zone.panel", "perf.open", "demo.pickplace",
-                    "edit.undo", "edit.redo", "workspace.clear", "calib.tab", "payload.tab"),
+                    "edit.undo", "edit.redo", "workspace.clear", "calib.tab", "payload.tab",
+                    // AR-постановка по QR-маркеру: в AR-режиме это основной путь постановки
+                    // стола на устройствах без плоскостей (волна16.11.2026).
+                    "ar.place.marker"),
 
             };
         }

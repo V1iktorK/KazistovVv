@@ -569,6 +569,14 @@
       "text": "制限ゾーン・中間点・比較・後処理キャッシュを削除（「新規プロジェクト」と同じ）"
     },
     {
+      "key": "cmd.ar.place.marker",
+      "text": "マーカーで配置"
+    },
+    {
+      "key": "cmd.ar.place.marker.desc",
+      "text": "テーブル上のQRコードからテーブルとロボットを配置：コードの4隅から姿勢を求め、ARCoreの平面は不要です"
+    },
+    {
       "key": "cmd.robot.switch",
       "text": "ロボット切替"
     },

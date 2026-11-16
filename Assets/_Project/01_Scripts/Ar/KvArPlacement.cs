@@ -296,6 +296,15 @@ namespace KazistovVvAr
         /// <summary>Сколько раз ставили мир (для журнала).</summary>
         public int PlaceAttempts { get; private set; }
 
+        /// <summary>Физический размер QR-маркера на столешнице, метры (сторона кода).</summary>
+        public float markerSizeMeters = 0.10f;
+
+        /// <summary>ПОСТАНОВКА ПО МАРКЕРУ: последняя поза (для статуса и журнала).</summary>
+        public KvMarkerPoseResult LastMarkerPose { get; private set; }
+
+        /// <summary>ПОСТАНОВКА ПО МАРКЕРУ: последний честный статус — успех или конкретный отказ.</summary>
+        public string LastMarkerStatus { get; private set; }
+
         /// <summary>Мир поставлен.</summary>
         public bool IsPlaced { get { return world != null && world.IsPlaced; } }
 
@@ -309,6 +318,9 @@ namespace KazistovVvAr
 
         /// <summary>О не-столе предупреждаем ОДИН раз: иначе каждое касание пола засоряет журнал.</summary>
         private bool warnedNotATable;
+
+        /// <summary>До какого времени статус маркера не затирается периодической подсказкой.</summary>
+        private float markerHintUntil;
 
         void Awake()
         {
@@ -350,6 +362,9 @@ namespace KazistovVvAr
             if (ui != null && Time.unscaledTime >= nextStatusTime)
             {
                 nextStatusTime = Time.unscaledTime + Mathf.Max(0.1f, statusIntervalSeconds);
+                // СТАТУС МАРКЕРА ЕЩЁ ЧИТАЮТ: пока не вышло markerHintUntil, периодическая
+                // подсказка его не затирает — иначе отказ «маркер не виден» живёт0.5 секунды.
+                if (Time.unscaledTime < markerHintUntil) return;
                 string hint = KvArPlacementMath.Hint(State, PlanesFound, FirstPlaneSeconds, TableFound);
                 if (hint != lastHint)
                 {
@@ -525,7 +540,7 @@ namespace KazistovVvAr
             return true;
         }
 
-        private bool PlaceSurface(KvArSurfaceHit surface, string source)
+        private bool PlaceSurface(KvArSurfaceHit surface, string source, bool allowWithoutAnchor = false)
         {
             if (world == null)
             {
@@ -536,7 +551,7 @@ namespace KazistovVvAr
 
             Vector3 cameraPosition = arCamera != null ? arCamera.transform.position : Vector3.zero;
             string reason;
-            if (!world.TryPlace(surface, cameraPosition, out reason))
+            if (!world.TryPlace(surface, cameraPosition, out reason, allowWithoutAnchor))
             {
                 Debug.LogWarning("[KvAr] ПОСТАНОВКА НЕ УДАЛАСЬ (" + source + "): " + reason);
                 SetState(KvArPlacementState.Failed);
@@ -587,6 +602,185 @@ namespace KazistovVvAr
                               world.Robot.transform.position, world.FloorY) ? " (в пределах 5 мм)" : ""));
             }
             return true;
+        }
+
+        // ================================================================ ПОСТАНОВКА ПО МАРКЕРУ
+
+        /// <summary>
+        /// ПОСТАНОВКА СТОЛА ПО ПОЗЕ МАРКЕРА (B, волна16.11.2026). Маркер лежит на столешнице —
+        /// значит верх стола лежит в плоскости маркера: центр и нормаль маркера переносятся в
+        /// мир, дальше штатный путь `PlaceSurface` (журнал, статус, робот — как у тапа).
+        ///
+        /// ЧЕСТНОСТЬ (C). Каждый отказ возвращается false с конкретной причиной в
+        /// `LastMarkerStatus` и в подсказке: маркер не виден / слишком мал / слишком под углом /
+        /// интринсики приблизительные / нет камеры / нет мира. Успех — строка
+        /// `KvMarkerPose.SuccessStatus` («дистанция … м, наклон …°») и в статус, и в журнал.
+        /// </summary>
+        public bool TryPlaceByMarker(Vector2[] imageCorners, KvMarkerIntrinsics intrinsics,
+            bool requireExactIntrinsics = false)
+        {
+            PlaceAttempts++;
+            KvMarkerPoseResult pose = KvMarkerPose.Compute(imageCorners, markerSizeMeters,
+                intrinsics, requireExactIntrinsics);
+            LastMarkerPose = pose;
+            if (!pose.usable)
+            {
+                return MarkerRefuse(pose.reason);
+            }
+
+            if (arCamera == null) arCamera = KvArRigBridge.FindArCamera();
+            if (arCamera == null)
+            {
+                return MarkerRefuse("нет AR-камеры — позу маркера не перенести в мир");
+            }
+
+            KvArSurfaceHit surface = BuildMarkerSurface(pose, arCamera.transform);
+            if (!PlaceSurface(surface, "по маркеру", allowWithoutAnchor: true))
+            {
+                string why = world != null && !string.IsNullOrEmpty(world.LastFailure)
+                    ? world.LastFailure
+                    : "причина не названа";
+                return MarkerRefuse("постановка по маркеру не удалась: " + why);
+            }
+
+            LastMarkerStatus = KvMarkerPose.SuccessStatus(pose.distance, pose.tiltDegrees,
+                pose.intrinsicsApproximate);
+            Debug.Log("[KvAr] " + LastMarkerStatus);
+            if (ui != null)
+            {
+                ui.SetHint(LastMarkerStatus);
+                markerHintUntil = Time.unscaledTime + 4f;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// СКАН QR И ПОСТАНОВКА: свежий кадр AR-камеры → четыре угла кода
+        /// (`KvQrMarkerDetector`) → `TryPlaceByMarker`. Интринсики настоящие из ARFoundation,
+        /// иначе фолбэк `fx ≈ ширина кадра` с пометкой точности. Каждый шаг отказывает честно.
+        /// </summary>
+        public bool TryPlaceByMarkerFromCamera(bool requireExactIntrinsics = false)
+        {
+            ARCameraManager cameraManager = FindAnyObjectByType<ARCameraManager>();
+            if (cameraManager == null)
+            {
+                return MarkerRefuse("камера AR не найдена — сканировать нечего");
+            }
+
+            XRCpuImage image;
+            bool acquired;
+            try
+            {
+                acquired = cameraManager.TryAcquireLatestCpuImage(out image);
+            }
+            catch (Exception error)
+            {
+                image = default(XRCpuImage);
+                acquired = false;
+                Debug.LogWarning("[KvAr] МАРКЕР: кадр не получен (" + error.GetType().Name + ")");
+            }
+            if (!acquired)
+            {
+                return MarkerRefuse("кадр камеры недоступен — повторите попытку");
+            }
+
+            Color32[] pixels;
+            int width;
+            int height;
+            using (image)
+            {
+                width = image.width;
+                height = image.height;
+                // Конструктор ARSubsystems 6000.5 принимает ИСХОДНЫЙ КАДР (а не RectInt):
+                //     new ConversionParams(image, format, transformation)
+                // ставит inputRect и outputDimensions во весь кадр — то же самое, что
+                // было задано явным RectInt'ом (сверено по исходнику ConversionParams.cs).
+                XRCpuImage.ConversionParams conversion = new XRCpuImage.ConversionParams(
+                    image, TextureFormat.RGBA32, XRCpuImage.Transformation.None);
+                Texture2D frame = new Texture2D(width, height, TextureFormat.RGBA32, false);
+                try
+                {
+                    // Без MirrorY: углы должны лежать в той системе кадра, к которой
+                    // относятся интринсики ARFoundation.
+                    image.Convert(conversion, frame.GetRawTextureData<byte>());
+                    frame.Apply();
+                    pixels = frame.GetPixels32();
+                }
+                finally
+                {
+                    if (Application.isPlaying) Destroy(frame);
+                    else DestroyImmediate(frame);
+                }
+            }
+
+            Vector2[] corners;
+            string reason;
+            if (!KvQrMarkerDetector.TryFindCorners(pixels, width, height, out corners, out reason))
+            {
+                return MarkerRefuse(reason);
+            }
+
+            KvMarkerIntrinsics intrinsics;
+            XRCameraIntrinsics camIntrinsics;
+            if (cameraManager.TryGetIntrinsics(out camIntrinsics) &&
+                camIntrinsics.resolution.x > 0 && camIntrinsics.resolution.y > 0)
+            {
+                float sx = width / (float)camIntrinsics.resolution.x;
+                float sy = height / (float)camIntrinsics.resolution.y;
+                intrinsics = new KvMarkerIntrinsics
+                {
+                    fx = camIntrinsics.focalLength.x * sx,
+                    fy = camIntrinsics.focalLength.y * sy,
+                    cx = camIntrinsics.principalPoint.x * sx,
+                    cy = camIntrinsics.principalPoint.y * sy,
+                    approximate = false
+                };
+            }
+            else
+            {
+                // ФОЛБЭК без интринсик камеры: fx ≈ ширина кадра — поза считается,
+                // но статус честно скажет, что она приблизительная.
+                intrinsics = KvMarkerIntrinsics.FromFrame(width, height);
+            }
+
+            return TryPlaceByMarker(corners, intrinsics, requireExactIntrinsics);
+        }
+
+        /// <summary>
+        /// ПЛОЩАДКА ИЗ ПОЗЫ МАРКЕРА (чистая): точка — центр маркера в мире, нормаль — нормаль
+        /// маркера (маркер на столешнице лицевой стороной вверх → верх стола в плоскости
+        /// маркера). Плоскости AR нет (`plane = null`) — это и есть независимость от ARCore.
+        /// </summary>
+        public static KvArSurfaceHit BuildMarkerSurface(KvMarkerPoseResult pose, Transform camera)
+        {
+            KvArSurfaceHit hit = default(KvArSurfaceHit);
+            hit.valid = true;
+            hit.point = camera.TransformPoint(pose.position);
+            Vector3 normal = camera.rotation * (pose.rotation * Vector3.forward);
+            if (normal.sqrMagnitude < 1e-6f) normal = Vector3.up;
+            normal.Normalize();
+            if (normal.y < 0f) normal = -normal; // маркер на столе виден сверху — нормаль вверх
+            hit.normal = normal;
+            hit.worldPose = new Pose(hit.point, KvArPlacementMath.ReticleRotation(normal));
+            hit.plane = null;
+            hit.planeArea = 0f;
+            hit.alignment = PlaneAlignment.HorizontalUp;
+            hit.distance = Vector3.Distance(camera.position, hit.point);
+            return hit;
+        }
+
+        /// <summary>Честный отказ маркерной постановки: причина — и в статус, и в подсказку, и в журнал.</summary>
+        private bool MarkerRefuse(string reason)
+        {
+            if (string.IsNullOrEmpty(reason)) reason = "маркер не виден: сканер не вернул четыре угла";
+            LastMarkerStatus = reason;
+            Debug.LogWarning("[KvAr] ПОСТАНОВКА ПО МАРКЕРУ ОТКЛОНЕНА: " + reason);
+            if (ui != null)
+            {
+                ui.SetHint("Постановка по маркеру: " + reason);
+                markerHintUntil = Time.unscaledTime + 4f;
+            }
+            return false;
         }
 
         /// <summary>

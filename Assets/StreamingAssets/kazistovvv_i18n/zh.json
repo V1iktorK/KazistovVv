@@ -569,6 +569,14 @@
       "text": "移除禁区、中途点、比较和后处理缓存——与「新建项目」相同"
     },
     {
+      "key": "cmd.ar.place.marker",
+      "text": "按标记放置"
+    },
+    {
+      "key": "cmd.ar.place.marker.desc",
+      "text": "通过桌面上的QR码放置桌子和机器人：由代码四角求取位姿，无需ARCore平面"
+    },
+    {
       "key": "cmd.robot.switch",
       "text": "切换机器人"
     },

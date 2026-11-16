@@ -851,6 +851,13 @@ namespace KazistovVvAr
                 if (placement != null && !placement.IsPlaced) placement.TryPlaceAtCenter();
                 else Debug.Log("[KvAr] КНОПКА: мир уже поставлен — «Переставить» для нового места");
             });
+            // ПОСТАНОВКА ПО МАРКЕРУ (16.11.2026): для устройств без ARCore-плоскостей —
+            // QR-маркер на столешнице задаёт плоскость стола, робот встаёт по позе маркера.
+            ui.AddButton("По маркеру", delegate
+            {
+                if (placement != null) placement.TryPlaceByMarkerFromCamera();
+                else Debug.Log("[KvAr] КНОПКА: нет компонента постановки — маркер сканировать нечем");
+            });
             ui.AddButton("Переставить", delegate
             {
                 if (placement != null) placement.RePlace();
@@ -865,7 +872,7 @@ namespace KazistovVvAr
             });
 
             KvArUi.EnsureEventSystem();
-            Debug.Log("[KvAr] ИНТЕРФЕЙС: правый ряд кнопок — 4 · меню/инструменты/дерево в оверлее");
+            Debug.Log("[KvAr] ИНТЕРФЕЙС: правый ряд кнопок — 5 · меню/инструменты/дерево в оверлее");
         }
         /// <summary>
         /// РАЗРЕШЕНИЕ КАМЕРЫ (Android). Без него ARCore не получает кадров: экран остаётся

@@ -665,6 +665,36 @@ namespace KazistovVvFeatures
                 }
             });
 
+            // --- МАРКЕРНАЯ ПОСТАНОВКА (16.11.2026, волна A–D): «Поставить по маркеру».
+            //     Устройство-инициатор волны НЕ ARCore-совместимо (диагностика: плоскостей 0,
+            //     трекаблов 0, сессия трекается, камера живая), а устройства при тестах
+            //     меняются — постановка обязана не зависеть от сертификации ARCore. Стол
+            //     ставится по позе QR-маркера: четыре угла кода + физический размер маркера →
+            //     гомография → поза → верх стола в плоскости маркера; робот — штатным путём
+            //     `KvArWorld`. Отказы честные: маркер не виден / слишком мал / слишком под
+            //     углом / интринсики приблизительные (см. `KvMarkerPose`).
+            KvCommands.Register(new KvCommand
+            {
+                Id = "ar.place.marker",
+                Title = "Поставить по маркеру",
+                Description = "Поставить стол и робота по QR-маркеру на столешнице: поза " +
+                              "считается по четырём углам кода, без плоскостей ARCore",
+                Icon = "table",
+                MenuPath = "Сервис/Поставить по маркеру",
+                Execute = delegate
+                {
+                    KazistovVvAr.KvArPlacement placement =
+                        UnityEngine.Object.FindAnyObjectByType<KazistovVvAr.KvArPlacement>();
+                    if (placement == null)
+                    {
+                        Debug.Log("[KvAr] МАРКЕР: постановка по маркеру доступна только " +
+                                  "в AR-режиме (компонента KvArPlacement в сцене нет)");
+                        return;
+                    }
+                    placement.TryPlaceByMarkerFromCamera();
+                }
+            });
+
             // --- ЭТАП 1: главное меню
             KvCommands.Register(new KvCommand
             {

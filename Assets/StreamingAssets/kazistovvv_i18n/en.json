@@ -569,6 +569,14 @@
       "text": "Remove no-go zones, waypoints, comparison and post-processing caches — the same as New Project"
     },
     {
+      "key": "cmd.ar.place.marker",
+      "text": "Place by marker"
+    },
+    {
+      "key": "cmd.ar.place.marker.desc",
+      "text": "Place the table and robot by the QR marker on the tabletop: pose from the four code corners, no ARCore planes needed"
+    },
+    {
       "key": "cmd.robot.switch",
       "text": "Switch robot"
     },

@@ -569,6 +569,14 @@
       "text": "Verbotszonen, Zwischenpunkte, Vergleiche und Nachbearbeitungs-Caches entfernen — dasselbe wie Neues Projekt"
     },
     {
+      "key": "cmd.ar.place.marker",
+      "text": "Nach Marker platzieren"
+    },
+    {
+      "key": "cmd.ar.place.marker.desc",
+      "text": "Tisch und Roboter am QR-Marker auf der Tischplatte platzieren: Pose aus den vier Code-Ecken, ohne ARCore-Ebenen"
+    },
+    {
       "key": "cmd.robot.switch",
       "text": "Roboter wechseln"
     },

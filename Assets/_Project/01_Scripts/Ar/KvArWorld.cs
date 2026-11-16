@@ -96,8 +96,14 @@ namespace KazistovVvAr
         /// <summary>
         /// ПОСТАВИТЬ МИР НА ПОВЕРХНОСТЬ. Возвращает true, если якорь создан (или запрошен
         /// асинхронно) и мир появился.
+        ///
+        /// `allowWithoutAnchor` — разрешить путь БЕЗ AR-якоря (маркерная постановка): поза
+        /// площадки уже мировая (считана по четырём углам QR с кадра камеры), поэтому якорь
+        /// не обязателен — иначе устройство без ARCore-сертификации (плоскостей0, якоря нет)
+        /// не смогло бы поставить мир вовсе. Без флага прежнее поведение сохранено байт-в-байт.
         /// </summary>
-        public bool TryPlace(KvArSurfaceHit surface, Vector3 cameraPosition, out string reason)
+        public bool TryPlace(KvArSurfaceHit surface, Vector3 cameraPosition, out string reason,
+            bool allowWithoutAnchor = false)
         {
             LastFailure = null;
             reason = null;
@@ -111,10 +117,17 @@ namespace KazistovVvAr
 
             if (anchorManager == null)
             {
-                reason = "нет ARAnchorManager в сцене — привязка к миру невозможна";
-                LastFailure = reason;
-                Debug.LogError("[KvAr] ЯКОРЬ: " + reason);
-                return false;
+                if (!allowWithoutAnchor)
+                {
+                    reason = "нет ARAnchorManager в сцене — привязка к миру невозможна";
+                    LastFailure = reason;
+                    Debug.LogError("[KvAr] ЯКОРЬ: " + reason);
+                    return false;
+                }
+                // ПУТЬ БЕЗ ЯКОРЯ: мир занимает позу площадки напрямую (см. ApplyPose).
+                if (IsPlaced || Anchor != null) Clear("перестановка мира");
+                ApplyPose(surface, cameraPosition);
+                return true;
             }
 
             // ПЕРЕСТАНОВКА: старый мир (и прежний якорь) убираем — два мира не должно быть.
@@ -181,6 +194,33 @@ namespace KazistovVvAr
                           yaw.ToString("0", System.Globalization.CultureInfo.InvariantCulture) +
                           "° · робот: " + (spawned ? "поставлен" : "НЕ создан") +
                           " · якорь в иерархии «" + anchor.name + "»");
+                if (spawned) Debug.Log("[KvAr] " + content.DescribeLastSpawn());
+            }
+        }
+
+        /// <summary>
+        /// ПОСТАВИТЬ МИР ПО ПОЗЕ БЕЗ ЯКОРЯ (маркерная постановка, волна16.11.2026).
+        /// Корень лежит ровно в позе площадки: маркер на столешнице → верх стола в плоскости
+        /// маркера. Робот ставится тем же штатным путём `SpawnDefaultRobot`, что и под якорем.
+        /// Привязки к реальному миру нет — об этом честно сказано в строке журнала.
+        /// </summary>
+        private void ApplyPose(KvArSurfaceHit surface, Vector3 cameraPosition)
+        {
+            GameObject rootGo = new GameObject("ArLabRoot");
+            LabRoot = rootGo.transform;
+            LabRoot.SetPositionAndRotation(surface.worldPose.position, surface.worldPose.rotation);
+
+            float yaw = KvArPlacementMath.YawTowardsCamera(surface.point, cameraPosition);
+            bool spawned = content != null && content.SpawnDefaultRobot(LabRoot, Vector3.zero, yaw);
+
+            if (logOnPlace)
+            {
+                Debug.Log("[KvAr] ЯКОРЬ: AR-якоря в сцене нет — мир поставлен по позе без привязки · " +
+                          surface.Describe() + " · высота корня " +
+                          LabRoot.position.y.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture) +
+                          " м · поворот робота " +
+                          yaw.ToString("0", System.Globalization.CultureInfo.InvariantCulture) +
+                          "° · робот: " + (spawned ? "поставлен" : "НЕ создан"));
                 if (spawned) Debug.Log("[KvAr] " + content.DescribeLastSpawn());
             }
         }
