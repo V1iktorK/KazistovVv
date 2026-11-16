@@ -700,7 +700,7 @@ if (-not $headset) {
     & $Adb -s $headset.Id shell input keyevent KEYCODE_WAKEUP 2>&1 | Out-Null
     & $Adb -s $headset.Id shell svc power stayon true 2>&1 | Out-Null
     Start-Sleep -Seconds 2
-    & $Adb -s $headset.Id shell monkey -p $package -c android.intent.category.LAUNCHER 1 2>&1 | Out-Null
+    & $Adb -s $headset.Id shell am start -n ($package + '/com.unity3d.player.UnityPlayerGameActivity') 2>&1 | Out-Null
     Start-Sleep -Seconds 40
 
     $hlc = (& $Adb -s $headset.Id logcat -d 2>&1) -join "`n"
@@ -708,7 +708,7 @@ if (-not $headset) {
         Write-Host "    [KvEnv] нет — будилью и повторяю запуск (сон стенда, а не код)"
         & $Adb -s $headset.Id shell input keyevent KEYCODE_WAKEUP 2>&1 | Out-Null
         Start-Sleep -Seconds 2
-        & $Adb -s $headset.Id shell monkey -p $package -c android.intent.category.LAUNCHER 1 2>&1 | Out-Null
+        & $Adb -s $headset.Id shell am start -n ($package + '/com.unity3d.player.UnityPlayerGameActivity') 2>&1 | Out-Null
         Start-Sleep -Seconds 30
         $hlc = (& $Adb -s $headset.Id logcat -d 2>&1) -join "`n"
     }
