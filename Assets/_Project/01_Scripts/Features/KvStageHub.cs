@@ -842,7 +842,10 @@ namespace KazistovVvFeatures
                 Description = "Переключить оформление: A — промышленный, B — стиль проекта АДДОН",
                 Icon = "pendant",
                 MenuPath = "Сервис/Виртуальный пульт/Вариант A / B",
-                Execute = delegate { hub.Pendant.ToggleVariant(); }
+                Execute = delegate { hub.Pendant.ToggleVariant(); },
+                // ЛИСТ `pendant.variant`: «вариант не показывается на кнопке — нет `IsChecked`,
+                // цикл вслепую». Галка горит на варианте B (АДДОН), погашена на A (промышленном).
+                IsChecked = delegate { return hub.Pendant != null && hub.Pendant.Variant == KvPendantVariant.Addon; }
             });
             KvCommands.Register(new KvCommand
             {
@@ -859,7 +862,10 @@ namespace KazistovVvFeatures
                             ? KvPendantAttach.AboveRobot
                             : KvPendantAttach.Floating;
                     hub.Pendant.SetAttach(next);
-                }
+                },
+                // ЛИСТ `pendant.attach`: «текущее положение не отображается — `IsChecked`
+                // отсутствует, цикл „вслепую“». Галка горит, пока пульт ЗАКРЕПЛЕН (не парит).
+                IsChecked = delegate { return hub.Pendant != null && hub.Pendant.Attach != KvPendantAttach.Floating; }
             });
             KvCommands.Register(new KvCommand
             {
@@ -868,7 +874,10 @@ namespace KazistovVvFeatures
                 Description = "Джойстик покачивает выбранный сустав либо сдвигает TCP в плоскости",
                 Icon = "pendant",
                 MenuPath = "Сервис/Виртуальный пульт/Режим джойстика",
-                Execute = delegate { hub.Pendant.ToggleJogMode(); }
+                Execute = delegate { hub.Pendant.ToggleJogMode(); },
+                // ЛИСТ `pendant.jogmode`: «режим не виден на кнопке (нет `IsChecked`)».
+                // Галка горит в режиме TCP (сдвиг в плоскости), погашена в JOINT (качание оси).
+                IsChecked = delegate { return hub.Pendant != null && hub.Pendant.JogMode == KvPendantJog.World; }
             });
 
             Debug.Log("[Stages] команды этапов 1–8 зарегистрированы · всего команд: " +

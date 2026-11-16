@@ -680,6 +680,21 @@ namespace KazistovVvUI
             Debug.Log("[KazistovVv] ПАНЕЛИ: " + message);
         }
 
+        /// <summary>
+        /// ЖУРНАЛ ДЕЙСТВИЙ (`KvActionLog`), А НЕ КОНСОЛЬ.
+        ///
+        /// ЗАЧЕМ ОТДЕЛЬНЫЙ ОТ `Log` МЕТОД. `Log` пишет только при включённом `logUiEvents`,
+        /// который на устройстве выключен по умолчанию, — а консоли на шлеме/планшете нет вообще.
+        /// Листья `view.theme`, `ui.palette`, `ui.resetlayout`, `help.open/about`, `ui.access`
+        /// («по коду, есть дефект») оставляли след РОВНО там: оператор нажимал и не видел
+        /// ничего. Событийная строка (не кадр) идёт в журнал и в консоль.
+        /// </summary>
+        private static void Journal(string message)
+        {
+            KazistovVvFeatures.KvActionLog.Instance.Add(KazistovVvFeatures.KvLogKind.Ui, message);
+            Debug.Log("[KazistovVv] " + message);
+        }
+
         // ------------------------------------------------------------------ сборка оболочки
 
         private void EnsureEventSystem()
@@ -1138,7 +1153,9 @@ namespace KazistovVvUI
         public void CycleTheme()
         {
             KvThemeMode mode = KvTheme.Cycle();
-            Log("Тема: " + KvTheme.ModeLabel + " (палитра " + KvTheme.PaletteLabel + ")");
+            // ЛИСТ `view.theme`: след смены темы уходил только в `Log` — консоль, выключенную
+            // на устройстве. Теперь строка идёт в журнал (и в статус-бар темы, как раньше).
+            Journal("тема интерфейса: " + KvTheme.ModeLabel + " (палитра " + KvTheme.PaletteLabel + ")");
             if (status != null) status.SetTheme(KvTheme.ModeLabel);
             if (settings != null) settings.RefreshValues();
         }
@@ -2103,6 +2120,11 @@ namespace KazistovVvUI
         /// </summary>
         public void ShowSettings(int tab)
         {
+            // ЛИСТЫ `help.open`/`help.about`/`ui.access`: открытие вкладки настроек не оставляло
+            // НИКАКОГО следа — ни в журнале, ни в статус-баре (след был бы только в консоли).
+            // Строка идёт ПЕРВОЙ: даже если сборка панели упадёт, нажатие оператора останется
+            // записанным, а не растворится в консоли.
+            Journal("настройки открыты (вкладка " + tab + ")");
             // ФИКС 10 (§22): «настройки не открываются» — потому что команда лишь включала
             // панель, а САМА ОБОЛОЧКА могла быть скрыта (телеоперация или открытое стартовое
             // меню). Канвас выключен → панель «включалась» в никуда, и клик по ней был
@@ -3796,9 +3818,16 @@ namespace KazistovVvUI
         /// <summary>Открыть палитру команд (Ctrl+P, Start на геймпаде, кнопка тулбара).</summary>
         public void OpenCommandPalette()
         {
-            if (palette == null) return;
+            if (palette == null)
+            {
+                // ЛИСТ `ui.palette`: «тихий отказ при непостроенной оболочке» — нажатие не давало
+                // ни палитры, ни объяснения (ДЕРЕВЬЯ_КНОПОК_КОМАНДЫ, карточка `ui.palette`).
+                Journal("палитра команд не открыта: оболочка интерфейса в сцене нет");
+                return;
+            }
             palette.Open();
-            Log("палитра команд открыта (команд в реестре: " + KvCommands.All.Count + ")");
+            // Там же: число команд печаталось только в консоль (и только при logUiEvents).
+            Journal("палитра команд открыта (команд в реестре: " + KvCommands.All.Count + ")");
         }
 
         /// <summary>Закрыть палитру команд.</summary>
@@ -3847,8 +3876,12 @@ namespace KazistovVvUI
             panelStates.Clear();
             foreach (KvToolbarGroup group in KvToolbarGroups.All)
                 KvSettings.SetToolbarGroupCollapsed(group.Id, false);
+            // ЛИСТ `ui.resetlayout`: событие пересборки оболочки уходило только в `Log` (консоль,
+            // выключенную на устройстве) — оператор не видел, что раскладка вообще сброшена.
+            // Строка идёт ДО пересборки: сброс уже произошёл, а падение сборки не должно
+            // стирать след нажатия.
+            Journal("раскладка окон сброшена к значениям по умолчанию (панели и группы тулбара)");
             RebuildShell();
-            Log("раскладка окон сброшена к значениям по умолчанию (панели и группы тулбара)");
         }
 
         /// <summary>Состояния интерфейса (ошибка/загрузка/пустое состояние) — для диагностики.</summary>

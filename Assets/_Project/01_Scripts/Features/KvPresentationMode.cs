@@ -105,6 +105,14 @@ namespace KazistovVvFeatures
                 Report("презентационный режим невозможен: в сцене нет камеры");
                 return false;
             }
+            if (rig == null)
+            {
+                // ЛИСТ `presentation.toggle`: «тихая деградация при непривязанных ссылках» —
+                // режим включался, но риг камеры оператора оставался со своими настройками
+                // и это нигде не проговаривалось.
+                Report("презентационный режим включён, но риг камеры не привязан — " +
+                       "настройки камеры оператора не блокируются");
+            }
 
             active = true;
             line = 0;
@@ -242,6 +250,10 @@ namespace KazistovVvFeatures
         {
             Debug.Log("[Presentation] " + text);
             if (Message != null) Message(text);
+            // ЛИСТ `presentation.toggle`: подписка `Presentation.Message` живёт в `Awake` хаба —
+            // без неё след уходил ТОЛЬКО в консоль (на устройстве её нет). Без подписчика
+            // строка идёт в журнал напрямую, чтобы нажатие не осталось без объяснения.
+            else KvActionLog.Instance.Add(KvLogKind.Ui, text);
         }
     }
 }

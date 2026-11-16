@@ -642,7 +642,15 @@ namespace KazistovVvFeatures
         public void EmergencyStop()
         {
             if (flow == null) flow = ui != null ? ui.Flow : null;
-            if (flow == null) return;
+            if (flow == null)
+            {
+                // ЛИСТ `estop` («по коду, есть дефект»): раньше здесь стоял голый `return;` —
+                // оператор жмёт АВАРИЙНУЮ, а на устройстве (где консоли нет) ни результата,
+                // ни объяснения. Причина называется с фактом.
+                Log.Add(KvLogKind.Warning, "аварийная остановка не выполнена: поток траекторий " +
+                                           "в сцене нет — останавливать и сбрасывать нечего");
+                return;
+            }
 
             try
             {
@@ -1481,7 +1489,15 @@ namespace KazistovVvFeatures
                 Description = "Камера сама облетает робота, текст на экране, интерфейс скрыт; выход — Esc",
                 Icon = "presentation",
                 MenuPath = "Вид/Презентационный режим",
-                Execute = delegate { hub.Presentation.Toggle(); },
+                Execute = delegate
+                {
+                    // ЛИСТ `presentation.toggle`: «тихая деградация при непривязанных ссылках» —
+                    // служба режима создаётся в `Awake` хаба; без неё нажатие не должно падать
+                    // и не должно молчать.
+                    if (hub.Presentation != null) hub.Presentation.Toggle();
+                    else hub.Log.Add(KvLogKind.Warning, "презентационный режим невозможен: " +
+                                                          "служба в сцене нет");
+                },
                 IsChecked = delegate { return hub.Presentation != null && hub.Presentation.Active; }
             });
 
@@ -1504,9 +1520,27 @@ namespace KazistovVvFeatures
                 MenuPath = "Файл/Сессия/Загрузить последнюю сессию",
                 Execute = delegate
                 {
+                    if (hub.Sessions == null)
+                    {
+                        // ЛИСТ `session.load`: служба сессий создаётся в `Awake` хаба — без неё
+                        // нажатие падало бы с NullReference, не оставив ни строки.
+                        hub.Log.Add(KvLogKind.Warning,
+                            "сессия не загружена: служба сессий в сцене нет");
+                        return;
+                    }
                     KvSession newest = hub.Sessions.Newest;
                     if (newest == null) hub.Log.Add(KvLogKind.Error, "сессий нет — сначала сохраните");
-                    else hub.Sessions.Load(newest);
+                    else
+                    {
+                        hub.Sessions.Load(newest);
+                        // ЛИСТ `session.load`: оператор жмёт «Загрузить последнюю сессию» и НЕ ВИДИТ
+                        // ничего — ни при пустом списке (там причина была), ни при успехе: статус-бар
+                        // не трогается, а след уходил только в консоль. Успех называется именем
+                        // сессии и попадает в журнал, отказ выше — тоже.
+                        hub.Log.Add(KvLogKind.Session, "сессия загружена: «" + newest.name + "»");
+                        KazistovVvUIManager.SetPlanStatus("Сессия загружена: «" + newest.name + "»",
+                            KvTheme.Ok);
+                    }
                 }
             });
             KvCommands.Register(new KvCommand
@@ -1543,7 +1577,15 @@ namespace KazistovVvFeatures
                 MenuPath = "Файл/Папка данных",
                 Execute = delegate
                 {
-                    hub.Log.Add(KvLogKind.System, "папка данных: " + FeatureStorage.Root);
+                    // ЛИСТ `file.export`: имя и иконка («Экспорт», «layers») обещали выгрузку
+                    // файлов, а команда показывает ПУТЬ — раньше полный перечень каталогов уходил
+                    // только в консоль Unity (на устройстве её нет). Теперь в журнале и полный
+                    // перечень, и честное пояснение, что экспорт файлов это НЕ делает.
+                    hub.Log.Add(KvLogKind.System, "папка данных (не экспорт файлов, только путь): " +
+                        FeatureStorage.Root);
+                    hub.Log.Add(KvLogKind.System, "записи: " + FeatureStorage.RecordingsDir +
+                        " · позы: " + FeatureStorage.PosesDir + " · зоны: " + FeatureStorage.ZonesDir +
+                        " · сессии: " + FeatureStorage.SessionsDir + " · журнал: " + FeatureStorage.LogsDir);
                     Debug.Log("[Features] папка данных: " + FeatureStorage.Root +
                               "\n  записи: " + FeatureStorage.RecordingsDir +
                               "\n  позы: " + FeatureStorage.PosesDir +
@@ -1914,7 +1956,13 @@ namespace KazistovVvFeatures
         /// <summary>Отметить выбранную в дереве траекторию для сравнения (этап 6).</summary>
         public void MarkForComparison()
         {
-            if (ui == null || flow == null) return;
+            if (ui == null || flow == null)
+            {
+                // ЛИСТ `compare.mark`: тихий выход без потока (ДЕРЕВЬЯ_КНОПОК_КОМАНДЫ §10.2).
+                Log.Add(KvLogKind.Warning, "отметить траекторию нельзя: поток траекторий " +
+                                           "в сцене нет — выберите узел «Траектория N»");
+                return;
+            }
             ProjectNode node = ui.SelectedNode;
             TrajectoryCandidate candidate = node != null ? node.Tag as TrajectoryCandidate : null;
             if (candidate == null)

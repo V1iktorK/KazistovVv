@@ -722,6 +722,10 @@ namespace KazistovVvFeatures
             if (string.IsNullOrEmpty(text)) return;
             Debug.Log("[RobotExport] " + text);
             if (Message != null) Message(text);
+            // ЛИСТ `export.lang`: текущий язык экспорта «не отображается на кнопке» — подписи на
+            // кнопке нет (заголовок берётся из словаря), поэтому состояние называется в журнале.
+            // Подписка `Message` живёт в `Awake` хаба; без неё строка идёт в журнал напрямую.
+            else KvActionLog.Instance.Add(KvLogKind.System, text);
         }
     }
 

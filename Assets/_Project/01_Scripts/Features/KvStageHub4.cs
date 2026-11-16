@@ -514,6 +514,17 @@ namespace KazistovVvFeatures
 
         // ================================================================== действия
 
+        /// <summary>
+        /// ОТКАЗ, КОТОРЫЙ ДОХОДИТ ДО ОПЕРАТОРА: строка и в `KvActionLog`, и в консоль.
+        /// Одна точка входа на хаб — как `KvStageHub2.Refuse` (волна 2): на устройстве консоли
+        /// нет, поэтому молчаливый `return;` читается как «нажал и ничего не произошло».
+        /// </summary>
+        private static void Refuse(string reason)
+        {
+            KvActionLog.Instance.Add(KvLogKind.Warning, reason);
+            Debug.Log("[Stages4] " + reason);
+        }
+
         public void OpenTab(string tabKey)
         {
             if (KvWorkbenchWindow.Instance == null)
@@ -539,11 +550,18 @@ namespace KazistovVvFeatures
         /// </summary>
         public bool StartSelected()
         {
-            if (flow == null) return false;
+            if (flow == null)
+            {
+                // ЛИСТ `valid.run`: отказ приходил только в консоль Unity (`Debug.LogWarning`),
+                // а кнопка «ПУСК с проверкой» оставалась активной в любом состоянии потока.
+                Refuse("ПУСК: поток траекторий в сцене нет — пустить нечего");
+                return false;
+            }
             if (flow.State.phase != FlowState.PhantomsMoving)
             {
-                Debug.LogWarning("[Stages4] ПУСК: нет подтверждаемой траектории (состояние " +
-                                 flow.State.phase + ")");
+                string reason = "ПУСК: нет подтверждаемой траектории (состояние " +
+                                flow.State.phase + ") — выберите точку и подтвердите вариант";
+                Refuse(reason);
                 return false;
             }
             bool ok = flow.ConfirmSelectedTrajectory();
@@ -558,23 +576,104 @@ namespace KazistovVvFeatures
             return PreRun.RequestRun(delegate { StartSelected(); });
         }
 
-        public void ToggleProxies() { Proxies.Enabled = !Proxies.Enabled; }
+        /// <summary>ОБЫЧНАЯ СТРОКА СОСТОЯНИЯ (не отказ) — в журнал и в консоль.</summary>
+        private static void Note(string text)
+        {
+            KvActionLog.Instance.Add(KvLogKind.System, text);
+            Debug.Log("[Stages4] " + text);
+        }
 
-        public void ToggleTree() { Lab.ToggleTree(); }
+        public void ToggleProxies()
+        {
+            if (Proxies == null)
+            {
+                Refuse("прокси не переключены: служба коллизионных прокси в сцене нет");
+                return;
+            }
+            Proxies.Enabled = !Proxies.Enabled;
+            // ЛИСТ `collision.toggle`: «переключатель не пишет строку в журнал сам по себе» —
+            // след уходил только в консоль сервиса (`[Collision] …`).
+            Note("прокси коллизий: " + (Proxies.Enabled ? "включены" : "выключены"));
+        }
 
-        public void StartBenchmark() { Lab.Start(); }
+        public void ToggleTree()
+        {
+            if (Lab == null)
+            {
+                Refuse("дерево RRT не переключено: служба стенда планировщиков в сцене нет");
+                return;
+            }
+            Lab.ToggleTree();
+            Note("дерево RRT: " + (Lab.TreeVisible ? "показано" : "скрыто"));
+        }
 
-        public void ToggleCinema() { Cinema.Toggle(); }
+        public void StartBenchmark()
+        {
+            if (Lab == null)
+            {
+                Refuse("стенд планировщиков не запущен: служба в сцене нет");
+                return;
+            }
+            Lab.Start();
+            // ЛИСТЫ `lab.run`/`lab.tab`/`lab.tree`: «нет индикации «идёт прогон» на кнопке;
+            // остановки из UI нет». Индикация на кнопке — `IsChecked = Lab.Running`, а строка
+            // состояния прогоняет прогон в журнал.
+            Note(Lab.Running
+                ? "стенд планировщиков: прогон запущен · " + Lab.Status()
+                : "стенд планировщиков: прогон не запущен · " + Lab.Status());
+        }
 
-        public void ToggleWeb() { Web.Toggle(); }
+        public void ToggleCinema()
+        {
+            if (Cinema == null)
+            {
+                Refuse("кинорежим не переключен: служба кинорежима в сцене нет");
+                return;
+            }
+            Cinema.Toggle();
+            Note("кинорежим: " + (Cinema.Enabled ? "включён" : "выключен"));
+        }
 
-        public void ToggleCompanion() { Companion.Toggle(); }
+        public void ToggleWeb()
+        {
+            if (Web == null)
+            {
+                Refuse("веб-дашборд не переключен: служба в сцене нет");
+                return;
+            }
+            Web.Toggle();
+            // ЛИСТ `web.toggle`: страница мониторинга слушает ТОЛЬКО loopback — с другого
+            // устройства/телефона она не откроется. Ограничение называется вслух.
+            Note(Web.Running
+                ? "веб-дашборд: включён · адрес http://127.0.0.1:47800 — открывается только " +
+                  "с этой машины (для других устройств нужен IPAddress.Any)"
+                : "веб-дашборд: выключен");
+        }
+
+        public void ToggleCompanion()
+        {
+            if (Companion == null)
+            {
+                Refuse("мобильный пульт не переключен: служба в сцене нет");
+                return;
+            }
+            Companion.Toggle();
+            Note("мобильный пульт: " + (Companion.Running ? "включён" : "выключен"));
+        }
 
         public void CycleEnvironment()
         {
+            if (Environment == null)
+            {
+                Refuse("окружение не сменено: служба окружения в сцене нет");
+                return;
+            }
             Environment.SetVisible(true);
             Environment.Next();
             if (ui != null) ui.RebuildTree(true);
+            // Подпись текущего пресета (ЛИСТ `env.next`): «нет IsChecked/названия» — название
+            // пресета теперь в журнале и в статус-баре, а не только в консоли сервиса.
+            Note("окружение: " + Environment.CurrentTitle);
         }
 
         public void CycleLighting()
@@ -585,27 +684,124 @@ namespace KazistovVvFeatures
             // обработчика не перехватывает — команда `light.next` падала без объяснения.
             if (Lighting == null)
             {
-                Debug.LogWarning("[Stages4] свет: сервис освещения не создан — переключать нечего");
+                // ЛИСТ `light.next`: причина уходила только в консоль (`Debug.LogWarning`).
+                Refuse("смена освещения не выполнена: сервис освещения в сцене нет");
                 return;
             }
             Lighting.Next();
+            Note("освещение: " + Lighting.CurrentTitle);
         }
 
-        public void ToggleVoice() { Voice.SetEnabled(!Voice.Enabled); }
+        public void ToggleVoice()
+        {
+            if (Voice == null)
+            {
+                Refuse("голосовые команды не переключены: служба в сцене нет");
+                return;
+            }
+            Voice.SetEnabled(!Voice.Enabled);
+            // ЛИСТ `voice.toggle`: флаг включался, а данных не было — «включил голос, микрофон
+            // работает, команды не выполняются» (распознавания речи в проекте нет вовсе).
+            Note(Voice.Enabled
+                ? "голосовые команды: включены · распознавания речи нет (IKvSpeechSource не " +
+                  "реализован) — сервис измеряет только громкость"
+                : "голосовые команды: выключены");
+        }
 
-        public void ToggleHands() { Hands.SetEnabled(!Hands.Enabled); Hands.SetVisible(Hands.Enabled); }
+        public void ToggleHands()
+        {
+            if (Hands == null)
+            {
+                Refuse("отслеживание рук не переключено: служба в сцене нет");
+                return;
+            }
+            Hands.SetEnabled(!Hands.Enabled);
+            Hands.SetVisible(Hands.Enabled);
+            // ЛИСТ `hands.toggle`: на ПК тумблер выглядел рабочим и бесполезным.
+            Note(Hands.Enabled
+                ? "отслеживание рук: включено · жесты приходят только с OpenXR-кистей шлема, " +
+                  "на ПК данных нет"
+                : "отслеживание рук: выключено");
+        }
 
-        public void ToggleEyes() { Eyes.SetEnabled(!Eyes.Enabled); }
+        public void ToggleEyes()
+        {
+            if (Eyes == null)
+            {
+                Refuse("отслеживание взгляда не переключено: служба в сцене нет");
+                return;
+            }
+            Eyes.SetEnabled(!Eyes.Enabled);
+            // ЛИСТ `eyes.toggle`: включённый флаг ≠ работающий выбор взглядом; источник — поза
+            // головы (трекера глаз нет), на ПК данных нет.
+            Note(Eyes.Enabled
+                ? "отслеживание взгляда: включено · источник — поза головы (трекера глаз нет), " +
+                  "на ПК данных нет"
+                : "отслеживание взгляда: выключено");
+        }
 
-        public void ClearFault() { Failures.Clear(); }
+        public void ClearFault()
+        {
+            if (Failures == null)
+            {
+                Refuse("авария не сброшена: служба имитации отказов в сцене нет");
+                return;
+            }
+            // ЛИСТ `fail.clear`: «бесполезен, пока аварии нет (нет обратной связи)» — теперь
+            // есть и пустой сброс, и подтверждённый: оба называются в журнале.
+            bool wasActive = Failures.Active;
+            Failures.Clear();
+            Note(wasActive ? "авария сброшена" : "сбрасывать нечего: аварии нет");
+        }
 
-        public void SimulateCommsLoss() { Failures.Start(KvFailureKind.CommsLoss); }
+        public void SimulateCommsLoss()
+        {
+            if (Failures == null)
+            {
+                Refuse("имитация потери связи не выполнена: служба имитации отказов в сцене нет");
+                return;
+            }
+            Failures.Start(KvFailureKind.CommsLoss);
+            Note("имитация: потеря связи " + Failures.Status());
+        }
 
-        public void SimulateJointLoss() { Failures.Start(KvFailureKind.JointLoss, 2); }
+        public void SimulateJointLoss()
+        {
+            if (Failures == null)
+            {
+                Refuse("имитация отказа сустава не выполнена: служба имитации отказов в сцене нет");
+                return;
+            }
+            Failures.Start(KvFailureKind.JointLoss, 2);
+            Note("имитация: отказ 2-го сустава " + Failures.Status());
+        }
 
-        public void ExportLogView() { LogTools.ExportVisible(); }
+        public void ExportLogView()
+        {
+            if (LogTools == null)
+            {
+                Refuse("журнал не выгружен: служба журнала в сцене нет");
+                return;
+            }
+            LogTools.ExportVisible();
+        }
 
-        public void MakeReport() { Report.Generate(); }
+        public void MakeReport()
+        {
+            if (Report == null)
+            {
+                Refuse("отчёт не сформирован: служба отчёта в сцене нет");
+                return;
+            }
+            string file = Report.Generate();
+            // ЛИСТЫ `report.pdf`/`report.make`: «путь к PDF не показывается в статус-баре
+            // (только журнал)». Путь и в статус-бар, и в журнал.
+            if (!string.IsNullOrEmpty(file))
+            {
+                Note("PDF-отчёт сформирован: " + file);
+                KazistovVvUIManager.SetPlanStatus("PDF-отчёт: " + file, KvTheme.Ok);
+            }
+        }
 
         // ================================================================== ДЕРЕВО МОДЕЛЕЙ
 
@@ -835,21 +1031,24 @@ namespace KazistovVvFeatures
                     "при планировании", "obstacle",
                 "Робот/Производительность/Прокси (переключатель)",
                 delegate { hub.ToggleProxies(); },
-                delegate { return hub.Proxies.Enabled; });
+                delegate { return hub.Proxies != null && hub.Proxies.Enabled; });
 
             // --- ЭТАП 14: стенд сравнения планировщиков
             Command("lab.tab", "Стенд планировщиков", "Сравнение RRT*, BiRRT и оптимизации: 100+ задач, " +
                     "среднее время, успех, длина", "metrics",
-                "Робот/Производительность/Стенд планировщиков", delegate { hub.OpenTab("planner"); });
+                "Робот/Производительность/Стенд планировщиков", delegate { hub.OpenTab("planner"); },
+                WorkbenchOn("planner"));
             Command("lab.run", "Запустить стенд", "Прогнать набор задач и получить таблицу метрик", "metrics",
                 "Робот/Производительность/Стенд планировщиков/Запустить",
-                delegate { hub.StartBenchmark(); });
+                delegate { hub.StartBenchmark(); },
+                // ЛИСТ `lab.run`: «нет индикации «идёт прогон» на кнопке» — галка читает сам стенд.
+                delegate { return hub.Lab != null && hub.Lab.Running; });
 
             // --- ЭТАП 15: дерево RRT
             Command("lab.tree", "Дерево RRT на экране", "Показывать построение дерева планировщика", "metrics",
                 "Робот/Производительность/Дерево RRT",
                 delegate { hub.ToggleTree(); },
-                delegate { return hub.Lab.TreeVisible; });
+                delegate { return hub.Lab != null && hub.Lab.TreeVisible; });
 
             // --- ЭТАП 16: камеры
             Command("cameras.tab", "Камеры и PiP", "Вид сверху, сбоку и от первого лица в отдельных окнах",
@@ -857,15 +1056,26 @@ namespace KazistovVvFeatures
 
             // --- ЭТАП 17: силы
             Command("forces.tab", "Силы и моменты", "Векторы моментов по суставам и сила на инструменте",
-                "metrics", "Вид/Силы и моменты", delegate { hub.OpenTab("forces"); });
+                "metrics", "Вид/Силы и моменты", delegate { hub.OpenTab("forces"); },
+                WorkbenchOn("forces"));
 
             // --- ЭТАП 18: карта времени
             Command("heat.time", "Карта времени достижимости", "Тепловая карта времени в секундах", "heatmap",
-                "Вид/Тепловая карта времени", delegate { hub.OpenTab("forces"); });
+                "Вид/Тепловая карта времени",
+                delegate
+                {
+                    hub.OpenTab("forces");
+                    // ЛИСТ `heat.time`: «не выделяет свою секцию — оператор попадает на вкладку
+                    // «Силы и моменты» и должен искать карту сам». Окно открывается штатно
+                    // (общий корень OpenTab), а раздел называется строкой в журнале.
+                    Note("вкладка «Силы и моменты»: раздел «Карта времени достижимости» — " +
+                         "карта времени в самой вкладке");
+                },
+                WorkbenchOn("forces"));
 
             // --- ЭТАП 19: PDF-отчёт
             Command("report.pdf", "PDF-отчёт", "Отчёт с траекторией, метриками, снимками и кинематикой",
-                "log", "Файл/Отчёт PDF", delegate { hub.OpenTab("report"); });
+                "log", "Файл/Отчёт PDF", delegate { hub.OpenTab("report"); }, WorkbenchOn("report"));
             Command("report.make", "Сделать отчёт", "Сформировать PDF-отчёт прямо сейчас", "log",
                 "Файл/Отчёт PDF/Сформировать", delegate { hub.MakeReport(); });
 
@@ -876,27 +1086,27 @@ namespace KazistovVvFeatures
             // --- ЭТАП 21: веб-дашборд
             Command("web.toggle", "Веб-дашборд", "Страница мониторинга состояния робота в браузере", "session",
                 "Сервис/Веб-дашборд", delegate { hub.ToggleWeb(); },
-                delegate { return hub.Web.Running; });
+                delegate { return hub.Web != null && hub.Web.Running; });
 
             // --- ЭТАП 22: мобильный пульт
             Command("mobile.toggle", "Мобильный пульт", "Приём команд с планшета по UDP", "session",
                 "Сервис/Мобильный пульт", delegate { hub.ToggleCompanion(); },
-                delegate { return hub.Companion.Running; });
+                delegate { return hub.Companion != null && hub.Companion.Running; });
 
             // --- ЭТАП 23: голос
             Command("voice.toggle", "Голосовые команды", "Слушать микрофон и выполнять команды", "record",
                 "Сервис/Голосовые команды", delegate { hub.ToggleVoice(); },
-                delegate { return hub.Voice.Enabled; });
+                delegate { return hub.Voice != null && hub.Voice.Enabled; });
 
             // --- ЭТАП 24: руки
             Command("hands.toggle", "Отслеживание рук", "Жесты: касание, свайп, горсть", "tcp",
                 "Сервис/Отслеживание рук", delegate { hub.ToggleHands(); },
-                delegate { return hub.Hands.Enabled; });
+                delegate { return hub.Hands != null && hub.Hands.Enabled; });
 
             // --- ЭТАП 25: взгляд
             Command("eyes.toggle", "Отслеживание взгляда", "Фиксации, выбор взглядом, фовеальное зрение",
                 "eye", "Сервис/Отслеживание взгляда", delegate { hub.ToggleEyes(); },
-                delegate { return hub.Eyes.Enabled; });
+                delegate { return hub.Eyes != null && hub.Eyes.Enabled; });
 
             // --- ЭТАП 26: макросы
             Command("script.tab", "Макросы (скрипты)", "Автоматизация действий робота в песочнице", "log",
@@ -904,7 +1114,8 @@ namespace KazistovVvFeatures
 
             // --- ЭТАП 27: дерево поведения
             Command("bt.tab", "Дерево поведения", "Визуальный редактор дерева поведения", "tree",
-                "Сервис/Дерево поведения", delegate { hub.OpenTab("behavior"); });
+                "Сервис/Дерево поведения", delegate { hub.OpenTab("behavior"); },
+                WorkbenchOn("behavior"));
 
             // --- ЭТАП 28: окружение
             Command("env.next", "Сменить окружение", "Ангар, лаборатория, цех, чистое помещение", "robot",
@@ -921,7 +1132,7 @@ namespace KazistovVvFeatures
             // --- ЭТАП 31: кинорежим
             Command("cine.toggle", "Кинематографический режим", "Широкий экран и плавное движение камеры",
                 "video", "Вид/Кинорежим", delegate { hub.ToggleCinema(); },
-                delegate { return hub.Cinema.Enabled; });
+                delegate { return hub.Cinema != null && hub.Cinema.Enabled; });
 
             // --- ЭТАП 32: титры
             Command("titles.tab", "Титры и подписи", "Титры, подзаголовки, пояснения и файл субтитров",
@@ -933,11 +1144,15 @@ namespace KazistovVvFeatures
 
             // --- ЭТАП 34: отказы
             Command("fail.tab", "Имитация отказов", "Отказ сустава, потеря связи, перегрузка", "health",
-                "Сервис/Имитация отказов", delegate { hub.OpenTab("failures"); });
+                "Сервис/Имитация отказов", delegate { hub.OpenTab("failures"); }, WorkbenchOn("failures"));
             Command("fail.comms", "Потеря связи (имитация)", "Проверить поведение системы при потере связи",
-                "health", "Сервис/Имитация отказов/Потеря связи", delegate { hub.SimulateCommsLoss(); });
+                "health", "Сервис/Имитация отказов/Потеря связи", delegate { hub.SimulateCommsLoss(); },
+                // ЛИСТЫ `fail.*`: «состояние аварии нигде не „залипает“ в UI (нет индикатора на
+                // кнопке/статусе)». Индикатор — галка, читающая саму аварию.
+                delegate { return hub.Failures != null && hub.Failures.Active; });
             Command("fail.joint", "Отказ сустава (имитация)", "Проверить поведение при потере момента",
-                "health", "Сервис/Имитация отказов/Отказ сустава", delegate { hub.SimulateJointLoss(); });
+                "health", "Сервис/Имитация отказов/Отказ сустава", delegate { hub.SimulateJointLoss(); },
+                delegate { return hub.Failures != null && hub.Failures.Active; });
             Command("fail.clear", "Сброс аварии", "Снять аварийное состояние после имитации", "reset",
                 "Сервис/Имитация отказов/Сброс аварии", delegate { hub.ClearFault(); });
 
@@ -945,16 +1160,26 @@ namespace KazistovVvFeatures
             Command("valid.tab", "Проверка перед пуском", "Замечания по траектории и подтверждение оператора",
                 "check", "Робот/Проверка перед пуском", delegate { hub.OpenTab("validate"); });
             Command("valid.run", "ПУСК с проверкой", "Проверить траекторию и запустить движение", "play",
-                "Робот/ПУСК с проверкой", delegate { hub.RequestRun(); });
+                "Робот/ПУСК с проверкой", delegate { hub.RequestRun(); }, null,
+                // ЛИСТ `valid.run`: «не имеет `IsEnabled` — кнопка активна в любом состоянии
+                // потока». Доступность — поток траекторий в сцене: без него пустить нечего.
+                delegate { return hub.flow != null; });
             // ФИКС 9: манекены учитываются в проверке перед пуском (по умолчанию — да).
             Command("valid.mannequins", "Учитывать манекены в проверке",
                 "Два манекена рядом с рабочей зоной учитываются вместе с оператором",
                 "check", "Робот/Проверка перед пуском/Учитывать манекены",
                 delegate
                 {
-                    if (hub.Mannequins == null) return;
+                    if (hub.Mannequins == null)
+                    {
+                        // ЛИСТ `valid.mannequins`: «при недоступном железе — молчаливый выход».
+                        Refuse("манекены в проверке не переключены: служба манекенов в сцене нет");
+                        return;
+                    }
                     hub.Mannequins.Include = !hub.Mannequins.Include;
                     if (hub.PreRun != null) hub.PreRun.PersonSourceNote = hub.Mannequins.SourceNote();
+                    // Состояние называется: раньше переключение не оставляло ни одной строки.
+                    Note("манекены в проверке: " + (hub.Mannequins.Include ? "учитываются" : "не учитываются"));
                 },
                 delegate { return hub.Mannequins != null && hub.Mannequins.Include; });
 
@@ -977,12 +1202,32 @@ namespace KazistovVvFeatures
                 KvLocExtra4.T("cmd.graphics.detect.desc",
                     "Повторно определить видеокарту, память и процессор и пересчитать пресет"),
                 "features", "Вид/Графика/Определить по железу",
-                delegate { if (graphics != null) graphics.Redetect(true); });
+                delegate
+                {
+                    // ЛИСТЫ `graphics.detect`/`graphics.benchmark`/`graphics.reset`: «три из пяти —
+                    // тихие отказы при недоступной службе» (`if (graphics != null)` без объяснения).
+                    if (graphics == null || !graphics.Available)
+                    {
+                        Refuse("графика: служба графики недоступна (нет графического устройства) — " +
+                               "определение по железу не выполнено");
+                        return;
+                    }
+                    graphics.Redetect(true);
+                });
             Command("graphics.benchmark", KvLocExtra4.T("cmd.graphics.benchmark", "Бенчмарк графики"),
                 KvLocExtra4.T("cmd.graphics.benchmark.desc",
                     "Замер кадровой частоты на 5 секунд: средний, минимальный FPS и просадки"),
                 "metrics", "Вид/Графика/Бенчмарк 5 секунд",
-                delegate { if (graphics != null) graphics.StartBenchmark(5f); });
+                delegate
+                {
+                    if (graphics == null || !graphics.Available)
+                    {
+                        Refuse("графика: служба графики недоступна (нет графического устройства) — " +
+                               "бенчмарк не запущен");
+                        return;
+                    }
+                    graphics.StartBenchmark(5f);
+                });
             Command("graphics.metrics", KvLocExtra4.T("cmd.graphics.metrics", "Метрики графики"),
                 KvLocExtra4.T("cmd.graphics.metrics.desc",
                     "Оверлей: FPS, время кадра, вызовы отрисовки, треугольники, видеопамять"),
@@ -993,7 +1238,17 @@ namespace KazistovVvFeatures
                 KvLocExtra4.T("cmd.graphics.reset.desc",
                     "Вернуть режим «Авто» и настройки графики по умолчанию"),
                 "reset", "Вид/Графика/Сбросить по умолчанию",
-                delegate { if (graphics != null) graphics.ResetToAuto(); });
+                delegate
+                {
+                    if (graphics == null || !graphics.Available)
+                    {
+                        Refuse("графика: служба графики недоступна (нет графического устройства) — " +
+                               "сброс к умолчанию не выполнен");
+                        return;
+                    }
+                    graphics.ResetToAuto();
+                    Note("графика: режим «Авто» и настройки по умолчанию восстановлены");
+                });
 
             // --- ФИКС 5: пересчёт кинематики SCARA — ТОЛЬКО по явному запросу оператора.
             //     Ход призмы считается один раз при инициализации; этот пункт нужен после
@@ -1002,7 +1257,22 @@ namespace KazistovVvFeatures
                 "Пересчитать пределы хода призмы и заново привязать поток (тяжёлая операция — " +
                 "по явному запросу, автоматически не выполняется)",
                 "reset", "Робот/Пересчитать кинематику SCARA",
-                delegate { if (hub.flow != null) hub.flow.RebindKinematics("команда оператора"); });
+                delegate
+                {
+                    if (hub.flow == null)
+                    {
+                        // ЛИСТ `scara.recalibrate`: «тихий отказ без потока».
+                        Refuse("пересчёт кинематики SCARA не выполнен: поток траекторий " +
+                               "в сцене нет");
+                        return;
+                    }
+                    // ЛИСТ `scara.recalibrate`: «нет предупреждения „операция тяжёлая, кадр
+                    // встанет“» — предупреждение идёт ДО операции, в журнал.
+                    Note("пересчёт кинематики SCARA: тяжёлая операция, кадр может встать " +
+                         "— выполняется синхронно");
+                    hub.flow.RebindKinematics("команда оператора");
+                    Note("пересчёт кинематики SCARA: поток заново привязан");
+                });
 
             Debug.Log("[Stages4] команды этапов 13–36 зарегистрированы · всего команд: " +
                       KvCommands.All.Count);
@@ -1030,7 +1300,8 @@ namespace KazistovVvFeatures
         }
 
         private static void Command(string id, string title, string description, string icon,
-            string menuPath, Action execute, Func<bool> isChecked = null)
+            string menuPath, Action execute, Func<bool> isChecked = null,
+            Func<bool> isEnabled = null)
         {
             KvCommands.Register(new KvCommand
             {
@@ -1040,8 +1311,25 @@ namespace KazistovVvFeatures
                 Icon = icon,
                 MenuPath = menuPath,
                 Execute = execute,
-                IsChecked = isChecked
+                IsChecked = isChecked,
+                IsEnabled = isEnabled
             });
+        }
+
+        /// <summary>
+        /// ГАЛКА ВКЛАДКИ ВЕРСТАКА: окно открыто И показывает ИМЕННО ЭТУ вкладку.
+        /// ЛИСТЫ `lab.tab`/`forces.tab`/`heat.time`/`report.pdf`/`fail.tab`/`bt.tab` —
+        /// «по коду, есть дефект»: у команд-вкладок не было функции состояния, в отличие от
+        /// соседних `graph.open`/`joints.panel`, чья галка честная. Констант нет: состояние
+        /// читается из самого окна (`Visible` + ключ активной вкладки).
+        /// </summary>
+        private static Func<bool> WorkbenchOn(string tabKey)
+        {
+            return delegate
+            {
+                KvWorkbenchWindow window = KvWorkbenchWindow.Instance;
+                return window != null && window.Visible && window.ActiveKey == tabKey;
+            };
         }
     }
 }

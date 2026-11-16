@@ -324,15 +324,22 @@ namespace KazistovVvFeatures
         {
             if (KvStageHub.Current == null || KvStageHub.Current.Waypoints == null)
             {
-                Debug.LogWarning("[Stages3] waypoint-редактор недоступен");
+                // ЛИСТЫ `wp.orient`/`wp.speed`/`wp.detour`/`wp.pause`/`wp.clear`: причина отказа
+                // уходила ТОЛЬКО в консоль (`Debug.LogWarning`), а команда считалась выполненной.
+                string reason = "waypoint-редактор недоступен: этап «Точка и траектория» " +
+                                "в сцене нет — ограничения точки не применены";
+                KvActionLog.Instance.Add(KvLogKind.Warning, reason);
+                Debug.LogWarning("[Stages3] " + reason);
                 return null;
             }
             KvWaypointManager manager = KvStageHub.Current.Waypoints;
             int index = manager.SelectedIndex;
             if (index < 0 || index >= manager.Count)
             {
-                Debug.Log("[Stages3] waypoint не выбран — выберите узел в ветке " +
-                          "«Промежуточные точки» или добавьте точку");
+                string reason = "waypoint не выбран — выберите узел в ветке «Промежуточные точки» " +
+                                "или добавьте точку: ограничение не применено";
+                KvActionLog.Instance.Add(KvLogKind.Warning, reason);
+                Debug.Log("[Stages3] " + reason);
                 return null;
             }
             return manager.Items[index];
@@ -345,7 +352,11 @@ namespace KazistovVvFeatures
             if (manager == null) return;
             manager.EvaluateAll();
             manager.RebuildRoute();
-            Debug.Log("[Stages3] ограничения waypoint: " + what + " · " + manager.RouteNote);
+            // ЛИСТЫ `wp.*`: состояние пересборки уходило в консоль — оператор на устройстве
+            // не видел ни успеха, ни отказа. Одна строка — и в журнал, и в консоль.
+            string line = "ограничения waypoint: " + what + " · " + manager.RouteNote;
+            KvActionLog.Instance.Add(KvLogKind.Trajectory, line);
+            Debug.Log("[Stages3] " + line);
             if (ui != null) ui.RebuildTree(true);
         }
 
@@ -367,6 +378,15 @@ namespace KazistovVvFeatures
         /// <summary>Переключить язык робота для экспорта (этап 11).</summary>
         public void CycleExportLanguage()
         {
+            if (Exporter == null)
+            {
+                // ЛИСТ `export.lang`: служба создаётся в `Awake` хаба — без неё нажатие падало
+                // бы без объяснения (`KvCommands.Invoke` исключения не перехватывает).
+                KvActionLog.Instance.Add(KvLogKind.Warning,
+                    "язык экспорта не переключен: служба экспорта в сцене нет");
+                Debug.Log("[Stages3] язык экспорта не переключен: служба экспорта в сцене нет");
+                return;
+            }
             Exporter.CycleLanguage();
         }
 

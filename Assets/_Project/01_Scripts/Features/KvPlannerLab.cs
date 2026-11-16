@@ -121,6 +121,10 @@ namespace KazistovVvFeatures
         private bool emptyTreeReported;    // ФИКС 4: «дерево пусто» сказано один раз на состояние
         private float treeTimer;
 
+        /// <summary>
+        /// ИДЁТ ЛИ ПРОГОН СЕЙЧАС. ЛИСТ `lab.run`: «нет индикации „идёт прогон“ на кнопке» —
+        /// это состояние читает галка команды (волна 2b).
+        /// </summary>
         public bool Running { get { return running; } }
         public int Progress { get { return cursor; } }
         public int Total { get { return totalTasks; } }

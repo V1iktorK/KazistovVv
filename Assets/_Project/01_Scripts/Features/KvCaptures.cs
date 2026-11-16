@@ -214,6 +214,10 @@ namespace KazistovVvFeatures
                     File.WriteAllBytes(path, png);
                     lastScreenshot = path;
                     Say("скриншот сохранён: " + path + " · " + png.Length / 1024 + " КБ · " + w + "×" + h);
+                    // ЛИСТ `shot.screenshot`: «результат — только в журнале, не в статус-баре».
+                    // Оператор жмёт F8 и должен УВИДЕТЬ, что снимок сделан, не открывая журнал.
+                    KazistovVvUI.KazistovVvUIManager.SetPlanStatus(
+                        "Скриншот: " + Path.GetFileName(path) + " · " + w + "×" + h, KvTheme.Ok);
                 }
             }
             catch (Exception e)

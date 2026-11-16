@@ -652,7 +652,14 @@ namespace KazistovVvFeatures
         {
             EtaPanelEnabled = !EtaPanelEnabled;
             if (!EtaPanelEnabled && etaPanel != null) etaPanel.gameObject.SetActive(false);
-            if (hub != null) hub.Log.Add(KvLogKind.Ui, "панель ETA: " + (EtaPanelEnabled ? "вкл" : "выкл"));
+            string line = "панель ETA: " + (EtaPanelEnabled ? "вкл" : "выкл") +
+                (EtaPanelEnabled ? " · панель появится, когда пойдёт траектория — пока показывать нечего" : "");
+            // ЛИСТ `eta.toggle`: «включил — панели нет» читалось как отказ. Панель показывает
+            // остаток времени ТЕКУЩЕЙ траектории, поэтому при простое на ней нечего рисовать —
+            // это объясняется в той же строке. Без хаба (окно построено, ход ещё не привязан)
+            // строка всё равно доходит до журнала.
+            if (hub != null) hub.Log.Add(KvLogKind.Ui, line);
+            else KvActionLog.Instance.Add(KvLogKind.Ui, line);
         }
 
         private void SetTab(int tabIndex)

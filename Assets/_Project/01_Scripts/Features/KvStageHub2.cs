@@ -374,21 +374,33 @@ namespace KazistovVvFeatures
         /// <summary>Постобработка выбранного варианта: сглаживание (этап 4).</summary>
         public void SmoothSelected()
         {
-            if (Smoothing == null) return;
+            if (Smoothing == null)
+            {
+                Refuse("сглаживание не применено: служба сглаживания в сцене нет");
+                return;
+            }
             Smoothing.ApplySelected(false);
         }
 
         /// <summary>Переключиться на время-оптимальную траекторию (этап 5).</summary>
         public void ApplyTimeOptimal()
         {
-            if (TimeOptimal == null) return;
+            if (TimeOptimal == null)
+            {
+                Refuse("время-оптимальная не применена: служба в сцене нет");
+                return;
+            }
             TimeOptimal.ApplySelected();
         }
 
         /// <summary>Переключиться на эко-профиль (этап 6).</summary>
         public void ApplyEcoProfile()
         {
-            if (Energy == null) return;
+            if (Energy == null)
+            {
+                Refuse("эко-профиль не применён: служба в сцене нет");
+                return;
+            }
             Energy.ApplySelected();
         }
 

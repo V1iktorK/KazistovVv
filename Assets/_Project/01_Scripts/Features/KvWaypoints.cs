@@ -147,6 +147,10 @@ namespace KazistovVvFeatures
         {
             if (logEvents) Debug.Log("[Waypoint] " + message);
             if (Message != null) Message(message);
+            // ЛИСТЫ `waypoint.delete`/`waypoint.build`: подписка `Message` живёт в `Awake` хаба —
+            // без неё след уходил только в консоль (на устройстве её нет). Без подписчика
+            // строка идёт в журнал напрямую.
+            else KvActionLog.Instance.Add(KvLogKind.Point, message);
         }
 
         private void Notify()
@@ -215,7 +219,14 @@ namespace KazistovVvFeatures
         /// <summary>Удалить точку по индексу.</summary>
         public bool Remove(int index)
         {
-            if (index < 0 || index >= items.Count) return false;
+            if (index < 0 || index >= items.Count)
+            {
+                // ЛИСТ `waypoint.delete`: «тот же тихий отказ, что у earlier/later» — `false`
+                // без единой строки, оператор не видит, почему точка не удалилась.
+                Say("удалить нечего: промежуточная точка не выбрана — выберите узел в ветке " +
+                    "«Промежуточные точки»");
+                return false;
+            }
             KvWaypoint wp = items[index];
             KillMarker(wp);
             items.RemoveAt(index);
@@ -510,11 +521,15 @@ namespace KazistovVvFeatures
             if (flow == null || !flow.Validator.Ready || flow.Planner == null)
             {
                 routeNote = "робот не определён";
+                // ЛИСТ `waypoint.build`: эти два отказа ставили `routeNote` и молча возвращали
+                // `false` — их видно было только в консоли/свойствах, в журнал они не попадали.
+                Say("маршрут не построен: " + routeNote);
                 return false;
             }
             if (items.Count == 0)
             {
                 routeNote = "точек нет";
+                Say("маршрут не построен: " + routeNote);
                 return false;
             }
             if (!flow.State.hasPoint)
