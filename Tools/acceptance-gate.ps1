@@ -95,6 +95,10 @@ if ([string]::IsNullOrWhiteSpace($UnityExe)) {
 $Adb = "C:\Program Files\Unity\Hub\Editor\6000.5.6f1\Editor\Data\PlaybackEngines\AndroidPlayer\SDK\platform-tools\adb.exe"
 $LogsDir = Join-Path $ProjectPath 'Logs'
 New-Item -ItemType Directory -Path $LogsDir -Force | Out-Null
+# СТЫК E2E_PC (путь отчёта диага, счётчик проверок, причина отказа запуска) вынесен в отдельный
+# файл и проверяется отдельным тестом: pwsh -NoProfile -File Tools/tests/e2e-pc-stitch.Tests.ps1
+# Причина выноса — прогон 16.11.2026: «E2E_PC: код 0 · проверок 0» без единого объяснения.
+. (Join-Path $PSScriptRoot 'e2e-pc-stitch.ps1')
 $StateFile = Join-Path $LogsDir 'gate-state.json'
 $BuildDir = 'C:\KazistovVv_Build'
 
@@ -119,7 +123,12 @@ function Invoke-Unity([string[]]$argList, [int]$timeoutMin) {
         Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
         return 124
     }
-    return 0
+    # НАСТОЯЩИЙ КОД ВОЗВРАТА (16.11.2026). Раньше здесь безусловно стоял 0 «если процесс вообще
+    # завершился», и E2E_PC печатал «код 0» даже тогда, когда Unity отвалилась ДО вызова
+    # -executeMethod: настоящая причина поломки (ненулевой код) терялась, и наружу выходило
+    # «код 0 · проверок 0» — приёмка не могла отличить «диаг не запустился» от «диаг прошёл».
+    # 124 остаётся признаком таймаута; прочие шаги (EDITMODE, MUTATION) код не использовали.
+    try { return [int]$p.ExitCode } catch { return 0 }
 }
 
 function Get-Devices {
@@ -457,23 +466,27 @@ if ($SkipUnity) {
     Add-Result 'E2E_PC' $false 'НЕ ПРОВЕРЕНО (-SkipUnity)'
 } else {
     $e2eLog = Join-Path $LogsDir 'gate-e2e-pc.log'
-    $e2eRep = "C:\Users\$env:USERNAME\AppData\LocalLow\KazistovVv\KazistovVv\KazistovVv\Reports\_e2e_settings.txt"
-    if (Test-Path $e2eLog) { Remove-Item $e2eLog -Force }
-    if (Test-Path $e2eRep) { Remove-Item $e2eRep -Force }
-    $code = Invoke-Unity @('-batchmode', '-projectPath', ('"' + $ProjectPath + '"'),
-        '-executeMethod', 'KvE2eSettingsDiag.Run', '-logFile', ('"' + $e2eLog + '"')) 25
-    $fails = 0
-    $totalChecks = 0
-    if (Test-Path $e2eRep) {
-        $repText = Get-Content $e2eRep -Raw
-        $fails = ([regex]::Matches($repText, '\[FAIL\]')).Count
-        $totalChecks = ([regex]::Matches($repText, '\[OK\]')).Count + $fails
+    # ПУТЬ ОТЧЁТА — ПО ПРАВИЛУ FeatureStorage, А НЕ ЛИТЕРАЛОМ (16.11.2026). Диаг пишет через
+    # KazistovVvFeatures.FeatureStorage.ReportPath, и гейт обязан строить ту же точку сам
+    # (см. Get-E2eReportPath в Tools/e2e-pc-stitch.ps1): иначе любой переезд отчёта или
+    # переименование продукта снова выдаст «проверок 0» без объяснения.
+    $e2eRep = Get-E2eReportPath -ProjectPath $ProjectPath
+    $e2eNote = ''
+    $e2eVerdict = $null
+    # ДВЕ ПОПЫТКИ — но только на ОТСУТСТВИЕ отчёта (диаг не запустился вообще). Если диаг отработал
+    # и насчитал провалы, повтор не поможет и только удлинит прогон: это не обход проверки.
+    for ($e2eTry = 1; $e2eTry -le 2; $e2eTry++) {
+        if (Test-Path $e2eLog) { Remove-Item $e2eLog -Force }
+        if (Test-Path $e2eRep) { Remove-Item $e2eRep -Force }
+        $code = Invoke-Unity @('-batchmode', '-projectPath', ('\"' + $ProjectPath + '\"'),
+            '-executeMethod', 'KvE2eSettingsDiag.Run', '-logFile', ('\"' + $e2eLog + '\"')) 25
+        $e2eVerdict = Get-E2eVerdict -ReportPath $e2eRep -LogPath $e2eLog -Code $code -Note $e2eNote
+        if (-not $e2eVerdict.Retry) { break }
+        # Причина первого отказа не теряется: она печатается в консоль гейта до повтора.
+        Write-Host ("  E2E_PC: отчёт диага не создан — " + $e2eVerdict.Detail)
+        if ($e2eTry -eq 1) { $e2eNote = 'повтор после отказа запуска' }
     }
-    if ($code -eq 0 -and $fails -eq 0 -and $totalChecks -ge 29) {
-        Add-Result 'E2E_PC' $true "код 0 · проверок $totalChecks · [FAIL] 0"
-    } else {
-        Add-Result 'E2E_PC' $false "код $code · проверок $totalChecks · [FAIL] $fails"
-    }
+    Add-Result 'E2E_PC' $e2eVerdict.Ok $e2eVerdict.Detail
 }
 
 # ================================================================ 7. MUTATION (негативный контроль)
@@ -680,10 +693,25 @@ if (-not $headset) {
     & $Adb -s $headset.Id shell am force-stop $package 2>&1 | Out-Null
     Start-Sleep -Seconds 3
     & $Adb -s $headset.Id logcat -c 2>&1 | Out-Null
+    # БУДИТЬ ОБЯЗАТЕЛЬНО (добавлено тестировщиком 16.11). Шлем без движения уходит в сон, и
+    # `monkey` в спящее устройство запускает активность молча: «нет строки [KvEnv]» — хотя код
+    # цел (самопрогон с KEYCODE_WAKEUP проходил на том же APK). Плюс удержание экрана на время
+    # замера и ОДИН повтор — чтобы вердикт не зависел от фазы сна стенда.
+    & $Adb -s $headset.Id shell input keyevent KEYCODE_WAKEUP 2>&1 | Out-Null
+    & $Adb -s $headset.Id shell svc power stayon true 2>&1 | Out-Null
+    Start-Sleep -Seconds 2
     & $Adb -s $headset.Id shell monkey -p $package -c android.intent.category.LAUNCHER 1 2>&1 | Out-Null
     Start-Sleep -Seconds 40
 
     $hlc = (& $Adb -s $headset.Id logcat -d 2>&1) -join "`n"
+    if ($hlc -notmatch '\[KvEnv\]') {
+        Write-Host "    [KvEnv] нет — будилью и повторяю запуск (сон стенда, а не код)"
+        & $Adb -s $headset.Id shell input keyevent KEYCODE_WAKEUP 2>&1 | Out-Null
+        Start-Sleep -Seconds 2
+        & $Adb -s $headset.Id shell monkey -p $package -c android.intent.category.LAUNCHER 1 2>&1 | Out-Null
+        Start-Sleep -Seconds 30
+        $hlc = (& $Adb -s $headset.Id logcat -d 2>&1) -join "`n"
+    }
     if ($hlc -match 'FATAL EXCEPTION') { $problems += 'падение приложения (FATAL EXCEPTION)' }
     if ($hlc -notmatch '\[KvEnv\]') { $problems += 'нет строки [KvEnv] — приложение не стартовало' }
 
