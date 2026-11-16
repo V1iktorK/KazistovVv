@@ -118,6 +118,63 @@ namespace KazistovVvAr
         /// <summary>Открыто ли меню (для проверок).</summary>
         public bool MenuVisible { get { return menuPanel != null && menuPanel.activeSelf; } }
 
+        // ================================================================== ДОСТУП ДЛЯ ПРОВЕРОК
+        //
+        // ЗАЧЕМ. Волна закрытия листьев (16.11.2026) обязана судить листья ПО ПОВЕДЕНИЮ, а не по
+        // тексту исходника (P4-3): «вкладка открывает группу», «кнопка закрывает окно»,
+        // «страницы не наезжают на строку» — это факты живого интерфейса, иначе проверяется
+        // только наличие строки в файле. Геттеры НИЧЕГО не меняют: они читают то, что уже
+        // построено.
+
+        /// <summary>
+        /// КНОПКА ПО ПУТИ ОТНОСИТЕЛЬНО КАНВАСА («PcCommandPanel/GroupTab_path»).
+        /// Нажатие в проверке обязано идти ЧЕРЕЗ кнопку (`onClick.Invoke`), а не мимо неё:
+        /// иначе проверяется обработчик, но не подключение обработчика.
+        /// </summary>
+        public Button UiButton(string path)
+        {
+            if (canvas == null || string.IsNullOrEmpty(path)) return null;
+            Transform node = canvas.transform.Find(path);
+            return node != null ? node.GetComponent<Button>() : null;
+        }
+
+        /// <summary>Кнопка действия окна сообщений показана (для проверок).</summary>
+        public bool MessageButtonVisible
+        {
+            get { return messageButton != null && messageButton.gameObject.activeInHierarchy; }
+        }
+
+        /// <summary>Подпись кнопки действия окна сообщений (для проверок).</summary>
+        public string MessageButtonLabel
+        {
+            get { return messageButtonText != null ? messageButtonText.text : string.Empty; }
+        }
+
+        /// <summary>Сколько строк команд сейчас на странице (кнопки пагинации не считаются).</summary>
+        public int CommandRowCount
+        {
+            get
+            {
+                if (commandRowsRoot == null) return 0;
+                int count = 0;
+                for (int i = 0; i < commandRowsRoot.transform.childCount; i++)
+                    if (commandRowsRoot.transform.GetChild(i).name.StartsWith("Cmd_")) count++;
+                return count;
+            }
+        }
+
+        /// <summary>Заголовок панели команд («Команды · Робот (21)»).</summary>
+        public string CommandTitleLabel
+        {
+            get { return commandTitle != null ? commandTitle.text : string.Empty; }
+        }
+
+        /// <summary>Счётчик страниц панели команд («1 / 3»).</summary>
+        public string CommandPageLabel
+        {
+            get { return commandPageText != null ? commandPageText.text : string.Empty; }
+        }
+
         void Start()
         {
             if (buildOnStart) EnsureBuilt();
@@ -472,7 +529,7 @@ namespace KazistovVvAr
                 string id = groups[i].Id;
                 string shortTitle = i < shortNames.Length ? shortNames[i] : ShortGroupTitle(groups[i].Title);
                 CreateButton(commandPanel.transform, "GroupTab_" + id, shortTitle,
-                    delegate { OpenCommands(id); },
+                    delegate { OpenCommands(id, false); },
                     new Vector2(100f, tabHeight), Mathf.RoundToInt(Mathf.Clamp(tabHeight * 0.34f, 16f, 26f)),
                     new Vector2(8f + i * 104f, -52f), TextAnchor.MiddleCenter);
             }
@@ -651,7 +708,7 @@ namespace KazistovVvAr
             }
 
             for (int i = menuPanel.transform.childCount - 1; i >= 0; i--)
-                Destroy(menuPanel.transform.GetChild(i).gameObject);
+                RemoveChild(menuPanel.transform.GetChild(i).gameObject);
 
             menuOpenTitle = menuTitle;
             menuPanel.SetActive(true);
@@ -702,18 +759,35 @@ namespace KazistovVvAr
         /// <summary>ОТКРЫТЬ ПАНЕЛЬ КОМАНД ГРУППЫ (все команды проекта с листанием).</summary>
         public void OpenCommands(string groupId = "robot")
         {
+            OpenCommands(groupId, true);
+        }
+
+        /// <summary>
+        /// ОТКРЫТЬ ПАНЕЛЬ КОМАНД ГРУППЫ. `allowToggleClose == false` — нажатие НЕ ЗАКРЫВАЕТ
+        /// панель (вкладки групп: лист «GroupTab_&lt;группа&gt;» — «открывает панель команд
+        /// группы», закрытие оставлено кнопкам «Закрыть» и «Команды»).
+        ///
+        /// ИНДИКАЦИЯ (лист «ArButton_Команды»): каждое нажатие оставляет оператору видимую
+        /// строку — «открыта» или «закрыта». Раньше переключатель молча закрывал окно, и по
+        /// экрану было не отличить, сработало нажатие или нет.
+        /// </summary>
+        public void OpenCommands(string groupId, bool allowToggleClose)
+        {
             EnsureBuilt();
             if (commandPanel == null) return;
             if (string.IsNullOrEmpty(groupId)) groupId = "robot";
-            if (commandPanel.activeSelf && commandGroupId == groupId)
+            if (allowToggleClose && commandPanel.activeSelf && commandGroupId == groupId)
             {
                 ClosePanels();
+                SetHint("Панель команд закрыта");
                 return;
             }
             commandGroupId = groupId;
             commandPage = 0;
             commandPanel.SetActive(true);
             FillCommandRows();
+            SetHint("Панель команд открыта: " +
+                    (commandTitle != null ? commandTitle.text : groupId));
             Debug.Log("[KvAr] ИНТЕРФЕЙС: открыта панель команд группы «" + groupId + "»");
         }
 
@@ -721,7 +795,7 @@ namespace KazistovVvAr
         {
             if (commandRowsRoot == null) return;
             for (int i = commandRowsRoot.transform.childCount - 1; i >= 0; i--)
-                Destroy(commandRowsRoot.transform.GetChild(i).gameObject);
+                RemoveChild(commandRowsRoot.transform.GetChild(i).gameObject);
 
             KvToolbarGroup group = KvToolbarGroups.Find(commandGroupId);
             string[] commands = group != null ? group.Commands : new string[0];
@@ -736,8 +810,11 @@ namespace KazistovVvAr
             // СТРОКИ ПОД ПАЛЕЦ, НО БЕЗ ОБРЕЗКИ: шаг сжимается, если страница не влезает целиком.
             float rowsSpace = CanvasHeightUi() - TopChromeHeightUi() - StatusBarHeightUi() -
                               10f - (52f + TabHeightUi() + 10f) - 12f;
-            float rowPitch = Mathf.Max(30f, Mathf.Min(TouchRowHeightUi(), rowsSpace / pageSize));
-            float rowHeight = Mathf.Max(26f, rowPitch - 6f);
+            float rowPitch;
+            float rowHeight;
+            float pagerY;
+            CommandRowsLayout(rowsSpace, TouchRowHeightUi(), pageSize, pages > 1,
+                              out rowPitch, out rowHeight, out pagerY);
             int start = commandPage * pageSize;
             int end = Mathf.Min(commands.Length, start + pageSize);
             for (int i = start; i < end; i++)
@@ -757,11 +834,63 @@ namespace KazistovVvAr
             {
                 CreateButton(commandRowsRoot.transform, "CmdPrev", "◀ ",
                     delegate { commandPage--; FillCommandRows(); },
-                    new Vector2(120f, 44f), 20, new Vector2(6f, -4f - 12 * 48f), TextAnchor.MiddleCenter);
+                    new Vector2(120f, PagerHeightUi), 20, new Vector2(6f, pagerY), TextAnchor.MiddleCenter);
                 CreateButton(commandRowsRoot.transform, "CmdNext", " ▶",
                     delegate { commandPage++; FillCommandRows(); },
-                    new Vector2(120f, 44f), 20, new Vector2(136f, -4f - 12 * 48f), TextAnchor.MiddleCenter);
+                    new Vector2(120f, PagerHeightUi), 20, new Vector2(136f, pagerY), TextAnchor.MiddleCenter);
             }
+        }
+
+        /// <summary>ВЫСОТА КНОПКИ ПАГИНАЦИИ (единицы канваса) — одна для раскладки и для проверок.</summary>
+        public const float PagerHeightUi = 44f;
+
+        /// <summary>
+        /// РАСКЛАДКА СТРОК КОМАНД И КНОПОК ПАГИНАЦИИ (чистая функция — проверяется без сцены).
+        ///
+        /// ОТКУДА (лист «CmdPrev/CmdNext», слайд 171, дефект по коду). Позиция пагинации была
+        /// КОНСТАНТОЙ `y = −4 − 12·48 = −580`, а шаг строк считался от экрана. На планшете
+        /// 2560×1600 `rowPitch ≈ 74`, восьмая строка занимает `−522…−586` — кнопки страниц
+        /// НАЕЗЖАЛИ на последнюю строку (ДЕРЕВЬЯ_КНОПОК_ПК/AR, §2.3). Прогон их поэтому и не
+        /// видел: под ними физически лежала строка команды.
+        ///
+        /// ЧТО СТАЛО. Пагинация стоит ПОД последней строкой (`pagerY = −4 − pageSize·rowPitch`),
+        /// а строкам резервируется её высота: `rowPitch` считается от `rowsSpace` УЧЁТНО места
+        /// пагинации. Нижняя граница (`pagerY − PagerHeightUi ≥ −rowsSpace`) — тоже обязано
+        /// выполняться: кнопки не уходят за низ панели.
+        /// </summary>
+        /// <param name="rowsSpace">свободное место под строки панели (единицы канваса).</param>
+        /// <param name="touchRow">высота строки «под палец».</param>
+        /// <param name="pageSize">строк на странице (в проекте 8).</param>
+        /// <param name="hasPager">есть ли на странице кнопки пагинации.</param>
+        /// <param name="rowPitch">шаг строк.</param>
+        /// <param name="rowHeight">высота одной строки.</param>
+        /// <param name="pagerY">Y верхней кнопки пагинации (0, если пагинации нет).</param>
+        public static void CommandRowsLayout(float rowsSpace, float touchRow, int pageSize,
+                                             bool hasPager, out float rowPitch,
+                                             out float rowHeight, out float pagerY)
+        {
+            int rows = Mathf.Max(1, pageSize);
+            // МЕСТО ПОД ПАГИНАЦИЮ РЕЗЕРВИРУЕТСЯ ЗАРАНЕЕ: без этого строкам доставалось
+            // всё место панели, а кнопки страниц стояли на константе и наезжали на восьмую
+            // строку (дефект листа «CmdPrev/CmdNext», ДЕРЕВЬЯ_КНОПОК_AR §2.3).
+            float budget = rowsSpace;
+            if (hasPager) budget -= PagerHeightUi + 8f;
+            rowPitch = Mathf.Max(30f, Mathf.Min(touchRow, budget / rows));
+            rowHeight = Mathf.Max(26f, rowPitch - 6f);
+            // Верх кнопок — ПОД дном последней строки: её дно = −4 − (rows−1)·rowPitch − rowHeight.
+            pagerY = hasPager ? -4f - rows * rowPitch : 0f;
+        }
+
+        /// <summary>
+        /// УДАЛИТЬ ОБЪЕКТ ТОМ РЕЖИМЕ, В КОТОРОМ РАБОТАЕМ. `Destroy` в редакторе (EditMode)
+        /// даёт ошибку «Destroy may not be called from edit mode», а перестройка строк панели
+        /// обязана работать и в проверках, и в приложении.
+        /// </summary>
+        private static void RemoveChild(GameObject go)
+        {
+            if (go == null) return;
+            if (Application.isPlaying) Destroy(go);
+            else DestroyImmediate(go);
         }
 
         /// <summary>НЕЙТРАЛЬНЫЕ ПОДПИСИ: «Виртуальный пульт» на планшете читается как намёк на VR — убираем слово.</summary>
@@ -810,6 +939,9 @@ namespace KazistovVvAr
                 case "Робот":
                     return new[]
                     {
+                        // Постановка стола/робота по QR-маркеру — основной путь на
+                        // устройствах без ARCore-плоскостей (волна16.11.2026).
+                        "ar.place.marker",
                         "robot.switch", "robot.playpause", "robot.stop", "estop",
                         "joints.panel", "pose.save", "pose.goto", "gripper.toggle",
                         "robot.model.stand_6axis", "robot.model.scara_ls10b702s",
@@ -887,7 +1019,9 @@ namespace KazistovVvAr
             rowRect.anchorMax = new Vector2(1f, 1f);
             rowRect.pivot = new Vector2(1f, 1f);
             rowRect.anchoredPosition = new Vector2(-16f, -(TopChromeHeightUi() + 16f));
-            rowRect.sizeDelta = new Vector2(buttonWidth + 8f, 4f * (TouchRowHeightUi() + 10f) + 20f);
+            // ПЯТЬ кнопок (пятая — «По маркеру», волна16.11.2026): ряд считает высоту под
+            // количество кнопок, иначе пятая вылезала бы за низ панели.
+            rowRect.sizeDelta = new Vector2(buttonWidth + 8f, 5f * (TouchRowHeightUi() + 10f) + 20f);
 
             VerticalLayoutGroup layout = row.AddComponent<VerticalLayoutGroup>();
             layout.spacing = 10f;
@@ -1056,14 +1190,25 @@ namespace KazistovVvAr
             if (messageRoot == null) return;
             messageRoot.SetActive(true);
             if (messageText != null) messageText.text = text ?? string.Empty;
-            messageAction = action;
+            // ОКНО ОБЯЗАНО ИМЕТЬ КНОПКУ. Раньше без подписи И без действия кнопка пряталась
+            // вместе с «ОТМЕНА» — окно оставалось открытым навсегда: закрыть его было нечем
+            // (ловушка сообщения «Установить ARCore не удалось», KvArSessionController).
+            // Теперь действие по умолчанию — закрыть окно, а подпись по умолчанию — «ЗАКРЫТЬ».
+            messageAction = action ?? (Action)HideMessage;
             messageCancelAction = null;
             if (messageCancelRoot != null) messageCancelRoot.SetActive(false);
-            bool hasButton = !string.IsNullOrEmpty(buttonLabel) && action != null;
-            if (messageButton != null) messageButton.gameObject.SetActive(hasButton);
-            if (hasButton && messageButtonText != null) messageButtonText.text = buttonLabel;
+            if (messageButton != null) messageButton.gameObject.SetActive(true);
+            if (messageButtonText != null)
+            {
+                messageButtonText.text = !string.IsNullOrEmpty(buttonLabel)
+                    ? buttonLabel
+                    : DefaultMessageButtonLabel;
+            }
             SetHint(string.Empty);
         }
+
+        /// <summary>ПОДПИСЬ КНОПКИ СООБЩЕНИЯ ПО УМОЛЧАНИЮ (сообщение без своего действия).</summary>
+        public const string DefaultMessageButtonLabel = "ЗАКРЫТЬ";
 
         /// <summary>
         /// ПОДТВЕРЖДЕНИЕ ОПАСНОГО ДЕЙСТВИЯ (очистка рабочего пространства): две кнопки —
@@ -1071,12 +1216,23 @@ namespace KazistovVvAr
         /// </summary>
         public void ShowConfirm(string text, string confirmLabel, Action onConfirm)
         {
+            ShowConfirm(text, confirmLabel, onConfirm, null);
+        }
+
+        /// <summary>
+        /// ПОДТВЕРЖДЕНИЕ С ДЕЙСТВИЕМ ОТМЕНЫ. Лист «ArMessageCancel «ОТМЕНА»» обязан не просто
+        /// закрывать окно, а ВЫПОЛНЯТЬ действие отмены: поле `messageCancelAction` присваивалось,
+        /// но обработчик его игнорировал — сейчас это эквивалентно `HideMessage`, а при
+        /// расширении подтверждения стало бы тихой потерей отмены.
+        /// </summary>
+        public void ShowConfirm(string text, string confirmLabel, Action onConfirm, Action onCancel)
+        {
             EnsureBuilt();
             if (messageRoot == null) return;
             messageRoot.SetActive(true);
             if (messageText != null) messageText.text = text ?? string.Empty;
             messageAction = onConfirm;
-            messageCancelAction = delegate { HideMessage(); };
+            messageCancelAction = onCancel ?? (Action)delegate { HideMessage(); };
             if (messageButton != null) messageButton.gameObject.SetActive(true);
             if (messageButtonText != null) messageButtonText.text = confirmLabel;
             if (messageCancelRoot != null) messageCancelRoot.SetActive(true);
@@ -1115,15 +1271,19 @@ namespace KazistovVvAr
         private void OnMessageButtonClicked()
         {
             Action action = messageAction;
-            if (action != null && messageRoot != null) messageRoot.SetActive(false);
-            messageAction = null;
-            messageCancelAction = null;
+            // ОКНО ЗАКРЫВАЕТСЯ ВСЕГДА — иначе сообщение без действия висело бы поверх
+            // интерфейса без единой кнопки (лист «ArMessageButton»: «закрывает окно»).
+            HideMessage();
             if (action != null) action();
         }
 
         private void OnMessageCancelClicked()
         {
+            Action cancel = messageCancelAction;
             HideMessage();
+            // ДЕЙСТВИЕ ОТМЕНЫ ОБЯЗАНО ВЫПОЛНИТЬСЯ: поле присваивалось в ShowConfirm, но
+            // обработчик его игнорировал (ДЕРЕВЬЯ_КНОПОК_AR §4.1, пункт 2).
+            if (cancel != null) cancel();
             Debug.Log("[KvAr] ИНТЕРФЕЙС: действие отменено");
         }
 

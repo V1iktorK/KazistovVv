@@ -1692,16 +1692,21 @@ namespace KazistovVvFeatures
 
             if ((point - measureFrom).sqrMagnitude < 1e-8f)
             {
-                // Двойной удар в ту же точку — это промах, а не «ноль метров»: говорим прямо.
+                // УДАР В ТУ ЖЕ ТОЧКУ — это промех, а не «ноль метров»: говорим прямо и
+                // снимаем замер (лист tool.measure: третий удар в ту же точку отменяет замер).
                 measureHasFirst = false;
-                Log.Add(KvLogKind.System, "линейка: вторая точка совпала с первой — замер отменён");
+                Log.Add(KvLogKind.System, "линейка: удар в ту же точку — замер отменён");
                 return;
             }
 
             string text = KvMeasureKit.Describe(measureFrom, point);
             Log.Add(KvLogKind.System, "линейка: " + text);
             Debug.Log("[Measure] расстояние " + text);
-            measureHasFirst = false;
+            // ЛИНЕЙКА НЕПРЕРЫВНАЯ: новая точка становится точкой отсчёта, поэтому следующий
+            // удар считает от неё, а удар в ТУ ЖЕ точку (без движения) снимает замер —
+            // ровно то, что назначено листу «две точки + отмена».
+            measureFrom = point;
+            measureHasFirst = true;
         }
 
         /// <summary>

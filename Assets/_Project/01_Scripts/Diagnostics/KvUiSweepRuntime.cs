@@ -8538,7 +8538,7 @@ namespace KazistovVvDiagnostics
         /// оболочке `KazistovVvUIManager` или на панели шлема, вторая — в собственной заставке
         /// (`KvArCameraGateCanvas`), которая к панелям проекта не относится.
         /// </summary>
-        private static bool IsProjectOwned(Transform t)
+        public static bool IsProjectOwned(Transform t)
         {
             if (t == null) return false;
 
@@ -8550,7 +8550,14 @@ namespace KazistovVvDiagnostics
             }
 
             // Панель шлема строит `KvXrGroupPanel` — она тоже наша, даже если лежит вне менеджера.
-            return t.GetComponentInParent<KvXrGroupPanel>() != null;
+            if (t.GetComponentInParent<KvXrGroupPanel>() != null) return true;
+
+            // ЭКРАННЫЙ ИНТЕРФЕЙС ПЛАНШЕТА (`KvArUi`, корень `ArUiCanvas`) — панели САМОГО
+            // приложения, а не посторонняя заставка: его кнопка «Настройки» ведёт в штатную
+            // панель проекта (ДЕРЕВЬЯ_КНОПОК_AR §4.5), и правило «системный пункт» обязано
+            // её пропустить. Заставка камеры `KvArCameraGateCanvas` сюда НЕ попадает — её
+            // кнопка реально уводит в настройки Android.
+            return t.GetComponentInParent<KvArUi>() != null;
         }
 
         /// <summary>Разрушительные элементы — В КОНЕЦ (порядок устойчивый: две группы, не сортировка).</summary>

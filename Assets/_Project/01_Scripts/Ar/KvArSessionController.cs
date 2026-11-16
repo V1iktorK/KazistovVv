@@ -239,6 +239,16 @@ namespace KazistovVvAr
         }
 
         /// <summary>
+        /// ТЕКСТ ОТКАЗА УСТАНОВКИ ARCORE — ОДИН ИСТОЧНИК ДЛЯ КОДА И ДЛЯ ПРОВЕРКИ.
+        /// Лист «ArMessageButton на сообщении “Установить ARCore не удалось”»: раньше текст
+        /// был вставлен в вызов, и проверка листа могла бы только угадать его. Константа
+        /// ничего не меняет в поведении — она просто не даёт тексту и проверке разойтись.
+        /// </summary>
+        public const string ArCoreInstallFailedText =
+            "Установить ARCore не удалось.\n\n" +
+            "Откройте Google Play и установите «Google Play Services for AR» вручную.";
+
+        /// <summary>
         /// ПОПЫТАТЬСЯ УСТАНОВИТЬ ARCORE. `ARSession.Install()` бросает исключение в состояниях
         /// `None` и `Unsupported` — это документированное поведение, ловим и сообщаем честно.
         /// </summary>
@@ -252,9 +262,7 @@ namespace KazistovVvAr
             catch (InvalidOperationException error)
             {
                 Debug.LogError("[KvAr] установка ARCore невозможна: " + error.Message);
-                if (ui != null)
-                    ui.ShowMessage("Установить ARCore не удалось.\n\n" +
-                                   "Откройте Google Play и установите «Google Play Services for AR» вручную.");
+                if (ui != null) ui.ShowMessage(ArCoreInstallFailedText);
             }
             catch (Exception error)
             {

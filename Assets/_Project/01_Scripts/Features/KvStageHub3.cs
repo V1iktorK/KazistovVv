@@ -248,8 +248,25 @@ namespace KazistovVvFeatures
 
         public void OpenTab(string tabKey)
         {
-            if (KvWorkbenchWindow.Instance == null) return;
+            if (KvWorkbenchWindow.Instance == null)
+            {
+                // ТИХИЙ ОТКАЗ БЫЛ ДЕФЕКТОМ ЛИСТА calib.tab: нажатие не давало ни результата,
+                // ни объяснения. Причина называется с фактами — какое окно не найдено и почему
+                // вкладка от него зависит.
+                string reason = MissingWindowReason(tabKey);
+                KvActionLog.Instance.Add(KvLogKind.Warning, reason);
+                Debug.Log("[Stage3] " + reason);
+                return;
+            }
             KvWorkbenchWindow.Instance.Show(tabKey);
+        }
+
+        /// <summary>ПРИЧИНА, ПОЧЕМУ ВКЛАДКА НЕ ОТКРЫЛАСЬ (чистая функция — её проверяет тест).</summary>
+        public static string MissingWindowReason(string tabKey)
+        {
+            return "вкладка «" + (string.IsNullOrEmpty(tabKey) ? "?" : tabKey) +
+                   "» не открыта: окно «Верстак» в сцене нет — вкладки калибровки и других " +
+                   "инструментов открываются только в нём";
         }
 
         /// <summary>Ограничение ориентации выбранной промежуточной точки «как сейчас» (этап 7).</summary>
