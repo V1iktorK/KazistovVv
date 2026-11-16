@@ -279,36 +279,77 @@ namespace KazistovVvFeatures
 
         // ================================================================== действия
 
+        /// <summary>
+        /// ТИХИЙ ОТКАЗ СТАЛ ПРИЧИНОЙ (волна 2 кампании «каждый листочек закрыт»).
+        ///
+        /// ЧТО БЫЛО. Обработчики этого хаба заканчивались строкой `if (сервис == null) return;`:
+        /// нажатие не давало ни результата, ни объяснения, а на устройстве консоли нет —
+        /// оператор видел ровно «нажал и ничего». Дефект листьев `startmenu.show`,
+        /// `workbench.toggle`, `post.smooth/timeoptimal/energy`, `tut.toggle/tut.restart`,
+        /// `demo.quick` (ДЕРЕВЬЯ_КНОПОК_КОМАНДЫ: «тихий отказ»).
+        ///
+        /// ЧТО СТАЛО. Отказ называется с фактом — какой службы нет и почему нажатие не
+        /// выполнилось, — и уходит в `KvActionLog` (журнал действий), а не только в консоль.
+        /// Одна точка входа на весь хаб: написать причину нельзя забыть в одном месте из восьми.
+        /// </summary>
+        private static void Refuse(string reason)
+        {
+            KvActionLog.Instance.Add(KvLogKind.Warning, reason);
+            Debug.Log("[Stages2] " + reason);
+        }
+
         public void ToggleStartMenu()
         {
-            if (StartMenu == null) return;
+            if (StartMenu == null)
+            {
+                Refuse("главное меню не показано: стартовое меню в сцене нет");
+                return;
+            }
             if (StartMenu.Visible) StartMenu.Hide();
             else StartMenu.Show();
         }
 
         public void ToggleWorkbench()
         {
-            if (Workbench == null) return;
+            if (Workbench == null)
+            {
+                Refuse("верстак не показан: окно «Верстак» в сцене нет");
+                return;
+            }
             Workbench.Toggle();
         }
 
         public void OpenWorkbench(string tabKey)
         {
-            if (Workbench == null) return;
+            if (Workbench == null)
+            {
+                // Причина — та же честная формулировка, что в третьем хабе (лист calib.tab):
+                // один текст на все вкладки, чтобы код и проверка не расходились.
+                Refuse(KvStageHub3.MissingWindowReason(tabKey));
+                return;
+            }
             Workbench.Show(tabKey);
         }
 
         /// <summary>Показать обучение (продолжить с сохранённого шага, если оно не закончено).</summary>
         public void StartTutorial()
         {
-            if (Tutorial == null) return;
+            if (Tutorial == null)
+            {
+                Refuse("обучение не запущено: туториал в сцене нет");
+                return;
+            }
             if (Tutorial.Active) Tutorial.Skip("повторное нажатие");
             else Tutorial.StartTutorial(KvTutorial.StartedNotFinished);
         }
 
         public void ToggleTutorial()
         {
-            if (Tutorial == null) return;
+            if (Tutorial == null)
+            {
+                Refuse("обучение не переключено: туториал в сцене нет");
+                return;
+            }
             if (Tutorial.Active) Tutorial.Skip("кнопка «Обучение»");
             else Tutorial.StartTutorial(KvTutorial.StartedNotFinished);
         }
@@ -316,7 +357,11 @@ namespace KazistovVvFeatures
         /// <summary>Показать демонстрацию (этап 3).</summary>
         public void PlayDemo()
         {
-            if (QuickStart == null) return;
+            if (QuickStart == null)
+            {
+                Refuse("демонстрация не запущена: служба демонстрации в сцене нет");
+                return;
+            }
             if (QuickStart.Running) QuickStart.StopDemo("повторное нажатие");
             else QuickStart.Begin();
         }
@@ -741,7 +786,17 @@ namespace KazistovVvFeatures
                 Description = "Сбросить прогресс обучения и начать с первого шага",
                 Icon = "reset",
                 MenuPath = "Справка/Обучение заново",
-                Execute = delegate { if (hub.Tutorial != null) hub.Tutorial.RestartTutorial(); }
+                Execute = delegate
+                {
+                    // ТИХИЙ ОТКАЗ (лист tut.restart): раньше условие стояло прямо в
+                    // обработчике и молча ничего не делало.
+                    if (hub.Tutorial == null)
+                    {
+                        Refuse("обучение не перезапущено: туториал в сцене нет");
+                        return;
+                    }
+                    hub.Tutorial.RestartTutorial();
+                }
             });
 
             // --- ЭТАПЫ 4–6: верстак постобработки
@@ -819,10 +874,21 @@ namespace KazistovVvFeatures
                 MenuPath = "Робот/Постобработка/Автосглаживание",
                 Execute = delegate
                 {
-                    if (hub.Smoothing == null) return;
+                    if (hub.Smoothing == null)
+                    {
+                        // ТИХИЙ ОТКАЗ (лист post.auto): без службы переключать нечего, и раньше
+                        // причина уходила ТОЛЬКО в консоль Unity — на устройстве консоли нет.
+                        string reason = "автосглаживание не переключено: служба сглаживания в сцене нет";
+                        KvActionLog.Instance.Add(KvLogKind.Warning, reason);
+                        Debug.Log("[Stages2] " + reason);
+                        return;
+                    }
                     hub.Smoothing.Auto = !hub.Smoothing.Auto;
-                    Debug.Log("[Stages2] автосглаживание " +
-                              (hub.Smoothing.Auto ? "включено" : "выключено"));
+                    // СЛЕД В ЖУРНАЛЕ (лист post.auto): переключение виделось только в консоли.
+                    string state = "автосглаживание " +
+                                  (hub.Smoothing.Auto ? "включено" : "выключено");
+                    KvActionLog.Instance.Add(KvLogKind.Ui, state);
+                    Debug.Log("[Stages2] " + state);
                 },
                 IsChecked = delegate { return hub.Smoothing != null && hub.Smoothing.Auto; }
             });
@@ -840,12 +906,23 @@ namespace KazistovVvFeatures
                 MenuPath = "Робот/Постобработка/Сглаживать только выбранный",
                 Execute = delegate
                 {
-                    if (hub.Smoothing == null) return;
+                    if (hub.Smoothing == null)
+                    {
+                        // ТИХИЙ ОТКАЗ (лист post.auto.selected): та же причина, что у post.auto,
+                        // — и тоже только в консоли, чего на устройстве не существует.
+                        string reason = "режим «только выбранный вариант» не переключен: служба сглаживания в сцене нет";
+                        KvActionLog.Instance.Add(KvLogKind.Warning, reason);
+                        Debug.Log("[Stages2] " + reason);
+                        return;
+                    }
                     hub.Smoothing.AutoSelectedOnly = !hub.Smoothing.AutoSelectedOnly;
-                    Debug.Log("[Stages2] автосглаживание " +
-                              (hub.Smoothing.AutoSelectedOnly
-                                  ? "только выбранного варианта (быстрее)"
-                                  : "всех вариантов (как было)"));
+                    // СЛЕД В ЖУРНАЛЕ (лист post.auto.selected): переключение было только в консоли.
+                    string state = "автосглаживание: " +
+                                  (hub.Smoothing.AutoSelectedOnly
+                                      ? "только выбранного варианта (быстрее)"
+                                      : "всех вариантов (как было)");
+                    KvActionLog.Instance.Add(KvLogKind.Ui, state);
+                    Debug.Log("[Stages2] " + state);
                 },
                 IsChecked = delegate
                 {

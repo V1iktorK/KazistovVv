@@ -1203,9 +1203,19 @@ namespace KazistovVvUI
                 Execute = delegate
                 {
                     FreeFlyCameraController cam = CameraRig;
-                    if (cam == null) return;
+                    if (cam == null)
+                    {
+                        // ТИХИЙ ОТКАЗ (лист path.select): причина уходила только в консоль.
+                        string reason = "зелёный лазер не переключен: рига в сцене нет";
+                        KazistovVvFeatures.KvActionLog.Instance.Add(KazistovVvFeatures.KvLogKind.Warning, reason);
+                        Debug.Log("[KazistovVv] " + reason);
+                        return;
+                    }
                     cam.rightHandEnabled = !cam.rightHandEnabled;
-                    Log("Зелёный лазер: " + (cam.rightHandEnabled ? "включён" : "выключен"));
+                    // СЛЕД В ЖУРНАЛЕ (лист path.select): включение лазера — событие, а не консоль.
+                    string state = "зелёный лазер: " + (cam.rightHandEnabled ? "включён" : "выключен");
+                    KazistovVvFeatures.KvActionLog.Instance.Add(KazistovVvFeatures.KvLogKind.Ui, state);
+                    Log(state);
                 },
                 IsChecked = delegate { return CameraRig != null && CameraRig.rightHandEnabled; },
                 CheckedTint = delegate { return KvTheme.LaserGreen; }
@@ -1366,11 +1376,22 @@ namespace KazistovVvUI
                 Execute = delegate
                 {
                     FreeFlyCameraController cam = CameraRig;
-                    if (cam == null) return;
+                    if (cam == null)
+                    {
+                        // ТИХИЙ ОТКАЗ (лист tool.flashlight): без рига фонарик не зажигается,
+                        // и раньше об этом не говорил ни журнал, ни консоль.
+                        string reason = "фонарик не переключен: рига в сцене нет";
+                        KazistovVvFeatures.KvActionLog.Instance.Add(KazistovVvFeatures.KvLogKind.Warning, reason);
+                        Debug.Log("[KazistovVv] " + reason);
+                        return;
+                    }
                     bool on = !cam.FlashlightOn;
                     cam.SetFlashlight(on);
                     KvSettings.Flashlight = on;
-                    Log("Фонарик: " + (on ? "включён" : "выключен"));
+                    // СЛЕД В ЖУРНАЛЕ (лист tool.flashlight): состояние света — событие журнала.
+                    string state = "фонарик: " + (on ? "включён" : "выключен");
+                    KazistovVvFeatures.KvActionLog.Instance.Add(KazistovVvFeatures.KvLogKind.Ui, state);
+                    Log(state);
                 },
                 IsChecked = delegate { return CameraRig != null && CameraRig.FlashlightOn; }
             });
@@ -1436,7 +1457,11 @@ namespace KazistovVvUI
                 Execute = delegate
                 {
                     string code = KvLoc.Cycle();
-                    Log("язык интерфейса: " + KvLoc.CurrentName + " (" + code + ")");
+                    // СЛЕД В ЖУРНАЛЕ (лист lang.cycle): строка уходила только в консоль
+                    // (`Log`), а на устройстве консоли нет — смена языка была невидима.
+                    string line = "смена языка интерфейса: " + KvLoc.CurrentName + " (" + code + ")";
+                    KazistovVvFeatures.KvActionLog.Instance.Add(KazistovVvFeatures.KvLogKind.Ui, line);
+                    Log(line);
                 }
             });
 
@@ -1902,6 +1927,16 @@ namespace KazistovVvUI
                 default:
                     Log("Пункт настроек «" + id + "» пока не имеет обработчика (структура готова)");
                     return;
+            }
+            // МОЛЧАЛИВЫЙ РАЗРЫВ (листы view.workspace / view.limits / view.metrics): настройка
+            // записана, а сцена не тронута — раньше об этом не говорил НИКТО, и оператор видел
+            // горящую галку с неизменившейся картиной. Причина с фактом уходит в журнал.
+            if (f == null && (id == "vis.workspace" || id == "vis.limits" || id == "vis.metrics"))
+            {
+                string reason = "настройка «" + id + "» " + (value ? "включена" : "выключена") +
+                                ", но визуализатора в сцене нет — картинка не изменится";
+                KazistovVvFeatures.KvActionLog.Instance.Add(KazistovVvFeatures.KvLogKind.Warning, reason);
+                Debug.Log("[KazistovVv] " + reason);
             }
             Log("Настройка «" + id + "»: " + (value ? "включена" : "выключена"));
             if (toolbar != null) toolbar.Refresh();

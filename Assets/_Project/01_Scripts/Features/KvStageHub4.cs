@@ -516,7 +516,19 @@ namespace KazistovVvFeatures
 
         public void OpenTab(string tabKey)
         {
-            if (KvWorkbenchWindow.Instance == null) return;
+            if (KvWorkbenchWindow.Instance == null)
+            {
+                // ТИХИЙ ОТКАЗ БЫЛ ДЕФЕКТОМ 15 ЛИСТЬЕВ ЭТОЙ ВОЛНЫ (collision.tab, lab.tab,
+                // cameras.tab, forces.tab, heat.time, report.pdf, net.tab, script.tab, bt.tab,
+                // mat.tab, titles.tab, vo.tab, fail.tab, valid.tab, logtools.tab): нажатие не
+                // давало ни результата, ни объяснения — тот же дефект, что волна 1 лечила в
+                // `KvStageHub3.OpenTab` (лист calib.tab), только во втором хабе. Причина
+                // называется с фактами теми же словами, что и в третьем хабе.
+                string reason = KvStageHub3.MissingWindowReason(tabKey);
+                KvActionLog.Instance.Add(KvLogKind.Warning, reason);
+                Debug.Log("[Stages4] " + reason);
+                return;
+            }
             KvWorkbenchWindow.Instance.Show(tabKey);
         }
 
@@ -1003,7 +1015,17 @@ namespace KazistovVvFeatures
         public static void OpenGraphicsTab()
         {
             KazistovVvUIManager ui = KazistovVvUIManager.Instance;
-            if (ui == null) return;
+            if (ui == null)
+            {
+                // ТИХИЙ ОТКАЗ (лист graphics.tab: «три из пяти — тихие отказы»). Раздел «Графика»
+                // живёт ВНУТРИ панели настроек: без панели открыть его нечем, и раньше нажатие
+                // молча ни к чему не приводило. Причина называется с фактом — какое окно не найдено.
+                string reason = "раздел «Графика» не открыт: панель настроек в сцене нет — " +
+                                "раздел открывается только из неё (вкладка «Настройки»)";
+                KvActionLog.Instance.Add(KvLogKind.Warning, reason);
+                Debug.Log("[Stages4] " + reason);
+                return;
+            }
             ui.ShowSettings(KvSettingsView.GraphicsTabIndex);
         }
 

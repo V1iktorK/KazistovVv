@@ -1215,7 +1215,7 @@ namespace KazistovVvFeatures
             {
                 Id = "pose.goto",
                 Title = "Перейти в позу",
-                Description = "Плавный переезд робота в выбранную позу (панель «Позы»)",
+                Description = "Открывает вкладку «Позы» панели функций; робот остаётся на месте",
                 Icon = "robot",
                 MenuPath = "Робот/Позы/Перейти в позу",
                 Execute = delegate { hub.Window.Show(1); }
@@ -1279,7 +1279,8 @@ namespace KazistovVvFeatures
                 Description = "Список зон: размер, перемещение, удаление, показать/скрыть",
                 Icon = "zone",
                 MenuPath = "Вид/Зоны запрета/Список зон",
-                Execute = delegate { hub.Window.Toggle(3); }
+                Execute = delegate { hub.Window.Toggle(3); },
+                IsChecked = delegate { return hub.Window != null && hub.Window.Visible && hub.Window.VisibleTab == 3; }
             });
             KvCommands.Register(new KvCommand
             {
@@ -1315,7 +1316,8 @@ namespace KazistovVvFeatures
                 Hotkey = "F7",
                 Icon = "compare",
                 MenuPath = "Вид/Сравнение траекторий/Открыть панель",
-                Execute = delegate { hub.Window.Toggle(4); }
+                Execute = delegate { hub.Window.Toggle(4); },
+                IsChecked = delegate { return hub.Window != null && hub.Window.Visible && hub.Window.VisibleTab == 4; }
             });
 
             // --- ЭТАП 7: графики углов
@@ -1401,7 +1403,8 @@ namespace KazistovVvFeatures
                 Hotkey = "F6",
                 Icon = "log",
                 MenuPath = "Сервис/Журнал действий",
-                Execute = delegate { hub.Window.Toggle(7); }
+                Execute = delegate { hub.Window.Toggle(7); },
+                IsChecked = delegate { return hub.Window != null && hub.Window.Visible && hub.Window.VisibleTab == 7; }
             });
             KvCommands.Register(new KvCommand
             {
@@ -1421,7 +1424,8 @@ namespace KazistovVvFeatures
                 Description = "Время генерации, попытки планирования, итерации, отброшенные дубликаты",
                 Icon = "metrics",
                 MenuPath = "Сервис/Производительность планировщика",
-                Execute = delegate { hub.Window.Toggle(6); }
+                Execute = delegate { hub.Window.Toggle(6); },
+                IsChecked = delegate { return hub.Window != null && hub.Window.Visible && hub.Window.VisibleTab == 6; }
             });
 
             // --- ЭТАП 15: Undo / Redo (активируем штатные кнопки-заглушки)
@@ -1456,7 +1460,8 @@ namespace KazistovVvFeatures
                 Description = "Готовые сценарии: workspace, pick-and-place, лимиты, 8 траекторий",
                 Icon = "scenario",
                 MenuPath = "Сервис/Сценарии",
-                Execute = delegate { hub.Window.Toggle(8); }
+                Execute = delegate { hub.Window.Toggle(8); },
+                IsChecked = delegate { return hub.Window != null && hub.Window.Visible && hub.Window.VisibleTab == 8; }
             });
             KvCommands.Register(new KvCommand
             {
@@ -1511,7 +1516,8 @@ namespace KazistovVvFeatures
                 Description = "Сохранённые сессии: загрузить, удалить, посмотреть содержимое",
                 Icon = "session",
                 MenuPath = "Файл/Сессия/Список сессий",
-                Execute = delegate { hub.Window.Toggle(9); }
+                Execute = delegate { hub.Window.Toggle(9); },
+                IsChecked = delegate { return hub.Window != null && hub.Window.Visible && hub.Window.VisibleTab == 9; }
             });
 
             // --- Панель функций целиком
@@ -1523,7 +1529,8 @@ namespace KazistovVvFeatures
                 Hotkey = "F5",
                 Icon = "features",
                 MenuPath = "Вид/Панель функций",
-                Execute = delegate { hub.Window.Toggle(0); }
+                Execute = delegate { hub.Window.Toggle(0); },
+                IsChecked = delegate { return hub.Window != null && hub.Window.Visible && hub.Window.VisibleTab == 0; }
             });
 
             // --- Файл: сохранение/загрузка записей и поз вручную

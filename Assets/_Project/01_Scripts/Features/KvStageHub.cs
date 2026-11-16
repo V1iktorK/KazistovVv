@@ -646,7 +646,7 @@ namespace KazistovVvFeatures
             {
                 Id = "video.toggle",
                 Title = "Начать / остановить запись",
-                Description = "Запись вида оператора (MP4 через Unity Recorder) в папку «Видео»",
+                Description = "Пишет кадры PNG (frame_000001.png …) и манифест recording.json в папку записи; готового видеофайла сборка не делает",
                 Hotkey = "F10",
                 Icon = "video",
                 MenuPath = "Файл/Экспорт демонстрации/Запись видео",
@@ -664,9 +664,22 @@ namespace KazistovVvFeatures
                 MenuPath = "Файл/Экспорт демонстрации/Подпись на скриншоте",
                 Execute = delegate
                 {
+                    if (hub.Capture == null)
+                    {
+                        // ТИХИЙ ОТКАЗ (лист shot.annotate): раньше отказа не было вовсе —
+                        // команда падала исключением, а причины оператор не видел ни в журнале,
+                        // ни в консоли (на устройстве консоли нет).
+                        string reason = "подпись на скриншоте не переключена: служба захвата в сцене нет";
+                        KvActionLog.Instance.Add(KvLogKind.Warning, reason);
+                        Debug.Log("[Capture] " + reason);
+                        return;
+                    }
                     hub.Capture.annotate = !hub.Capture.annotate;
-                    Debug.Log("[Capture] подпись на скриншоте: " +
-                              (hub.Capture.annotate ? "включена" : "выключена"));
+                    // СЛЕД В ЖУРНАЛЕ (лист shot.annotate): переключение писалось только в консоль.
+                    string state = "подпись на скриншоте " +
+                                  (hub.Capture.annotate ? "включена" : "выключена");
+                    KvActionLog.Instance.Add(KvLogKind.Ui, state);
+                    Debug.Log("[Capture] " + state);
                 },
                 IsChecked = delegate { return hub.Capture != null && hub.Capture.annotate; }
             });
