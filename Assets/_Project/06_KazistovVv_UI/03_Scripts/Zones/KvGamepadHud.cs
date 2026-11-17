@@ -36,6 +36,19 @@ namespace KazistovVvUI
         /// <summary>Подпись состояния геймпада (диагностика).</summary>
         public string StatusText { get { return title != null ? title.text : ""; } }
 
+        /// <summary>
+        /// ИНТЕРВАЛ ОБНОВЛЕНИЯ ИНДИКАТОРА, СЕКУНД (оптимизация MR, 17.11.2026).
+        /// Общая функция <see cref="KazistovVvFeatures.KvMrPerformance"/>: в MR обновления идут
+        /// реже, чем в VR, — и в том, и в другом случае по таймеру, а не каждый кадр.
+        /// </summary>
+        public float UpdateInterval
+        {
+            get { return KazistovVvFeatures.KvMrPerformance.UiUpdateIntervalSeconds(); }
+        }
+
+        /// <summary>Когда последний раз обновлялись строки (таймер <see cref="UpdateInterval"/>).</summary>
+        private float lastTick = -1000f;
+
         /// <summary>Собрать индикатор на канвасе.</summary>
         public static KvGamepadHud Create(RectTransform canvas)
         {
@@ -222,6 +235,15 @@ namespace KazistovVvUI
             bool enabled = KvSettings.GamepadHud;
             if (root.gameObject.activeSelf != enabled) root.gameObject.SetActive(enabled);
             if (!enabled) return;
+
+            // ТРОТТЛИНГ (оптимизация MR, 17.11.2026). Ниже — сборка строк состояния и цветов:
+            // в `Update` она аллоцирует строки (`+ ": "` в каждой подписи) и гонит их через
+            // сборщик мусора каждый кадр (Docs/PERFORMANCE_AUDIT.md, §3.1 «KvGamepadHud.Update —
+            // 7 аллокаций»). По таймеру те же строки собираются 20 раз в секунду в VR и ещё
+            // реже в MR; индикатор от этого не «замерзает» — показываемое состояние меняется
+            // медленнее кадра, а не медленнее действия оператора.
+            if (!KazistovVvFeatures.KvMrPerformance.Due(Time.unscaledTime, UpdateInterval, ref lastTick))
+                return;
 
             KvGamepadRouter router = KvGamepadRouter.Instance;
             bool present = router != null && router.Present;

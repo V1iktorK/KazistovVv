@@ -901,12 +901,56 @@ namespace KazistovVvFeatures
 
         // ================================================================== применение
 
+        /// <summary>
+        /// ПРОФИЛЬ, КОТОРЫЙ РЕАЛЬНО ПРИМЕНЯЕТСЯ: в MR поверх профиля оператора ложится
+        /// MR-пресет (<see cref="KvMrPerformance"/>), в VR — оригинал.
+        ///
+        /// ПОЧЕМУ КОПИЯ, А НЕ ПЕРЕЗАПИСЬ. Пресет оператора живёт в PlayerPrefs и обязан
+        /// пережить визит в MR: иначе после одного запуска в MR он обнаружил бы выключенные
+        /// эффекты и пониженный масштаб как СВОИ настройки, а правка любой графической строки
+        /// в MR сохраняла бы дешёвые значения в его профиль.
+        /// </summary>
+        public static KvGraphicsProfile EffectiveProfileFor(KvGraphicsProfile chosen)
+        {
+            if (chosen == null) return null;
+            if (!KvMrPerformance.IsMrMode()) return chosen;
+            KvGraphicsProfile cheap = chosen.Clone();
+            KvMrPerformance.ApplyTo(cheap);
+            return cheap;
+        }
+
         /// <summary>Применить текущий профиль. Возвращает построчный отчёт.</summary>
         public string Apply(bool announce)
         {
             if (active == null) active = ProfileOf(EffectivePreset());
             active.Normalize(KvGraphicsHardwareProbe.SupportsRayTracing());
 
+            // --- MR-ПРЕСЕТ (оптимизация MR, пункт плана 17.11.2026): подмена профиля только
+            // НА ВРЕМЯ применения и с обязательным возвратом — см. `EffectiveProfileFor`.
+            KvGraphicsProfile operatorProfile = active;
+            bool mrPreset = KvMrPerformance.IsMrMode();
+            active = EffectiveProfileFor(operatorProfile);
+
+            string report = ApplyInner(announce);
+
+            active = operatorProfile;
+            if (mrPreset)
+            {
+                // Строка в ОТЧЁТЕ: без неё оператор не отличил бы «MR-пресет сработал» от
+                // «графика не применялась» (в пакетном режиме служба честно пишет отказ).
+                applyReport = applyReport + "\n" + KazistovVvUI.KvLoc.T("mr.preset.applied",
+                    "MR-пресет применён: масштаб отрисовки ниже " +
+                    KvMrPerformance.MaxRenderScale.ToString("0.0",
+                        System.Globalization.CultureInfo.InvariantCulture) +
+                    ", тени упрощены, дорогие эффекты выключены");
+                report = applyReport;
+            }
+            return report;
+        }
+
+        /// <summary>Тело применения (без изменений) — см. <see cref="Apply"/>.</summary>
+        private string ApplyInner(bool announce)
+        {
             StringBuilder sb = new StringBuilder();
             if (!KvGraphics.Available)
             {
