@@ -80,6 +80,11 @@ namespace KazistovVvTests
             // события — проверяемая правда была бы не поведением кода, а правилом журнала.
             repeatsWereOn = KvActionLog.Instance.suppressRepeats;
             KvActionLog.Instance.suppressRepeats = false;
+            // ЖУРНАЛ КОЛЬЦЕВОЙ (capacity = 600): на полном прогоне он уже переполнен чужими
+            // тестами, старые строки вытесняются — и проверка «новая строка появилась ПОСЛЕ
+            // индекса before» получает пустой хвост и ложно проваливается. Чистим журнал на
+            // ВХОДЕ в фикстуру: каждый тест волны тогда пишет в свой собственный буфер.
+            KvActionLog.Instance.Clear();
 
             if (registrySnapshot == null)
             {
