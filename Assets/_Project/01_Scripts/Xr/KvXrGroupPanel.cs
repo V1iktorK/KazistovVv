@@ -2057,7 +2057,7 @@ for (int i = 0; i < shown; i++) labels.Add("Стол: " + NameOf(startTables[i])
 case KvXrStartSection.Robots:                {
 int shown = Mathf.Min(startRobots.Count, KvXrStartMenuRows.MaxExistingRows);
 for (int i = 0; i < shown; i++) labels.Add("Робот: " + NameOf(startRobots[i]));
-                    labels.Add("Добавить 6-осевой робот");
+                    labels.Add(KvXrStartMenuRows.AddSixAxisRowLabel);
                     labels.Add("Добавить SCARA");
                     labels.Add("Сменить робота");
                     // СТРОКА ВЛАДЕЛЬЦА (12.11.2026): «Переместить робота». Подпись, действие и
@@ -2364,12 +2364,47 @@ Debug.Log("[KvXr] МЕНЮ: создан стол «" + table.name + "» · ст
                 if (!KvXrObjectFactory.AbsoluteWorldHeights) spot.y = KvXrTableKinds.TopHeight;
             }
 
-            RobotController robot = KvXrObjectFactory.CreateRobot(scara, spot, 0f);
+            // ОСНОВНОЙ РОБОТ ПРОГРАММЫ — THOR (решение владельца 17.11.2026).
+            //
+            // ЧТО БЫЛО: шестиосевая строка клонировала сценный эталон (`KvXrObjectFactory`)
+            // — то есть робота проекта, а не того, что владелец собирает руками.
+            // ЧТО СТАЛО: строка ставит МОДЕЛЬ КАТАЛОГА ПО УМОЛЧАНИЮ (`KvRobotCatalog.Default`
+            // = THOR) через тот же спавнер, что и выбор модели в меню левой руки. Один путь
+            // создания — значит одинаковые суставы, оси и материалы во всех меню.
+            // SCARA создаётся как раньше: второстепенный робот, своего каталога у него нет.
+            RobotController robot = scara
+                ? KvXrObjectFactory.CreateRobot(true, spot, 0f)
+                : CreateDefaultRobot(spot);
             if (robot == null) return;
             RefreshStartLists();
             Rebuild();
             Debug.Log("[KvXr] МЕНЮ: создан робот «" + robot.robotName + "» · столов " +
                       startTables.Count + " · роботов " + startRobots.Count);
+        }
+
+        /// <summary>
+        /// СОЗДАТЬ ОСНОВНОГО РОБОТА ИЗ МЕНЮ ШЛЕМА — МОДЕЛЬ КАТАЛОГА ПО УМОЛЧАНИЮ (THOR).
+        ///
+        /// Отдельный метод, а не «ещё один вызов фабрики»: у `KvXrObjectFactory` своя копия
+        /// сценного эталона, а основной робот теперь определяется КАТАЛОГОМ. Место берётся
+        /// там же, где брала его строка меню (существующий робот либо точка перед оператором).
+        /// </summary>
+        private static RobotController CreateDefaultRobot(Vector3 spot)
+        {
+            KazistovVv.Core.KvRobotModel model = KazistovVv.Core.KvRobotCatalog.Default;
+            if (model == null)
+            {
+                Debug.LogWarning("[KvXr] МЕНЮ: в каталоге нет модели по умолчанию — робот не создан");
+                return null;
+            }
+
+            RobotController robot = KazistovVv.Core.KvRobotSpawner.Create(model, spot, 0f);
+            if (robot == null)
+            {
+                Debug.LogWarning("[KvXr] МЕНЮ: основной робот «" + model.Title + "» не создан — " +
+                                 "см. причину выше (нет префаба, суставов или геометрии)");
+            }
+            return robot;
         }
 private void InvokeMenuCommand(string id, string title)
 {

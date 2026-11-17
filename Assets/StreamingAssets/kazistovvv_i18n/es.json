@@ -585,6 +585,14 @@
       "text": "El otro robot de la celda pasa a estar activo"
     },
     {
+      "key": "cmd.robot.model.thor",
+      "text": "Robot: THOR"
+    },
+    {
+      "key": "cmd.robot.model.thor.desc",
+      "text": "Colocar el robot THOR sobre la mesa — el brazo abierto de 6 ejes que ensambla el propietario (625 mm estirado, 750 g)"
+    },
+    {
       "key": "cmd.view.workspace",
       "text": "Espacio alcanzable"
     },

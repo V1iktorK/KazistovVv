@@ -43,6 +43,13 @@ namespace KazistovVvUI
             BuildRobotChooser(parent);
         }
 
+        /// <summary>
+        /// ПОДПИСЬ ПЕРВОГО ПУНКТА ВЫБОРА РОБОТА (17.11.2026): основной робот программы — THOR.
+        /// Константа нужна тесту подписи: меню обязано называть того робота, которого и ставит
+        /// (`KazistovVvUIManager.CatalogModelForChooser(0)`).
+        /// </summary>
+        public const string SixAxisChooserLabel = "THOR · 6 осей  (1)";
+
         /// <summary>Панель выбора типа робота (появляется по «Добавить робота»).</summary>
         private void BuildRobotChooser(RectTransform parent)
         {
@@ -64,7 +71,7 @@ namespace KazistovVvUI
             title.rectTransform.offsetMin = new Vector2(0f, -40f);
             title.rectTransform.offsetMax = new Vector2(0f, -8f);
 
-            Button six = KvTheme.CreateButton(chooserRoot, "Btn_SixAxis", "6-осевой  (1)",
+            Button six = KvTheme.CreateButton(chooserRoot, "Btn_SixAxis", SixAxisChooserLabel,
                 () => onRobotTypeChosen?.Invoke(0), 34);
             RectTransform sr = (RectTransform)six.transform;
             sr.anchorMin = new Vector2(0.5f, 1f);

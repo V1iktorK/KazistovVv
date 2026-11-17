@@ -81,6 +81,9 @@ namespace KazistovVvUI
                     // Эти команды регистрируются ДИНАМИЧЕСКИ в KvRobotCommands (по одной
                     // на модель каталога), поэтому статический парсинг реестра их не видит —
                     // тест-сторож знает про префикс robot.model. и не считает их «мёртвыми».
+                    // THOR — ПЕРВЫМ (17.11.2026): основной робот программы стоит первым
+                    // и в каталоге, и в этой группе.
+                    "robot.model.thor",
                     "robot.model.stand_6axis", "robot.model.scara_ls10b702s",
                     "robot.model.ur5", "robot.model.kuka_iiwa7",
                     "robot.model.kuka_iiwa14", "robot.model.abb_irb6640",

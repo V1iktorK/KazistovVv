@@ -585,6 +585,14 @@
       "text": "The other robot of the cell becomes active"
     },
     {
+      "key": "cmd.robot.model.thor",
+      "text": "Robot: THOR"
+    },
+    {
+      "key": "cmd.robot.model.thor.desc",
+      "text": "Place the THOR robot on the table — the open-source 6-axis arm the owner is building (625 mm stretched, 750 g payload)"
+    },
+    {
       "key": "cmd.view.workspace",
       "text": "Reachable workspace"
     },

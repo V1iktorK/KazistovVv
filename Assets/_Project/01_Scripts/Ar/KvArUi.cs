@@ -383,6 +383,9 @@ namespace KazistovVvAr
 
             string[][] treeRows =
             {
+                // THOR — ПЕРВЫМ (17.11.2026): основной робот программы идёт первой строкой
+                // дерева, остальные модели каталога — ниже (парность каталога сохранена).
+                new[] { "THOR (основной)", "robot.model.thor" },
                 new[] { "6-осевой робот", "robot.model.stand_6axis" },
                 new[] { "SCARA LS10-B702S", "robot.model.scara_ls10b702s" },
                 new[] { "Квадратный стол", "table.square" },
@@ -944,6 +947,7 @@ namespace KazistovVvAr
                         "ar.place.marker",
                         "robot.switch", "robot.playpause", "robot.stop", "estop",
                         "joints.panel", "pose.save", "pose.goto", "gripper.toggle",
+                        "robot.model.thor",
                         "robot.model.stand_6axis", "robot.model.scara_ls10b702s",
                         "robot.model.ur5", "robot.model.kuka_iiwa7", "robot.model.kuka_iiwa14",
                         "robot.model.abb_irb6640", "robot.model.fanuc_m20ib",

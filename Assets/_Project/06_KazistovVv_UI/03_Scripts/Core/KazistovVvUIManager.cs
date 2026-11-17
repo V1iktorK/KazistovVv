@@ -172,6 +172,15 @@ namespace KazistovVvUI
 
         // Размещение роботов/столов (логика прежняя — перенесена без изменений поведения).
         private RobotController pendingRobotTemplate;
+
+        /// <summary>
+        /// МОДЕЛЬ КАТАЛОГА, КОТОРУЮ СТАВИТ РАЗМЕЩЕНИЕ (17.11.2026: основной робот — THOR).
+        ///
+        /// Пусто — размещение клонирует сценный шаблон, как раньше. Задано — в точку ставится
+        /// МОДЕЛЬ ИЗ `KvRobotCatalog` (`KvRobotSpawner.Create`), то есть робот с правильными
+        /// суставами, осями и геометрией. Выбирается в `OnRobotTypeChosen(0)`.
+        /// </summary>
+        private KazistovVv.Core.KvRobotModel pendingCatalogModel;
         private Transform pendingTable;
         private bool yawManual;
         private Transform yawTrackedTable;
@@ -3063,18 +3072,80 @@ namespace KazistovVvUI
         /// <summary>Выбор робота из «верстака» тулбара (0 — робот, 1 — SCARA).</summary>
         private void SelectRobotByWorkbench(int typeIndex)
         {
-            foreach (RobotController rc in UnityEngine.Object.FindObjectsByType<RobotController>(
-                FindObjectsInactive.Include))
+            // ОСНОВНОЙ РОБОТ — THOR (17.11.2026). Правило выбора вынесено в чистую функцию
+            // `PickWorkbenchRobot`, чтобы тест проверял именно его, а не косвенно по сцене.
+            RobotController[] all = UnityEngine.Object.FindObjectsByType<RobotController>(
+                FindObjectsInactive.Include);
+            var visible = new System.Collections.Generic.List<RobotController>();
+            foreach (RobotController rc in all)
             {
                 if (rc == null || RuntimeRegistry.IsHidden(rc.gameObject)) continue;
+                visible.Add(rc);
+            }
+
+            int index = PickWorkbenchRobot(visible.ToArray(), typeIndex);
+            if (index < 0) return;
+            RobotController chosen = visible[index];
+            ActivateRobotOnly(chosen);
+            Log("Верстак: активный робот — " + chosen.robotName +
+                (IsDefaultRobot(chosen) ? " (основной робот программы)" : ""));
+        }
+
+        /// <summary>
+        /// КАКОГО РОБОТА ВЫБИРАЕТ ВЕРСТАК — ЧИСТАЯ ФУНКЦИЯ (17.11.2026).
+        ///
+        /// Правило: сегмент «робот» активирует модель ПО УМОЛЧАНИЮ (THOR), если она есть в
+        /// списке, иначе — первого робота нужного типа (прежнее поведение, ничего не ломается).
+        /// Сегмент SCARA выбирает по тому же правилу, но Thor в нём не участвует.
+        ///
+        /// Возвращает ИНДЕКС в переданном массиве или −1, если роботов такого типа нет.
+        /// Отдельная функция нужна, чтобы правило проверялось тестом без сцены и без менеджера.
+        /// </summary>
+        public static int PickWorkbenchRobot(RobotController[] robots, int typeIndex)
+        {
+            if (robots == null) return -1;
+            int fallback = -1;
+            for (int i = 0; i < robots.Length; i++)
+            {
+                RobotController rc = robots[i];
+                if (rc == null) continue;
                 bool isScara = rc is SCARAController;
                 if ((typeIndex == 0 && !isScara) || (typeIndex == 1 && isScara))
                 {
-                    ActivateRobotOnly(rc);
-                    Log("Верстак: активный робот — " + rc.robotName);
-                    return;
+                    if (fallback < 0) fallback = i;
+                    if (IsDefaultRobot(rc)) return i;
                 }
             }
+            return fallback;
+        }
+
+        /// <summary>
+        /// МОДЕЛЬ КАТАЛОГА, КОТОРУЮ СТАВИТ ПЕРВЫЙ ПУНКТ ВЫБОРА РОБОТА — ЧИСТАЯ ФУНКЦИЯ.
+        ///
+        /// Пункт «THOR · 6 осей (1)» (`CenterWindow.ShowRobotChooser`) возвращает основную
+        /// модель каталога, если у неё есть геометрия; иначе `null` — и размещение откатывается
+        /// к прежнему пути со шаблоном из сцены. Пункт SCARA (1) всегда `null`: у SCARA своей
+        /// записи в каталоге нет.
+        /// </summary>
+        public static KazistovVv.Core.KvRobotModel CatalogModelForChooser(int typeIndex)
+        {
+            if (typeIndex != 0) return null;
+            KazistovVv.Core.KvRobotModel model = KazistovVv.Core.KvRobotCatalog.Default;
+            if (model == null) return null;
+            return KazistovVv.Core.KvRobotCatalog.HasGeometry(model) ? model : null;
+        }
+
+        /// <summary>
+        /// ЭТОТ РОБОТ — МОДЕЛЬ ПО УМОЛЧАНИЮ (THOR)? Сравнение идёт по имени модели из
+        /// `KvRobotCatalog.Default`, а не по строке-литералу: смена основного робота в каталоге
+        /// сама меняет и верстак.
+        /// </summary>
+        public static bool IsDefaultRobot(RobotController robot)
+        {
+            if (robot == null) return false;
+            KazistovVv.Core.KvRobotModel model = KazistovVv.Core.KvRobotCatalog.Default;
+            return model != null &&
+                   string.Equals(robot.robotName, model.Title, StringComparison.Ordinal);
         }
 
         private static void ActivateRobotOnly(RobotController keep)
@@ -3154,6 +3225,7 @@ namespace KazistovVvUI
             if (kind == SpawnKind.Robot)
             {
                 pendingRobotTemplate = null;
+                pendingCatalogModel = null;
                 centerWindow.StartPlacement(SpawnKind.None);
                 centerWindow.ShowRobotChooser(OnRobotTypeChosen);
                 return;
@@ -3161,6 +3233,7 @@ namespace KazistovVvUI
             if (kind == SpawnKind.None)
             {
                 pendingRobotTemplate = null;
+                pendingCatalogModel = null;
                 yawManual = false;
                 yawTrackedTable = null;
             }
@@ -3171,6 +3244,29 @@ namespace KazistovVvUI
         {
             centerWindow.HideRobotChooser();
             if (spawner == null) return;
+
+            // ОСНОВНОЙ РОБОТ — THOR (17.11.2026). Первый пункт выбора ставит МОДЕЛЬ КАТАЛОГА
+            // ПО УМОЛЧАНИЮ, а не копию сценного шаблона: так на стол попадает робот, который
+            // владелец собирает руками (правильные суставы, оси и геометрия — `KvRobotSpawner`).
+            // Если модели по умолчанию нет или у неё нет геометрии — работает прежний путь
+            // со шаблоном из сцены, размещение не ломается.
+            KazistovVv.Core.KvRobotModel defaultModel = CatalogModelForChooser(typeIndex);
+            if (defaultModel != null)
+            {
+                pendingCatalogModel = defaultModel;
+                pendingRobotTemplate = null;
+                yawManual = false;
+                yawTrackedTable = null;
+                Log("Размещение робота: " + defaultModel.Title + " (основной) — наведите на стол, " +
+                    "←/→ направление, ЛКМ/Enter — поставить)");
+                // Фантом без шаблона — стилизованная заглушка: габариты Thor ещё не в сцене,
+                // поэтому честнее нарисовать нейтральный контур, а не чужого робота.
+                centerWindow.SetPhantomTemplate(null);
+                centerWindow.StartPlacement(SpawnKind.Robot);
+                return;
+            }
+            pendingCatalogModel = null;
+
             spawner.RefreshRobotTemplates();
             RobotController template = null;
             foreach (RobotController rc in spawner.robotTemplates)
@@ -3421,17 +3517,39 @@ namespace KazistovVvUI
             else
             {
                 RemoveRobotsOnTable(pendingTable);
-                if (pendingRobotTemplate == null)
+                if (pendingCatalogModel != null)
+                {
+                    // ОСНОВНОЙ РОБОТ — THOR: в точку ставится модель каталога, а не копия
+                    // сценного шаблона (см. `OnRobotTypeChosen`). Место и поворот — те же,
+                    // что у любого другого размещения.
+                    RobotController fromCatalog = KazistovVv.Core.KvRobotSpawner.Create(
+                        pendingCatalogModel, point, yaw);
+                    if (fromCatalog == null)
+                    {
+                        Debug.LogWarning("[KazistovVv] Модель «" + pendingCatalogModel.Title +
+                                         "» не создана — размещение отменено (причина выше)");
+                        pendingCatalogModel = null;
+                        return;
+                    }
+                    placedRobot = fromCatalog;
+                    spawned = fromCatalog.GetComponent<RegisteredObject>();
+                    ActivateRobotOnly(fromCatalog);
+                }
+                else if (pendingRobotTemplate == null)
                 {
                     Debug.LogWarning("[KazistovVv] Не выбран тип робота — размещение отменено.");
                     return;
                 }
-                spawned = spawner.SpawnRobot(point, yaw, pendingRobotTemplate);
-                if (spawned != null)
+                else
                 {
-                    placedRobot = spawned.GetComponent<RobotController>();
-                    ActivateRobotOnly(placedRobot);
+                    spawned = spawner.SpawnRobot(point, yaw, pendingRobotTemplate);
+                    if (spawned != null)
+                    {
+                        placedRobot = spawned.GetComponent<RobotController>();
+                        ActivateRobotOnly(placedRobot);
+                    }
                 }
+                pendingCatalogModel = null;
             }
 
             if (spawned == null) return;

@@ -42,12 +42,25 @@ namespace KazistovVvXr
             int shown = existingRobots < MaxExistingRows ? existingRobots : MaxExistingRows;
             for (int i = 0; i < shown; i++) rows.Add("Робот: " + (i + 1));
 
-            rows.Add("Добавить 6-осевой робот");
+            rows.Add(AddSixAxisRowLabel);
             rows.Add("Добавить SCARA");
             rows.Add("Сменить робота");
             rows.Add(MoveRobotRowLabel);
             return rows;
         }
+
+        /// <summary>
+        /// ПОДПИСЬ СТРОКИ «ДОБАВИТЬ РОБОТА» — ОСНОВНОЙ РОБОТ THOR (17.11.2026).
+        ///
+        /// Слова владельца: «робот Thor — основной в программе». Строка осталась той же по
+        /// смыслу («добавить шестиосевого»), но называет робота, которого владелец собирает, и
+        /// создает ИМЕННО его (`KvXrGroupPanel.CreateStartRobot`). Подпись — константа в ОДНОМ
+        /// месте: и список строк, и обработчик нажатия берут её отсюда, иначе две части снова
+        /// разъедутся (правило §42 «состав строк и действие считаются одной функцией»).
+        ///
+        /// Тест подписи (`KvUiSweepTests`) сверяет строку меню ровно с этой константой.
+        /// </summary>
+        public const string AddSixAxisRowLabel = "Добавить робота THOR";
 
         /// <summary>
         /// ПОДПИСЬ СТРОКИ «ПЕРЕМЕСТИТЬ РОБОТА». В подписи названа КЛАВИША ФИКСАЦИИ — это и есть

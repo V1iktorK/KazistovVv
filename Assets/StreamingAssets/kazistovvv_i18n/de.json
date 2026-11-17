@@ -585,6 +585,14 @@
       "text": "Der andere Roboter der Zelle wird aktiv"
     },
     {
+      "key": "cmd.robot.model.thor",
+      "text": "Roboter: THOR"
+    },
+    {
+      "key": "cmd.robot.model.thor.desc",
+      "text": "THOR an den Tisch stellen — der offene 6-Achsen-Arm, den der Besitzer baut (625 mm gestreckt, 750 g Nutzlast)"
+    },
+    {
       "key": "cmd.view.workspace",
       "text": "Erreichbarer Arbeitsraum"
     },

@@ -585,6 +585,14 @@
       "text": "切换为工作单元中的另一台机器人"
     },
     {
+      "key": "cmd.robot.model.thor",
+      "text": "机器人: THOR"
+    },
+    {
+      "key": "cmd.robot.model.thor.desc",
+      "text": "将 THOR 放到工作台上 — 所有者正在组装的开源六轴机械臂(展开高度 625 mm,负载 750 g)"
+    },
+    {
       "key": "cmd.view.workspace",
       "text": "可达空间"
     },

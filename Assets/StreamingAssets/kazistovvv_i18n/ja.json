@@ -585,6 +585,14 @@
       "text": "セル内のもう一方のロボットを有効にします"
     },
     {
+      "key": "cmd.robot.model.thor",
+      "text": "ロボット: THOR"
+    },
+    {
+      "key": "cmd.robot.model.thor.desc",
+      "text": "THOR をテーブルに設置する — オーナーが組み立てるオープンソースの6軸アーム(全長625 mm、可搬質量 750 g)"
+    },
+    {
       "key": "cmd.view.workspace",
       "text": "到達可能領域"
     },
