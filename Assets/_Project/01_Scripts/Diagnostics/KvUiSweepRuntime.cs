@@ -817,6 +817,33 @@ namespace KazistovVvDiagnostics
             return steps;
         }
 
+        /// <summary>Шаг «панель вернулась в рейл» — вернуть её КЛИКОМ ПО ПОЛОЧКЕ.</summary>
+        public const string RailActionClick = "click";
+
+        /// <summary>Шаг «панель ушла в рейл» — отправить кнопкой шапки («в рейл»).</summary>
+        public const string RailActionToRail = "torail";
+
+        /// <summary>
+        /// ЧЕМ ВОЗВРАЩАТЬ ПАНЕЛЬ ИЗ РЕЙЛА (заказ 6a, лист «Dock / Клик по полочке (InRail)»).
+        ///
+        /// ЧТО БЫЛО. Обход возвращал панель прямым `FromRail()` — событие, за которое отвечает
+        /// лист (клик оператора по полочке, `KvDockDrag.OnPointerClick` → `RailClick`), в отчёте
+        /// не существовало вовсе, и лист оставался с причиной «события возврата панели нет».
+        ///
+        /// ЧТО СТАЛО. Правило чистое и называется ПО ФАКТУ: панель сейчас в рейле, а состояние
+        /// ДО нажатия было «не в рейле» → возврат идёт РОВНО тем путём, которым его делает
+        /// оператор (`RailClick`), и это событие печатается в отчёт. Обратный случай (ушла в
+        /// рейл) остаётся кнопкой шапки — её нажатие и так видно снимку.
+        /// </summary>
+        /// <param name="inRailNow">панель сейчас в рейле (0/1)</param>
+        /// <param name="inRailTarget">надо ли вернуть панель в исходное «не в рейле» (0/1)</param>
+        public static string RailAction(int inRailNow, int inRailTarget)
+        {
+            if (inRailNow == 0 && inRailTarget != 0) return RailActionToRail;
+            if (inRailNow != 0 && inRailTarget == 0) return RailActionClick;
+            return "";
+        }
+
         /// <summary>Различия ОДНОЙ панели. `before` может быть «пустым» (панели не было).</summary>
         public static string DescribeOne(string id, KvUiSweepPanelState before, KvUiSweepPanelState after)
         {
@@ -1128,6 +1155,17 @@ namespace KazistovVvDiagnostics
         public int StatusHash;
         /// <summary>Длина строки статуса — читаемое число рядом с отпечатком.</summary>
         public int StatusLength;
+        /// <summary>
+        /// ЗНАЧЕНИЯ СЕМИ ПОЛЕЙ СТАТУС-БАРА ЧЕРЕЗ ` | ` (State, Robot, Cursor, Message,
+        /// Graphics, Theme, Fps) — САМИ ЗНАЧЕНИЯ, а не длина и не хэш (заказ 6a, лист
+        /// «Статус-бар / Поля State/Robot/Cursor/Message/Graphics/Theme/Fps»).
+        ///
+        /// ЗАЧЕМ ОТДЕЛЬНО ОТ `StatusHash`. Хэш ловит любое изменение, но в отчёте он
+        /// нечитаем: тестировщик видит «222→333» и не знает, КАКОЕ поле поменялось. Строка
+        /// значений печатается в эффекте как есть («робот: 6-осевой → SCARA»), то есть замер
+        /// семи чисто отображательных полей наконец виден снимку И человеку.
+        /// </summary>
+        public string StatusFields;
         /// <summary>Меню дока открыто (0/1).</summary>
         public int MenuOpen;
         /// <summary>Стартовое меню шлема показано (0/1).</summary>
@@ -1866,6 +1904,9 @@ namespace KazistovVvDiagnostics
             // СТАТУС И МЕНЮ ДОКА: кнопки, которые «только сообщают», пишут именно сюда.
             Append(sb, "длина статуса", before.StatusLength, after.StatusLength);
             Append(sb, "текст статуса", before.StatusHash, after.StatusHash);
+            // СЕМЬ ПОЛЕЙ СТАТУС-БАРА ЗНАЧЕНИЯМИ (заказ 6a): длины и хэша мало — по ним не видно,
+            // что именно сказал интерфейс (робот сменился, FPS упал, пресет графики переключился).
+            AppendText(sb, "поля статус-бара", before.StatusFields, after.StatusFields);
             Append(sb, "меню дока открыто", before.MenuOpen, after.MenuOpen);
 
             // СТАРТОВОЕ МЕНЮ ШЛЕМА: нажатие раздела переключает его экран.
@@ -1896,6 +1937,50 @@ namespace KazistovVvDiagnostics
             if (from == to) return;
             if (sb.Length > 0) sb.Append("; ");
             sb.Append(name).Append(": ").Append(from).Append("→").Append(to);
+        }
+    }
+
+    /// <summary>
+    /// ЗНАЧЕНИЯ СЕМИ ПОЛЕЙ СТАТУС-БАРА ДЛЯ СНИМКА (заказ 6a, лист «Статус-бар / Поля
+    /// State/Robot/Cursor/Message/Graphics/Theme/Fps»).
+    ///
+    /// ЧТО БЫЛО. Снимок мерил только ДЛИНУ текста статуса (`StatusLength`) и его хэш
+    /// (`StatusHash`) — четыре поля, свёрнутые в одно число. Чисто отображательные поля
+    /// `Robot`, `Graphics`, `Fps` в снимке не существовали вовсе, и замерить их было нельзя:
+    /// лист оставался с честной причиной «в отчёте значений всех семи полей нет».
+    ///
+    /// ЧТО СТАЛО. Значения читаются САМИМИ полями (`KvStatusBar.StateText`…`FpsText`), а не
+    /// догадками менеджера, и склеиваются в одну строку в ПОРЯДКЕ полей на панели. Строка
+    /// попадает в эффект целиком (`KvUiSweepDiff` → «поля статус-бара: … → …»), поэтому по
+    /// строке отчёта видно, КАКОЕ именно поле сказало оператору.
+    /// </summary>
+    public static class KvUiSweepStatusBar
+    {
+        /// <summary>Разделитель полей в строке снимка.</summary>
+        public const string Separator = " | ";
+
+        /// <summary>
+        /// Строка из семи полей: `State: … | Robot: … | Cursor: … | Message: … | Graphics: … |
+        /// Theme: … | Fps: …`. Панели нет (`bar == null`) — возвращается хотя бы сообщение:
+        /// пустой снимок врал бы «ничего не изменилось».
+        /// </summary>
+        public static string FieldsOf(KvStatusBar bar, string message)
+        {
+            string msg = message ?? "";
+            if (bar == null) return "Message: " + msg;
+            return "State: " + Text(bar.StateText) +
+                   Separator + "Robot: " + Text(bar.RobotText) +
+                   Separator + "Cursor: " + Text(bar.CursorText) +
+                   Separator + "Message: " + (msg.Length > 0 ? msg : Text(bar.MessageText)) +
+                   Separator + "Graphics: " + Text(bar.GraphicsText) +
+                   Separator + "Theme: " + Text(bar.ThemeText) +
+                   Separator + "Fps: " + Text(bar.FpsText);
+        }
+
+        /// <summary>Текст поля без `null` (построенная панель всегда отвечает строкой).</summary>
+        private static string Text(string value)
+        {
+            return value ?? "";
         }
     }
 
@@ -3710,6 +3795,36 @@ namespace KazistovVvDiagnostics
             return path.IndexOf("/KvFeatureWindow/", StringComparison.Ordinal) >= 0;
         }
 
+        /// <summary>
+        /// Путь ведёт в ПАЛИТРУ КОМАНД (`…/KvCommandPalette/Panel/Input`, строки `Pal_<id>`).
+        ///
+        /// ЗАЧЕМ ОНО ЗДЕСЬ (заказ 6a, лист «Палитра команд / Input» и «… / Недавние команды»).
+        /// Палитра живёт в СВОЕМ выключенном корне (`root.gameObject.SetActive(false)` до
+        /// `Open()`), поэтому её строки физически не видны и обход отдавал им честное «элемент
+        /// в скрытой панели» — панель же открывается ОДНИМ штатным путём (Ctrl+P / кнопка
+        /// тулбара → `OpenCommandPalette`). Путь обязан вести к этому пути, а не к «исчез».
+        /// </summary>
+        public static bool IsPalettePath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            return path.IndexOf("/KvCommandPalette/", StringComparison.Ordinal) >= 0;
+        }
+
+        /// <summary>
+        /// Путь ведёт в ПАНЕЛЬ ВЫБОРА РОБОТА (`…/RobotChooser/Btn_Scara`, `Btn_SixAxis`).
+        ///
+        /// ЗАЧЕМ (заказ 6a, лист «Прочие кнопки / Btn_Scara «SCARA (2)»»). Корень панели
+        /// выключен (`SetActive(false)`), пока оператор не нажмёт «Добавить робота» — то есть
+        /// панель открывается ровно ОДНИМ штатным путём (`StartPlacement(SpawnKind.Robot)` →
+        /// `ShowRobotChooser`). Без восстановления экрана обход видел «элемент в скрытой
+        /// панели» и не нажимал ни одну из двух кнопок выбора.
+        /// </summary>
+        public static bool IsRobotChooserPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            return path.IndexOf("/RobotChooser/", StringComparison.Ordinal) >= 0;
+        }
+
         /// <summary>Путь относится к одному из трёх классов оболочки выше.</summary>
         public static bool IsShellPath(string path)
         {
@@ -3727,7 +3842,11 @@ namespace KazistovVvDiagnostics
         /// </summary>
         public static bool IsRestorablePath(string path)
         {
-            return IsShellPath(path) || IsFeatureWindowPath(path);
+            // ПАЛИТРА И ВЫБОР РОБОТА (заказ 6a): их панели выключены до штатного показа, поэтому
+            // элемент обязан идти по тому же маршруту восстановления, что и окно функций, —
+            // иначе Input, строки `Pal_*` и `Btn_Scara` навсегда остаются «в скрытой панели».
+            return IsShellPath(path) || IsFeatureWindowPath(path) ||
+                   IsPalettePath(path) || IsRobotChooserPath(path);
         }
 
         /// <summary>
@@ -3935,6 +4054,21 @@ namespace KazistovVvDiagnostics
         }
 
         /// <summary>
+        /// ВИДИМОЕ СОДЕРЖИМОЕ ИЗМЕНИЛОСЬ МЕЖДУ ДВУМЯ ЗАМЕРАМИ (заказ 6a).
+        ///
+        /// ПРАВИЛО. Равные ключи — ничего не пересобираем (пересборка сканирует все канвасы и
+        /// стоит кадров на КАЖДОМ элементе). Пустой ключ — оболочки нет или замер не удался:
+        /// вслепую пересобирать нельзя, это не «изменение», а неизвестность.
+        /// </summary>
+        public static bool ContentChanged(string before, string after)
+        {
+            string a = before ?? "";
+            string b = after ?? "";
+            if (a.Length == 0 || b.Length == 0) return false;
+            return !string.Equals(a, b, StringComparison.Ordinal);
+        }
+
+        /// <summary>
         /// ИНДЕКСЫ ПЕРВЫХ ЭКЗЕМПЛЯРОВ: повтор не включается, порядок сохраняется.
         /// Возвращает список индексов, которые остаются в инвентаре.
         /// </summary>
@@ -3956,6 +4090,107 @@ namespace KazistovVvDiagnostics
     // ============================================================================================
     //  ЧАСТЬ 2. РАНТАЙМ — обход живой сцены. Проверяется на устройстве (`Tools/ui-sweep-device.ps1`).
     // ============================================================================================
+
+    /// <summary>
+    /// ВЕТКИ ДЕРЕВА, КОТОРЫЕ СУЩЕСТВУЮТ ТОЛЬКО ПРИ ОБЪЕКТАХ В СЦЕНЕ (заказ 6a, листы
+    /// «KvTreeView / Точка 1…N · Траектория 1…N · Фантом 1…N · «Записи»/«Зоны запрета» ·
+    /// Ось 1…N · TCP»).
+    ///
+    /// ЧТО БЫЛО. В чистом прогоне объектов нет: группа точек показывается ТОЛЬКО при
+    /// `Waypoints.Count > 0`, «Записи траекторий» — только при файлах в хранилище, «Зоны
+    /// запрета» — только при зонах, траектории и фантомы — только после расчёта. Строки
+    /// физически не существовали, их путей не было в инвентаре, и листы оставались
+    /// непроверенными («нет путей Row_Точка/Row_Траектория/Row_Фантом»).
+    ///
+    /// ЧТО СТАЛО. Обход ГОТОВИТ СЦЕНУ САМ, штатными командами оператора, ДО сбора инвентаря
+    /// (`KvUiSweepRuntime.PrepareTreeScene`): сверху — раскрытие дерева (строки «Ось 1…N» и
+    /// «TCP» лежат у раскрытого узла робота), ниже — создание недостающих объектов. Здесь —
+    /// САМО ПРАВИЛО: какая ветка каким признаком узнаётся и какой командой создаётся.
+    /// </summary>
+    public static class KvUiSweepTreeNav
+    {
+        /// <summary>Ветка дерева, которой нужны объекты в сцене.</summary>
+        public enum Branch { None, Point, Trajectory, Phantom, Record, Zone, Axis, Tcp }
+
+        /// <summary>Путь — СТРОКА ДЕРЕВА (`…/KvTreeView/…/Row_…`, включая её «глазик»).</summary>
+        public static bool IsTreeRowPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            return path.IndexOf("/KvTreeView/", StringComparison.Ordinal) >= 0 &&
+                   path.IndexOf("/Row_", StringComparison.Ordinal) >= 0;
+        }
+
+        /// <summary>
+        /// КАКАЯ ВЕТКА (по подписи строки; `None` — строка не той ветки, что готовим).
+        /// Порядок проверок важен: `Row_TCP` и `Row_Ось` — узкие имена, «Фантом» — своя ветка.
+        /// </summary>
+        public static Branch Of(string path)
+        {
+            if (!IsTreeRowPath(path)) return Branch.None;
+            if (HasRow(path, "Row_TCP")) return Branch.Tcp;
+            if (HasRow(path, "Row_Ось")) return Branch.Axis;
+            if (HasRow(path, "Row_Фантом")) return Branch.Phantom;
+            if (HasRow(path, "Row_Траектори")) return Branch.Trajectory;
+            if (HasRow(path, "Row_Промежуточные точки") || HasRow(path, "Row_#")) return Branch.Point;
+            if (HasRow(path, "Row_Записи") || HasRow(path, "Row_●")) return Branch.Record;
+            if (HasRow(path, "Row_Зоны запрета")) return Branch.Zone;
+            return Branch.None;
+        }
+
+        /// <summary>
+        /// ШТАТНАЯ КОМАНДА ОПЕРАТОРА, СОЗДАЮЩАЯ ОБЪЕКТЫ ВЕТКИ (`""` — штатной команды нет:
+        /// фантомы создаёт сам расчёт траектории, строки «Ось/TCP» даёт сам робот в дереве).
+        /// </summary>
+        public static string PrepCommandFor(Branch branch)
+        {
+            switch (branch)
+            {
+                case Branch.Point: return "waypoint.add";
+                case Branch.Trajectory: return "waypoint.build";
+                case Branch.Record: return "record.toggle";
+                case Branch.Zone: return "zone.box";
+                default: return "";
+            }
+        }
+
+        /// <summary>ПОРЯДОК ПОДГОТОВКИ: сначала точка (по ней строится маршрут), потом маршрут,
+        /// затем объекты, которые не зависят друг от друга.</summary>
+        public static Branch[] PrepOrder()
+        {
+            return new[]
+            {
+                Branch.Point, Branch.Trajectory, Branch.Zone, Branch.Record
+            };
+        }
+
+        /// <summary>
+        /// ПРИЗНАК ВЕТКИ В ИЕРАРХИИ ДЕРЕВА — имя строки, по которому видно, что ветка УЖЕ есть
+        /// (и готовить её заново не надо). `""` — у ветки нет одной строки-признака.
+        /// </summary>
+        public static string RowMarkerFor(Branch branch)
+        {
+            switch (branch)
+            {
+                case Branch.Point: return "Row_Промежуточные точки";
+                case Branch.Trajectory: return "Row_Траектории";
+                case Branch.Phantom: return "Row_Фантом";
+                case Branch.Record: return "Row_Записи";
+                case Branch.Zone: return "Row_Зоны запрета";
+                case Branch.Axis: return "Row_Ось";
+                case Branch.Tcp: return "Row_TCP";
+                default: return "";
+            }
+        }
+
+        /// <summary>После сегмента `/Row_` строка начинается с признака ветки.</summary>
+        private static bool HasRow(string path, string marker)
+        {
+            int at = path.LastIndexOf("/Row_", StringComparison.Ordinal);
+            if (at < 0) return false;
+            int start = at + 1;                       // индекс 'R' в "Row_…"
+            return path.IndexOf(marker, start, StringComparison.Ordinal) == start;
+        }
+    }
 
     /// <summary>
     /// САМОПРОГОН ИНТЕРФЕЙСА. Живёт на объекте, созданном ТОЛЬКО по явному запросу.
@@ -4392,6 +4627,10 @@ namespace KazistovVvDiagnostics
             // перестраивает её содержимое: объекты уничтожаются, ссылки умирают. Обход по путям
             // позволяет найти пересозданный элемент заново и не обвинять работающую кнопку.
             var fresh = new List<Candidate>();
+            // ПОДГОТОВКА СЦЕНЫ — ДО СБОРА (заказ 6a): ветки дерева, которых в чистом прогоне
+            // нет физически, создаются штатными командами, а дерево раскрывается — и только
+            // ПОСЛЕ этого собирается инвентарь (иначе путей этих строк в очереди не существует).
+            yield return PrepareTreeScene();
             CollectTargets(fresh);
 
             byKey.Clear();
@@ -4496,6 +4735,14 @@ namespace KazistovVvDiagnostics
                     // НЕ НАЙДЕН — интерфейс мог измениться: пересобираем список и пробуем снова.
                     MergeFreshTargets();
                     found = Locate(c);
+                    // СТРОКА ДЕРЕВА ИСЧЕЗЛА ПРИ ПЕРЕСБОРКЕ (заказ 6a: «Ось 1…N», «TCP»).
+                    // Дерево могло свернуться или пересобраться — возвращаем его штатным
+                    // `ExpandAll` (тот же «+», что жмёт оператор) и ищем путь ПОВТОРНО.
+                    if (!found && KvUiSweepTreeNav.IsTreeRowPath(c.Path) && ExpandTree())
+                    {
+                        yield return null;
+                        found = Locate(c);
+                    }
                     if (c.PanelBound && (!found || !PanelLevelMatches(c)))
                     {
                         yield return RestorePanelElement(c);
@@ -4547,7 +4794,14 @@ namespace KazistovVvDiagnostics
                 }
 
                 index++;
+                string contentBefore = ContentSelectionKey();
                 yield return CheckOne(c, index, queue.Total);
+                // СМЕНА ВКЛЯДКИ/СОДЕРЖИМОГО ПЕРЕСТРОИЛА ПАНЕЛЬ — ИНВЕНТАРЬ ПЕРЕСОБИРАЕТСЯ
+                // СРАЗУ ПОСЛЕ НАЖАТИЯ (заказ 6a): раньше `MergeFreshTargets` звался ТОЛЬКО когда
+                // путь не находился, а элементы вкладки, которую только что открыли (`Seg3`«Графика»
+                // — +89 объектов), в инвентарь не попадали НИКОГДА: их путей не существовало в
+                // очереди, и проверить их было невозможно вовсе.
+                RebuildAfterContentChange(contentBefore);
                 queue.Done(key);
                 // РАСКРЫТИЕ УРОВНЯ — ПОСЛЕ проверки: состояние «что открылось» известно только
                 // сразу после нажатия, и добавленные пункты встают в очередь этого же цикла.
@@ -6225,6 +6479,56 @@ namespace KazistovVvDiagnostics
                 return PrepResult.HiddenPanel;
             }
 
+            // 2c) ПАЛИТРА КОМАНД И ПАНЕЛЬ ВЫБОРА РОБОТА (заказ 6a). Обе живут в выключенном
+            //     корне и открываются ОДНИМ штатным путём оператора: Ctrl+P/кнопка тулбара
+            //     (`OpenCommandPalette`) и «Добавить робота» (`StartPlacement(SpawnKind.Robot)` →
+            //     `ShowRobotChooser`). Проверка — ФАКТОМ (`TopInactiveAncestor == null`), не
+            //     надеждой: если панель не поднялась — честная «скрытая панель» с путём ворот.
+            if (gate != null && KvUiSweepShellNav.IsPalettePath(c.Path))
+            {
+                KazistovVvUIManager paletteUi = KazistovVvUIManager.Instance;
+                if (paletteUi == null)
+                {
+                    detail = "оболочки интерфейса нет";
+                    return PrepResult.HiddenPanel;
+                }
+                if (!paletteUi.PaletteOpen)
+                {
+                    paletteUi.OpenCommandPalette();
+                    c.OpenedPalette = paletteUi.PaletteOpen;
+                }
+                if (TopInactiveAncestor(target.gameObject) == null)
+                {
+                    c.PreparedBy = "палитра команд (OpenCommandPalette)";
+                    return PrepResult.Ready;
+                }
+                detail = PathOf(gate);
+                return PrepResult.HiddenPanel;
+            }
+
+            if (gate != null && KvUiSweepShellNav.IsRobotChooserPath(c.Path))
+            {
+                KazistovVvUIManager chooserUi = KazistovVvUIManager.Instance;
+                if (chooserUi == null)
+                {
+                    detail = "оболочки интерфейса нет";
+                    return PrepResult.HiddenPanel;
+                }
+                if (!c.OpenedRobotChooser)
+                {
+                    // ШТАТНЫЙ ПУТЬ ОПЕРАТОРА: «Добавить робота» → показ выборщика типа робота.
+                    chooserUi.StartPlacement(SpawnKind.Robot);
+                    c.OpenedRobotChooser = chooserUi.RobotChooserOpen;
+                }
+                if (TopInactiveAncestor(target.gameObject) == null)
+                {
+                    c.PreparedBy = "панель выбора робота (StartPlacement → ShowRobotChooser)";
+                    return PrepResult.Ready;
+                }
+                detail = PathOf(gate);
+                return PrepResult.HiddenPanel;
+            }
+
             // 3) ОСТАЛЬНОЕ — СКРЫТАЯ ПАНЕЛЬ. СИЛОЙ НЕ ВКЛЮЧАЕМ (см. `MayActivate`): включённая
             // силой панель не перестроена под текущее состояние, и её кнопки «нажимаются»
             // впустую — так и появились ложные «нет изменений» у вкладок панели команд AR.
@@ -6654,6 +6958,24 @@ namespace KazistovVvDiagnostics
                     c.OpenedFeature = false;
                 }
 
+                // ПАЛИТРА КОМАНД, КОТОРУЮ ОТКРЫЛ ОБХОД (заказ 6a): закрывается ШТАТНЫМ путём
+                // (`CloseCommandPalette` — тот же, что Esc), иначе открытая палитра перекрывала
+                // бы экран следующим элементам и «открывала» бы им чужой мир.
+                if (c.OpenedPalette)
+                {
+                    if (ui != null) ui.CloseCommandPalette();
+                    c.OpenedPalette = false;
+                }
+
+                // ПАНЕЛЬ ВЫБОРА РОБОТА, КОТОРУЮ ОТКРЫЛ ОБХОД (заказ 6a): отменяется тем же
+                // путём, что Esc оператора (`StartPlacement(SpawnKind.None)`), — иначе после
+                // «SCARA (2)» прогон оставил бы включённым режим размещения робота.
+                if (c.OpenedRobotChooser)
+                {
+                    if (ui != null) ui.StartPlacement(SpawnKind.None);
+                    c.OpenedRobotChooser = false;
+                }
+
                 if (c.ToolbarLayoutBefore >= 0)
                 {
                     int back = c.ToolbarLayoutBefore;
@@ -6729,7 +7051,12 @@ namespace KazistovVvDiagnostics
                 // состояние панели НАСОВСЕМ (оно сохраняется в PlayerPrefs как выбор оператора).
                 // Если не вернуть, прогон оставит интерфейс разобранным, а следующий элемент
                 // проверится на свёрнутой панели — и «без эффекта» получит уже невиновная кнопка.
-                RestorePanels(beforePanels);
+                List<string> shelfClicks = RestorePanels(beforePanels);
+                // КЛИК ПО ПОЛОЧКЕ — СОБЫТИЕ В ОТЧЁТЕ (заказ 6a): возврат панели из рейла идёт
+                // штатным кликом оператора, и по строке отчёта видно, что полочка сработала.
+                for (int i = 0; i < shelfClicks.Count; i++)
+                    Line("[KvUiSweep] ПОЛОЧКА: клик по полочке вернул панель «" +
+                         shelfClicks[i] + "» из рейла (путь оператора RailClick)");
                 // ПРОВЕРКА ВОССТАНОВЛЕНИЯ. Если состояние панели осталось чужим, следующий элемент
                 // проверится не в том мире, и «нет эффекта» получит невиновная кнопка (ровно на это
                 // намекали провалы кнопки «в рейл» у панели дерева). Молчать об этом нельзя.
@@ -6894,12 +7221,18 @@ namespace KazistovVvDiagnostics
         /// ВЕРНУТЬ DOCK-ПАНЕЛИ В ИСХОДНОЕ СОСТОЯНИЕ. Порядок важен: `SetCollapsed` сбрасывает
         /// рейл, а `ToRail` сбрасывает свёрнутость — поэтому сначала сторона, потом рейл, потом
         /// свёрнутость, и только затем видимость.
+        ///
+        /// ВОЗВРАТ ИЗ РЕЙЛА — КЛИКОМ ПО ПОЛОЧКЕ (заказ 6a): панель возвращается ровно тем
+        /// путём, каким её возвращает оператор (`KvDockPanel.RailClick`), а не прямым `FromRail`.
+        /// Возвращает id панелей, вернувшихся КЛИКОМ — их обход печатает в отчёт как событие
+        /// «полочка вернула панель» (лист «Dock / Клик по полочке (InRail)»).
         /// </summary>
-        private static void RestorePanels(List<KvUiSweepPanelState> beforePanels)
+        private static List<string> RestorePanels(List<KvUiSweepPanelState> beforePanels)
         {
-            if (beforePanels == null || beforePanels.Count == 0) return;
+            var shelfClicks = new List<string>(2);
+            if (beforePanels == null || beforePanels.Count == 0) return shelfClicks;
             KazistovVvUIManager ui = KazistovVvUIManager.Instance;
-            if (ui == null) return;
+            if (ui == null) return shelfClicks;
 
             for (int i = 0; i < beforePanels.Count; i++)
             {
@@ -6916,13 +7249,25 @@ namespace KazistovVvDiagnostics
                     {
                         case "side": panel.SetSide((KvDockSide)s.Side); break;
                         case "rail":
-                            if (s.InRail != 0) panel.ToRail(); else panel.FromRail();
+                            // ЧЕМ ВОЗВРАЩАТЬ — ТОЖЕ ЧИСТОЕ ПРАВИЛО (`RailAction`): из рейла —
+                            // кликом по полочке, в рейл — кнопкой шапки.
+                            if (KvUiSweepPanelSig.RailAction(panel.InRail ? 1 : 0,
+                                    s.InRail) == KvUiSweepPanelSig.RailActionClick)
+                            {
+                                panel.RailClick();
+                                shelfClicks.Add(s.Id);
+                            }
+                            else if (s.InRail != 0)
+                            {
+                                panel.ToRail();
+                            }
                             break;
                         case "collapsed": panel.SetCollapsed(s.Collapsed != 0); break;
                         case "shown": panel.SetVisible(s.Shown != 0); break;
                     }
                 }
             }
+            return shelfClicks;
         }
 
         // ------------------------------------------------------------------ сбор элементов
@@ -7109,6 +7454,146 @@ namespace KazistovVvDiagnostics
 
         /// <summary>Сколько повторов путей отброшено за прогон (для отчёта).</summary>
         private int inventoryDuplicates;
+
+        /// <summary>
+        /// КЛЮЧ ВИДИМОГО СОДЕРЖИМОГО ИНТЕРФЕЙСА (заказ 6a): вкладка панели настроек, вкладка
+        /// верстака, вкладка окна функций и открытый список группы тулбара. Это ровно те
+        /// переключатели, после которых панель ПЕРЕСТРАИВАЕТ СВОЁ СОДЕРЖИМОЕ: старые строки
+        /// уничтожаются, новые создаются, и их путей в собранном инвентаре ещё нет.
+        ///
+        /// Пустая строка — оболочки нет (ничего пересобирать не надо).
+        /// </summary>
+        private string ContentSelectionKey()
+        {
+            KazistovVvUIManager ui = KazistovVvUIManager.Instance;
+            if (ui == null) return "";
+            KvWorkbenchWindow workbench = KvWorkbenchWindow.Instance;
+            KvFeatureWindow feature = FeatureWindow();
+            KvToolbar toolbar = ui.Toolbar;
+            return "tab=" + ui.SettingsTab +
+                   "|wb=" + (workbench != null ? workbench.ActiveKey : "") +
+                   "|fw=" + (feature != null ? feature.VisibleTab.ToString(CultureInfo.InvariantCulture) : "-1") +
+                   "|grp=" + (toolbar != null && toolbar.GroupMenuOpen ? toolbar.RowsGroupId : "");
+        }
+
+        /// <summary>
+        /// ПЕРЕСБОРКА ИНВЕНТАРЯ, ЕСЛИ СОДЕРЖИМОЕ ТОЛЬКО ЧТО СМЕНИЛОСЬ (заказ 6a).
+        ///
+        /// ЗАЧЕМ ОТДЕЛЬНЫЙ МЕТОД, А НЕ `MergeFreshTargets` В ЦИКЛЕ. Пересборка сканирует все
+        /// канвасы — звать её после КАЖДОГО нажатия значит платить за 500 элементов. Здесь она
+        /// зовётся ТОЛЬКО когда ключ содержимого изменился, то есть ровно после переключения
+        /// вкладки/списка — момента, когда физически появились новые строки.
+        /// </summary>
+        /// <returns>сколько новых элементов встало в очередь (0 — содержимое не менялось)</returns>
+        private int RebuildAfterContentChange(string selectionBefore)
+        {
+            string now = ContentSelectionKey();
+            if (!KvUiSweepInventory.ContentChanged(selectionBefore, now)) return 0;
+            int added = MergeFreshTargets();
+            Line("[KvUiSweep] СОДЕРЖИМОЕ СМЕНИЛОСЬ: «" + selectionBefore + "» → «" + now + "»" +
+                 " — новых элементов " + added + ", осталось проверить " + queue.Count);
+            return added;
+        }
+
+        /// <summary>Обход сам запустил запись, готовя дерево (заказ 6a) — фиксируется в отчёте.</summary>
+        private bool prepStartedRecording;
+
+        /// <summary>РАСКРЫТЬ ДЕРЕВО ШТАТНЫМ `ExpandAll` (заказ 6a). false — дерева в сцене нет.</summary>
+        private static bool ExpandTree()
+        {
+            KazistovVvUIManager ui = KazistovVvUIManager.Instance;
+            KvTreeView tree = ui != null ? ui.Tree : null;
+            if (tree == null) return false;
+            tree.ExpandAll();
+            return true;
+        }
+
+        /// <summary>ЕСТЬ ЛИ В ИЕРАРХИИ ДЕРЕВА ХОТЯ БЫ ОДНА СТРОКА С ПРИЗНАКОМ `marker`.</summary>
+        private static bool TreeHasRow(KvTreeView tree, string marker)
+        {
+            if (tree == null || marker.Length == 0) return false;
+            Transform[] all = tree.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < all.Length; i++)
+                if (all[i] != null && all[i].name.StartsWith(marker, StringComparison.Ordinal))
+                    return true;
+            return false;
+        }
+
+        /// <summary>
+        /// ЕСТЬ ЛИ В ДЕРЕВЕ ВЕТКА. У «Записей» ДВА признака: группа «Записи траекторий» (файлы
+        /// в хранилище) и живая строка «● ИДЁТ ЗАПИСЬ» (идёт запись) — в чистом прогоне
+        /// достижим только второй.
+        /// </summary>
+        private static bool TreeHasBranch(KvTreeView tree, KvUiSweepTreeNav.Branch branch)
+        {
+            if (branch == KvUiSweepTreeNav.Branch.Record)
+                return TreeHasRow(tree, "Row_Записи") || TreeHasRow(tree, "Row_●");
+            return TreeHasRow(tree, KvUiSweepTreeNav.RowMarkerFor(branch));
+        }
+
+        /// <summary>
+        /// ПОДГОТОВКА СЦЕНЫ ОБХОДОМ (заказ 6a): ветки дерева «Точка/Траектория/Записи/Зоны»
+        /// физически не существуют, пока в сцене нет объектов, а строки «Ось 1…N» и «TCP» —
+        /// пока дерево не раскрыто. Обход готовит сцену САМ, ШТАТНЫМИ командами оператора,
+        /// ДО сбора инвентаря: иначе путей этих строк не существует в очереди и проверить их
+        /// невозможно вовсе.
+        ///
+        /// ПОРЯДОК И ЧЕСТНОСТЬ. Сначала раскрытие дерева, затем ветки по `PrepOrder()`; команда
+        /// зовётся ТОЛЬКО если ветки ещё нет, и ПОСЛЕ неё проверяется ФАКТ появления строки.
+        /// Отказ (`waypoint.add` без точки прицела, `waypoint.build` без валидного робота) —
+        /// не ошибка подготовки, а честная строка отчёта с именем команды и причиной.
+        /// </summary>
+        private IEnumerator PrepareTreeScene()
+        {
+            KazistovVvUIManager ui = KazistovVvUIManager.Instance;
+            KvTreeView tree = ui != null ? ui.Tree : null;
+            if (tree == null)
+            {
+                Line("[KvUiSweep] ПОДГОТОВКА СЦЕНЫ: дерева в оболочке нет — ветки не готовились");
+                yield break;
+            }
+
+            // 1) ДЕРЕВО РАСКРЫВАЕТСЯ: строки «Ось 1…N» и «TCP» лежат у раскрытого узла робота.
+            tree.ExpandAll();
+            yield return null;
+
+            // 2) ОБЪЕКТЫ ВЕТОК — штатными командами, только там, где объектов ещё нет.
+            KvUiSweepTreeNav.Branch[] order = KvUiSweepTreeNav.PrepOrder();
+            for (int i = 0; i < order.Length; i++)
+            {
+                KvUiSweepTreeNav.Branch branch = order[i];
+                if (TreeHasBranch(tree, branch))
+                {
+                    Line("[KvUiSweep] ПОДГОТОВКА СЦЕНЫ: ветка «" + branch +
+                         "» уже есть — команду не зовём");
+                    continue;
+                }
+
+                string command = KvUiSweepTreeNav.PrepCommandFor(branch);
+                if (command.Length == 0) continue;
+
+                bool invoked = false;
+                string fail = "";
+                try
+                {
+                    invoked = KvCommands.Invoke(command);
+                }
+                catch (Exception e)
+                {
+                    fail = e.GetType().Name + ": " + e.Message;
+                }
+                yield return null;
+                yield return null;
+
+                bool appeared = TreeHasBranch(tree, branch);
+                if (branch == KvUiSweepTreeNav.Branch.Record && appeared && invoked)
+                    prepStartedRecording = true;
+                Line("[KvUiSweep] ПОДГОТОВКА СЦЕНЫ: ветка «" + branch + "» — команда " + command +
+                     (fail.Length > 0 ? " упала (" + fail + ")"
+                       : invoked ? " выполнена" : " отклонена реестром") +
+                     " — строка в дереве " + (appeared ? "появилась" : "НЕ появилась"));
+            }
+        }
 
         /// <summary>
         /// <summary>
@@ -7975,7 +8460,14 @@ namespace KazistovVvDiagnostics
                 snapshot.StatusHash = KvUiSweepNames.StableHash(
                     (ui.StatusState ?? "") + "|" + message + "|" +
                     (ui.StatusCursor ?? "") + "|" + (ui.StatusTheme ?? ""));
+                // СЕМЬ ПОЛЕЙ ЗНАЧЕНИЯМИ (заказ 6a): раньше снимок видел только длину и хэш, и
+                // замер полей State/Robot/Cursor/Message/Graphics/Theme/Fps был в отчёте невозможен.
+                snapshot.StatusFields = KvUiSweepStatusBar.FieldsOf(ui.StatusBar, message);
                 snapshot.MenuOpen = MenuOpenNow() ? 1 : 0;
+            }
+            else
+            {
+                snapshot.StatusFields = "";
             }
 
             KvXrStartMenu start = KvXrStartMenu.Active;
@@ -8711,6 +9203,28 @@ namespace KazistovVvDiagnostics
             if (!string.IsNullOrEmpty(forcedFailure))
                 Line("[KvUiSweep] ПРИЧИНА: " + forcedFailure);
 
+            // ПОДГОТОВКА СЦЕНЫ (заказ 6a): обход сам запустил запись, чтобы ветка дерева
+            // «Записи» в чистом прогоне СУЩЕСТВОВАЛА. Останавливаем её здесь же — если её
+            // не остановил уже сам прогон (кнопка «Записать»), и называем факт в отчёте.
+            if (prepStartedRecording)
+            {
+                if (KvCommands.IsChecked("record.toggle"))
+                {
+                    try
+                    {
+                        KvCommands.Invoke("record.toggle");
+                        Line("[KvUiSweep] ПОДГОТОВКА СЦЕНЫ: запись движения, запущенная обходом " +
+                             "для ветки «Записи», остановлена по окончании прогона");
+                    }
+                    catch (Exception e)
+                    {
+                        Line("[KvUiSweep] ПОДГОТОВКА СЦЕНЫ: запись, запущенная обходом, остановить " +
+                             "не удалось — " + e.GetType().Name + ": " + e.Message);
+                    }
+                }
+                prepStartedRecording = false;
+            }
+
             Line(run.TotalLine(seconds));
             // ПОКРЫТИЕ — сразу после ИТОГа: «проверено M из найденных K» и, если есть, «НЕ
             // проверено X». Потеря покрытия обязана быть видна числом, а не скрываться за
@@ -8924,6 +9438,17 @@ namespace KazistovVvDiagnostics
             public int FeatureTab = -1;
             /// <summary>Обход открыл окно функций — после проверки окно закрывается (заказ E).</summary>
             public bool OpenedFeature;
+            /// <summary>
+            /// Обход открыл ПАЛИТРУ КОМАНД штатным `OpenCommandPalette` — после проверки палитра
+            /// закрывается (заказ 6a): иначе следующие элементы проверялись бы в мире, который
+            /// подготовил не сам обход.
+            /// </summary>
+            public bool OpenedPalette;
+            /// <summary>
+            /// Обход открыл ПАНЕЛЬ ВЫБОРА РОБОТА штатным `StartPlacement(SpawnKind.Robot)` —
+            /// после проверки она закрывается тем же путём, что и Esc оператора (заказ 6a).
+            /// </summary>
+            public bool OpenedRobotChooser;
             /// <summary>
             /// ФИЗИЧЕСКАЯ РАСКЛАДКА ТУЛБАРА ПРИ СБОРЕ (`−1` — не ручка тулбара; заказ A).
             /// Считается по самой панели (`KvToolbar.LayoutMode`), а не по настройке: снимок

@@ -340,6 +340,12 @@ namespace KazistovVvUI
         public string ThemeText { get { return themeText != null ? themeText.text : ""; } }
         /// <summary>Текущий текст индикатора графики (диагностика).</summary>
         public string GraphicsText { get { return graphicsText != null ? graphicsText.text : ""; } }
+        /// <summary>
+        /// ТЕКУЩИЙ ТЕКСТ СЧЁТЧИКА FPS (диагностика/замер). Нужен снимку обхода (заказ 6a):
+        /// поле `Fps` — одно из семи полей статус-бара, и без геттера его значение было
+        /// недоступно ничему, кроме прямого поиска по иерархии.
+        /// </summary>
+        public string FpsText { get { return fpsText != null ? fpsText.text : ""; } }
         /// <summary>§26: текущий текст индикатора режима (диагностика).</summary>
         public string CursorModeText { get { return modeText != null ? modeText.text : ""; } }
         /// <summary>§26: режим, который показывает индикатор (диагностика).</summary>

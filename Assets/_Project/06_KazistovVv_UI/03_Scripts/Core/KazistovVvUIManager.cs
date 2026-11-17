@@ -3815,6 +3815,20 @@ namespace KazistovVvUI
         /// <summary>Палитра команд (Ctrl+P) — только чтение для диагностики.</summary>
         public KvCommandPalette Palette { get { return palette; } }
 
+        /// <summary>
+        /// ПАЛИТРА КОМАНД ОТКРЫТА (диагностика и восстановление экрана обходом, заказ 6a):
+        /// обход обязан проверять ФАКТ открытия панели, а не надеяться на `OpenCommandPalette`.
+        /// </summary>
+        public bool PaletteOpen { get { return palette != null && palette.IsOpen; } }
+
+        /// <summary>
+        /// ПАНЕЛЬ ВЫБОРА РОБОТА ОТКРЫТА (диагностика и восстановление экрана обходом, заказ 6a).
+        /// </summary>
+        public bool RobotChooserOpen
+        {
+            get { return centerWindow != null && centerWindow.RobotChooserOpen; }
+        }
+
         /// <summary>Открыть палитру команд (Ctrl+P, Start на геймпаде, кнопка тулбара).</summary>
         public void OpenCommandPalette()
         {
