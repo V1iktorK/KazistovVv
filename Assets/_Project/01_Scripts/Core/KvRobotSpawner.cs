@@ -144,6 +144,7 @@ namespace KazistovVv.Core
             }
 
             ApplyJoints(robot, joints, model);
+            ApplyJointAxes(robot, model);
 
             // --- TCP
             Transform tcp = FindEndEffector(go.transform, model.EndEffectorName, joints);
@@ -224,6 +225,35 @@ namespace KazistovVv.Core
 
             Debug.LogWarning("[KvRobot] у контроллера «" + robot.GetType().Name +
                              "» нет поля jointTransforms — суставы не привязаны");
+        }
+
+        /// <summary>
+        /// ПРИМЕНИТЬ ОСИ СУСТАВОВ ИЗ ДАННЫХ МОДЕЛИ (задача THOR, 17.11.2026).
+        ///
+        /// Зачем. `SixAxisController` вращает каждый сустав строго вокруг СВОЕЙ оси, заданной в
+        /// локальных осях сустава (`jointAxesLocal`). Для импортированных URDF-моделей оси
+        /// подобраны под чужую геометрию, а модель, собранная кодом (THOR), приходит с осями
+        /// из описателя `KvThorModel.JointAxesLocal` — они выведены из официальной конфигурации
+        /// робота (yaw-roll-roll-yaw-roll-yaw) и из нулевой позы, в которой стоят суставы.
+        ///
+        /// Пустой массив у модели — обычное состояние (все прежние модели): поведение не
+        /// меняется, контроллер оставляет свои оси.
+        /// </summary>
+        private static void ApplyJointAxes(RobotController robot, KvRobotModel model)
+        {
+            if (robot == null || model == null) return;
+            Vector3[] axes = model.JointAxesLocal;
+            if (axes == null || axes.Length == 0) return;
+
+            System.Reflection.FieldInfo field = robot.GetType().GetField("jointAxesLocal",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.NonPublic);
+            if (field != null && field.FieldType == typeof(Vector3[]))
+            {
+                var copy = new Vector3[axes.Length];
+                Array.Copy(axes, copy, axes.Length);
+                field.SetValue(robot, copy);
+            }
         }
 
         /// <summary>Заполнить TCP у контроллера (поле называется по-разному у разных типов).</summary>
