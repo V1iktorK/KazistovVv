@@ -2167,6 +2167,30 @@
     {
       "key": "cmd.graphics.reset.desc",
       "text": "Return to «Auto» mode and default graphics settings"
+    },
+    {
+      "key": "settings.mode.section",
+      "text": "Settings"
+    },
+    {
+      "key": "settings.mode.note",
+      "text": "The mode is shared by the computer and the headset: VR is a virtual lab, MR is the operator's room. The choice takes effect after the app restarts."
+    },
+    {
+      "key": "settings.mode.current",
+      "text": "Currently selected:"
+    },
+    {
+      "key": "settings.mode.vr",
+      "text": "Virtual reality (VR)"
+    },
+    {
+      "key": "settings.mode.mr",
+      "text": "Mixed reality (MR)"
+    },
+    {
+      "key": "mr.preset.applied",
+      "text": "MR preset applied: render scale below 0.8, shadows simplified, expensive effects off"
     }
   ]
 }

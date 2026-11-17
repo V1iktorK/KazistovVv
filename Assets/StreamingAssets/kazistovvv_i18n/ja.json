@@ -2167,6 +2167,30 @@
     {
       "key": "cmd.graphics.reset.desc",
       "text": "「自動」モードと既定のグラフィック設定に戻す"
+    },
+    {
+      "key": "settings.mode.section",
+      "text": "設定"
+    },
+    {
+      "key": "settings.mode.note",
+      "text": "モードはパソコンとヘッドセットで共通です。VR はバーチャルラボ、MR はオペレーターの部屋です。選択はアプリの再起動後に反映されます。"
+    },
+    {
+      "key": "settings.mode.current",
+      "text": "現在の選択："
+    },
+    {
+      "key": "settings.mode.vr",
+      "text": "バーチャルリアリティ (VR)"
+    },
+    {
+      "key": "settings.mode.mr",
+      "text": "ミクスドリアリティ (MR)"
+    },
+    {
+      "key": "mr.preset.applied",
+      "text": "MR プリセットを適用：レンダースケール 0.8 未満、影を簡素化、高負荷エフェクトを無効化"
     }
   ]
 }

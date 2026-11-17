@@ -2076,6 +2076,12 @@ case KvXrStartSection.Tutorial:                    labels.Add("Начать об
                     break;
 case KvXrStartSection.Settings:                    labels.Add("Настройки шлема");
                     labels.Add("Интерфейс компьютера");
+                    // ТРЕТЬЯ СТРОКА — ПЕРЕКЛЮЧАТЕЛЬ VR/MR ПОД ДВУМЯ ПРЕЖНИМИ ПУНКТАМИ
+                    // (приоритет владельца 17.11.2026: «под двумя подпунктами в графе настройки —
+                    // переключатель из VR на MR»). Подпись — та же функция, что у кнопки
+                    // `Set_Mode` экрана настроек, и она называет ФАКТИЧЕСКИ выбранный режим;
+                    // обработчик — `ToggleMixedReality`, то есть ОДИН механизм на все панели.
+                    labels.Add(KvXrGroupPanel.ModeRowText(KvXrSettings.GetModeIndex()));
                     break;
 default:                    labels.Add("Вернуться к работе");
                     labels.Add("Выйти из приложения");
@@ -2262,7 +2268,17 @@ case KvXrStartSection.Project:                    if (row == 0) InvokeMenuComman
                     return;
 case KvXrStartSection.Tutorial:                    InvokeMenuCommand("tut.toggle", "Начать обучение");
                     return;
-case KvXrStartSection.Settings:                    OpenWindow(row == 0 ? KvXrPanelLevel.SettingsScreen : KvXrPanelLevel.InterfaceScreen);
+case KvXrStartSection.Settings:
+                    // ТРЕТЬЯ СТРОКА КОЛОНКИ «НАСТРОЙКИ» — ПЕРЕКЛЮЧАТЕЛЬ РЕЖИМА VR/MR.
+                    // Тот же обработчик, что у кнопки `Set_Mode` экрана настроек: один механизм
+                    // (`KvXrSettings.ToggleMode`) на все панели, чтобы кнопка в меню и кнопка на
+                    // экране не могли разойтись в поведении.
+                    if (row == 2)
+                    {
+                        ToggleMixedReality();
+                        return;
+                    }
+                    OpenWindow(row == 0 ? KvXrPanelLevel.SettingsScreen : KvXrPanelLevel.InterfaceScreen);
                     return;
 default:                    if (row == 0)
 {

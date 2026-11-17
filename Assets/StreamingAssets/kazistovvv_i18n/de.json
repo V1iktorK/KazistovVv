@@ -2167,6 +2167,30 @@
     {
       "key": "cmd.graphics.reset.desc",
       "text": "Zurück zu Modus „Auto“ und Standard-Grafikeinstellungen"
+    },
+    {
+      "key": "settings.mode.section",
+      "text": "Einstellungen"
+    },
+    {
+      "key": "settings.mode.note",
+      "text": "Der Modus gilt für Computer und Headset gemeinsam: VR ist ein virtuelles Labor, MR der Raum des Bedieners. Die Auswahl wird nach einem Neustart der Anwendung wirksam."
+    },
+    {
+      "key": "settings.mode.current",
+      "text": "Aktuell gewählt:"
+    },
+    {
+      "key": "settings.mode.vr",
+      "text": "Virtuelle Realität (VR)"
+    },
+    {
+      "key": "settings.mode.mr",
+      "text": "Mischte Realität (MR)"
+    },
+    {
+      "key": "mr.preset.applied",
+      "text": "MR-Voreinstellung angewendet: Render-Skala unter 0,8, Schatten vereinfacht, teure Effekte aus"
     }
   ]
 }

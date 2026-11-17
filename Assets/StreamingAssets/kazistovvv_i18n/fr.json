@@ -2167,6 +2167,30 @@
     {
       "key": "cmd.graphics.reset.desc",
       "text": "Revenir au mode « Auto » et aux réglages graphiques par défaut"
+    },
+    {
+      "key": "settings.mode.section",
+      "text": "Paramètres"
+    },
+    {
+      "key": "settings.mode.note",
+      "text": "Le mode est commun à l'ordinateur et au casque : VR est un laboratoire virtuel, MR la salle de l'opérateur. Le choix prend effet après le redémarrage de l'application."
+    },
+    {
+      "key": "settings.mode.current",
+      "text": "Sélection actuelle :"
+    },
+    {
+      "key": "settings.mode.vr",
+      "text": "Réalité virtuelle (VR)"
+    },
+    {
+      "key": "settings.mode.mr",
+      "text": "Réalité mixte (MR)"
+    },
+    {
+      "key": "mr.preset.applied",
+      "text": "Préréglage MR appliqué : échelle de rendu inférieure à 0,8, ombres simplifiées, effets coûteux désactivés"
     }
   ]
 }

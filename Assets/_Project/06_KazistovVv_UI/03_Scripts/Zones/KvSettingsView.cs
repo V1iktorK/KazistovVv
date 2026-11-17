@@ -607,6 +607,72 @@ namespace KazistovVvUI
                 "контроллеров нет, там работают клавиатура и геймпад.",
                 KvTheme.TextDisabled);
             rows.Add(tail.gameObject);
+
+            // ------------------------------------------- ГРАФА «НАСТРОЙКИ»: РЕЖИМ VR / MR
+            //
+            // ОТКУДА (приоритет владельца, просил НЕСКОЛЬКО РАЗ): «под двумя подпунктами в графе
+            // настройки — переключатель из VR на MR». Режим до этой правки менялся только на
+            // вкладке «Интерфейс» и на экране настроек шлема — в графе «Настройки» (раздел,
+            // который читают первым) его не было.
+            //
+            // ЧТО ЗДЕСЬ. Заголовок графы «Настройки» и под ним — тот же сегмент на два
+            // НАЗВАННЫХ положения, что и на вкладке «Интерфейс»: один механизм
+            // (`KvXrSettings`), одна запись, одна подпись состояния. Положение сегмента читается
+            // из хранилища при КАЖДОЙ сборке вкладки, поэтому подпись не может «отстать» от факта.
+            Divider();
+            Header(KvLoc.T("settings.mode.section", "Настройки"));
+            AddModeSwitch("VrMrMenu",
+                KvLoc.T("settings.mode.note",
+                    "Режим общий для компьютера и шлема: VR — виртуальная лаборатория, " +
+                    "MR — комната оператора. Выбор применяется после перезапуска приложения.") +
+                " " + KvLoc.T("settings.mode.current", "Сейчас выбрано:") + " " +
+                ModeNowText());
+        }
+
+        /// <summary>
+        /// ПОДПИСЬ «ЧТО ВЫБРАНО СЕЙЧАС» — ЧИТАЕТСЯ ИЗ ХРАНИЛИЩА, А НЕ ЗАПОМИНАЕТСЯ.
+        /// Переключатель, который показывает последнее нажатие, а не факт, врёт оператору после
+        /// сброса настроек и после запуска на другой машине.
+        /// </summary>
+        private static string ModeNowText()
+        {
+            return KazistovVvXr.KvXrSettings.GetModeIndex() == KazistovVvXr.KvXrSettings.ModeMr
+                ? KvLoc.T("settings.mode.mr", KazistovVvXr.KvXrSettings.ModeLabel(
+                    KazistovVvXr.KvXrSettings.ModeMr))
+                : KvLoc.T("settings.mode.vr", KazistovVvXr.KvXrSettings.ModeLabel(
+                    KazistovVvXr.KvXrSettings.ModeVr));
+        }
+
+        /// <summary>
+        /// СТРОКА-ПЕРЕКЛЮЧАТЕЛЬ РЕЖИМА VR / MR: два НАЗВАННЫХ положения и честная подпись
+        /// состояния. Положение сегмента всегда читается из ОДНОГО хранилища с веткой MR.
+        /// </summary>
+        private void AddModeSwitch(string segmentName, string note)
+        {
+            int mode = callbacks != null && callbacks.GetMode != null
+                ? callbacks.GetMode()
+                : KazistovVvXr.KvXrSettings.GetModeIndex();
+
+            KvSegmented seg = KvWidgets.Segmented(content, segmentName,
+                new[]
+                {
+                    KvLoc.T("settings.mode.vr", KazistovVvXr.KvXrSettings.ModeLabel(
+                        KazistovVvXr.KvXrSettings.ModeVr)),
+                    KvLoc.T("settings.mode.mr", KazistovVvXr.KvXrSettings.ModeLabel(
+                        KazistovVvXr.KvXrSettings.ModeMr))
+                },
+                Mathf.Clamp(mode, 0, KazistovVvXr.KvXrSettings.ModeCount - 1),
+                delegate (int i)
+                {
+                    if (callbacks != null && callbacks.SetMode != null) callbacks.SetMode(i);
+                    // Пересборка панели: подпись «Сейчас выбрано: …» обязана смениться в том же
+                    // кадре, иначе переключатель молча врёт про текущий режим.
+                    Rebuild();
+                }, 22f);
+            rows.Add(seg.gameObject);
+
+            Text status = KvWidgets.Note(content, note, KvTheme.TextDim);
+            rows.Add(status.gameObject);
         }
 
         // ------------------------------------------------------------------ вкладка 3

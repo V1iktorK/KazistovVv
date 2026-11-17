@@ -2167,6 +2167,30 @@
     {
       "key": "cmd.graphics.reset.desc",
       "text": "恢复到“自动”模式和默认图形设置"
+    },
+    {
+      "key": "settings.mode.section",
+      "text": "设置"
+    },
+    {
+      "key": "settings.mode.note",
+      "text": "模式在电脑与头显之间共用：VR 是虚拟实验室，MR 是操作员的房间。选择将在应用重启后生效。"
+    },
+    {
+      "key": "settings.mode.current",
+      "text": "当前选择："
+    },
+    {
+      "key": "settings.mode.vr",
+      "text": "虚拟现实 (VR)"
+    },
+    {
+      "key": "settings.mode.mr",
+      "text": "混合现实 (MR)"
+    },
+    {
+      "key": "mr.preset.applied",
+      "text": "已应用 MR 预设：渲染缩放低于 0.8，阴影简化，昂贵效果已关闭"
     }
   ]
 }
