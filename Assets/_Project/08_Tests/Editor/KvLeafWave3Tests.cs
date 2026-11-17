@@ -468,8 +468,12 @@ namespace KazistovVvTests
             RegisterAllCommands(NewHost("models"));
 
             KvRobotModel[] all = KvRobotCatalog.All;
-            Assert.AreEqual(12, all.Length,
-                "в каталоге " + all.Length + " моделей вместо двенадцати — проверка не про те листья");
+            // 13 = 12 прежних моделей + THOR (основной робот, решение владельца 17.11.2026).
+            // Число называется осознанно: проверка «не про те листья» обязана видеть ВСЕ модели
+            // каталога, включая новую, иначе листья про Thor просто не проверяются.
+            Assert.AreEqual(13, all.Length,
+                "в каталоге " + all.Length + " моделей вместо тринадцати (12 прежних + THOR) — " +
+                "проверка не про те листья");
 
             int withoutGeometry = 0;
             int withGeometry = 0;

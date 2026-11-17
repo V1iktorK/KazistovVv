@@ -3430,8 +3430,13 @@ namespace KazistovVvTests
         public void StartMenu_DeleteRowReason_NamesNoObjectsFact()
         {
             const string urn = "KvXrStartMenu/KvXrStartMenuPanel/KvXrGroupCanvas/MenuDelete_0";
+            // Подпись строки берётся из того же источника, что и сама строка меню: владелец
+            // 17.11.2026 сделал основным роботом THOR, и строка теперь называется «Добавить
+            // робота THOR». Жёсткая строка-литерал здесь снова разошлась бы с меню при первой
+            // же правке подписи — ровно тот дефект, который проверяет этот тест.
             const string create =
-                "KvXrStartMenu/KvXrStartMenuPanel/KvXrGroupCanvas/MenuRow_1«Добавить 6-осевой робот»";
+                "KvXrStartMenu/KvXrStartMenuPanel/KvXrGroupCanvas/MenuRow_1" +
+                "«" + "Добавить робота THOR" + "»";
 
             Assert.IsTrue(KvUiSweepStartMenu.IsDeleteRowPath(urn),
                 "урна распознаётся по последнему отрезку пути");
