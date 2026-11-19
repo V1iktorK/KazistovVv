@@ -174,6 +174,15 @@ namespace KazistovVvFeatures
         public bool Begin()
         {
             if (running) return false;
+
+            // ДЕФЕКТ ВОЛНЫ 5 («Показать демо», лист «Сервис/Показать демо»): шаги строит только
+            // `Bind`, а его зовёт `KvStageHub2.BindServices`, который рано выходит, пока
+            // планировщик не готов (нет робота/стола). Кнопка демо при этом ДОСТУПНА ВСЕГДА, и
+            // нажатие до готовности падало `IndexOutOfRangeException` на `steps[0]` — вместо
+            // designed-поведения «демонстрация начнётся с шага „наведите лазер“» (см. комментарий
+            // ниже про ожидание робота). Теперь шаги достраиваются на месте.
+            if (steps.Count == 0) BuildSteps();
+
             if (flow == null)
             {
                 KazistovVvUIManager ui = KazistovVvUIManager.Instance;
