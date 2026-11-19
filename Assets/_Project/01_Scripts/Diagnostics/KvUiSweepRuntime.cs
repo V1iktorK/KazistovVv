@@ -1759,6 +1759,13 @@ namespace KazistovVvDiagnostics
         public const int MaxAttempts = 3;
 
         /// <summary>
+        /// СКОЛЬКО ПОПЫТОК ДЛЯ ЭЛЕМЕНТА ВЕЕРА. Цепочка группы может быть неизвестна (группы
+        /// стартового меню не совпадают с раскладкой тулбара) — тогда каждая попытка перебирает
+        /// иконки групп, и их нужно покрыть все (13 иконок на замере 19.11.2026) с запасом.
+        /// </summary>
+        public const int FanProbeAttempts = 16;
+
+        /// <summary>
         /// ЦЕПОЧКА ШТАТНЫХ НАЖАТИЙ ОТ БАЗЫ ДО УРОВНЯ (подписи иконок: сначала группа, потом
         /// экран). Пустой массив — уровень базовый, возвращаться не надо. `null` — восстановить
         /// штатными путями нечем (стартовое меню показывается своим `Show`, окно компьютера —
@@ -4914,6 +4921,12 @@ namespace KazistovVvDiagnostics
             // успешное нажатие. Плюс выбор живёт в двух трекерах — проверяются оба.
             bool treeRowSelectedBefore = TreeRowAlreadySelected(c);
 
+            // СЕГМЕНТ УЖЕ ВЫБРАН ДО НАЖАТИЯ — снимок ДО, как у строки дерева (замер 19.11.2026).
+            // Прежде правило читало `KvSegmented.Index` ПОСЛЕ нажатия: удачное нажатие СТАВИЛО
+            // этот индекс, и «вкладка уже выбрана» приклеивалась к живым сегментам (28 строк
+            // GraphSeg в одном прогоне). Единственный честный вопрос — «и так уже был выбран?».
+            int segIndexBefore = SegIndexBefore(c);
+
             // МАКЕТ AR — ЭЛЕМЕНТЫ ПАНЕЛИ ШЛЕМА НЕ ПРОВЕРЯЮТСЯ (заказ B). Причина чистая:
             // путь + макет, считается ДО нажатия и ею же запрещается нажатие — иначе обход
             // ломался бы об «панель не открыта» на панели, которой в этом макете нет.
@@ -5076,7 +5089,7 @@ namespace KazistovVvDiagnostics
                 TimedOut = timedOut
             };
             element.ExemptReason = ExemptReasonFor(c, sectionBefore, treeRowSelectedBefore,
-                helmetReason);
+                segIndexBefore, helmetReason);
             // НЕНАЖАТЫЙ ЭЛЕМЕНТ ОБЯЗАН БЫТЬ С ПРИЧИНОЙ (дефект D3, 13.11.2026). `mayPress == false`
             // — решение САМОГО прогона: он сознательно не трогает такой элемент (системный шлюз,
             // системный экран, выход). Без причины этот элемент считался «без эффекта», то есть
@@ -5179,8 +5192,13 @@ namespace KazistovVvDiagnostics
         /// нажатия сверять нельзя: после удачного нажатия выбрана любая строка, и правило
         /// вычёркивало бы успешное нажатие (дефект B3).
         /// </param>
+        /// <param name="segIndexBefore">
+        /// Индекс сегмента `KvSegmented` ДО нажатия (−1 — неизвестно). ПОСЛЕ нажатия читать
+        /// нельзя: удачное нажатие ставит этот индекс, и «вкладка уже выбрана» приклеивалась бы
+        /// к живым сегментам (замер 19.11.2026).
+        /// </param>
         private static string ExemptReasonFor(Candidate c, int sectionBefore, bool treeRowSelectedBefore,
-            string helmetReason)
+            int segIndexBefore, string helmetReason)
         {
             // МАКЕТ AR: ЭЛЕМЕНТ ПАНЕЛИ ШЛЕМА — ГРАНИЦА МАКЕТА, А НЕ «ПАНЕЛЬ НЕ ОТКРЫТА» (заказ B).
             // Причина посчитана в `CheckOne` по пути и макету; здесь она только возвращается,
@@ -5207,19 +5225,19 @@ namespace KazistovVvDiagnostics
 
             if (!IsInteractable(c)) return KvUiSweepExemptions.DisabledReason;
 
-            // ЗАКОННЫЕ «НИЧЕГО НЕ МЕНЯЮТ» — только с проверкой ФАКТИЧЕСКОГО состояния.
+            // ЗАКОННЫЕ «НИЧЕГО НЕ МЕНЯЮТ» — только с проверкой ФАКТИЧЕСКОГО состояния ДО НАЖАТИЯ.
             // 1) Активная вкладка: нажатие на уже выбранный сегмент законно ничего не меняет.
-            if (c.Target != null)
+            //    Индекс берётся из снимка ДО (как у строки дерева): ПОСЛЕ удачного нажатия он
+            //    равен номеру элемента всегда — правило вычёркивало бы УСПЕШНЫЕ нажатия
+            //    (замер 19.11.2026: 28 строк GraphSeg). Снимок неизвестен (−1) — причину НЕ
+            //    даём: неизвестное состояние не повод вычёркивать элемент.
+            if (segIndexBefore >= 0 && c.Target != null)
             {
                 int elementIndex = KvUiSweepExemptions.SegmentIndexOfName(c.Target.gameObject.name);
                 if (elementIndex >= 0)
                 {
-                    KvSegmented segmented = c.Target.GetComponentInParent<KvSegmented>();
-                    if (segmented != null)
-                    {
-                        string tab = KvUiSweepExemptions.AlreadyActiveTabReasonFor(segmented.Index, elementIndex);
-                        if (tab.Length > 0) return tab;
-                    }
+                    string tab = KvUiSweepExemptions.AlreadyActiveTabReasonFor(segIndexBefore, elementIndex);
+                    if (tab.Length > 0) return tab;
                 }
             }
 
@@ -7841,6 +7859,18 @@ namespace KazistovVvDiagnostics
             c.RestoreScreenTitle = KvUiSweepPanelNav.LevelTitle(owner.Level, screenTitle);
             c.RestoreChain = KvUiSweepPanelNav.ChainFor(owner.Level, owner.OpenGroupIndex,
                 GroupTitles(), screenTitle);
+            // ВЕЕР: цепочка берётся и из ЖИВОЙ ПАНЕЛИ (`TitleAt`), а не только из раскладки
+            // тулбара. Замер 19.11.2026: у стартового меню группы свои, `GroupTitles()` давал
+            // `null` — восстановление не нажимало НИЧЕГО («уровень Groups вместо GroupFan»,
+            // 14 элементов; в логе не было ни одной строки «ВЕЕР: … раскрыта» в момент
+            // восстановления). Если и это не дало цепочки — `NavigatePanel` найдёт группу
+            // перебором иконок.
+            if (c.RestoreChain == null && owner.Level == KvXrPanelLevel.GroupFan &&
+                owner.OpenGroupIndex >= 0)
+            {
+                string fanGroup = owner.TitleAt(owner.OpenGroupIndex);
+                if (!string.IsNullOrEmpty(fanGroup)) c.RestoreChain = new[] { fanGroup };
+            }
         }
 
         /// <summary>
@@ -7994,6 +8024,23 @@ namespace KazistovVvDiagnostics
                     panel.OpenScreen((KvXrPanelLevel)c.ExpectedLevel);
             }
 
+            // 4б) ВЕЕР БЕЗ ЦЕПОЧКИ (или цепочка не сработала) — ИЩУ ГРУППУ ПЕРЕБОРОМ ИКОНОК.
+            // Каждое нажатие жмёт следующую иконку, пока уровень не станет GroupFan: `OpenGroup`
+            // перестраивает синхронно, так что успех виден сразу. Иконка экрана уводит панель с
+            // базового уровня — перед следующим нажатием возвращаю базу `RestoreBase`. Счёт
+            // перебора сквозной (`FanProbeIndex`), чтобы попытки шли по кругу иконок.
+            if ((int)panel.Level != c.ExpectedLevel &&
+                c.ExpectedLevel == (int)KvXrPanelLevel.GroupFan)
+            {
+                int iconCount = panel.IconsOnLevel;
+                while (c.FanProbeIndex < iconCount)
+                {
+                    if ((int)panel.Level != (int)KvXrPanelLevel.Groups) RestoreBase(panel);
+                    panel.PressIndex(c.FanProbeIndex++);
+                    if ((int)panel.Level == c.ExpectedLevel) break;
+                }
+            }
+
             // 5) ПРОВЕРКА ФАКТА: «нажали и надеемся» не считается восстановлением.
             if ((int)panel.Level != c.ExpectedLevel)
                 return "уровень " + panel.Level + " вместо " + (KvXrPanelLevel)c.ExpectedLevel;
@@ -8017,7 +8064,10 @@ namespace KazistovVvDiagnostics
             if (c == null || !c.PanelBound) yield break;
             c.RestoreFail = "";
 
-            for (int attempt = 0; attempt < KvUiSweepPanelNav.MaxAttempts; attempt++)
+            int maxAttempts = c.ExpectedLevel == (int)KvXrPanelLevel.GroupFan
+                ? KvUiSweepPanelNav.FanProbeAttempts
+                : KvUiSweepPanelNav.MaxAttempts;
+            for (int attempt = 0; attempt < maxAttempts; attempt++)
             {
                 if (finished) yield break;
                 if (Locate(c) && PanelLevelMatches(c)) { c.RestoreFail = ""; yield break; }
@@ -9003,6 +9053,20 @@ namespace KazistovVvDiagnostics
         }
 
         /// <summary>
+        /// ИНДЕКС СЕГМЕНТА `KvSegmented` ДО НАЖАТИЯ (−1 — неизвестно или не сегмент). Снимок
+        /// живого состояния в момент перед нажатием — единственный честный ответ на вопрос «и так
+        /// уже был выбран этот сегмент?» (та же роль, что у `TreeRowAlreadySelected` для дерева).
+        /// </summary>
+        private static int SegIndexBefore(Candidate c)
+        {
+            if (c == null || c.Target == null) return -1;
+            int elementIndex = KvUiSweepExemptions.SegmentIndexOfName(c.Target.gameObject.name);
+            if (elementIndex < 0) return -1;
+            KvSegmented segmented = c.Target.GetComponentInParent<KvSegmented>();
+            return segmented != null ? segmented.Index : -1;
+        }
+
+        /// <summary>
         /// ЧЕСТНЫЙ ТЕКСТ ЭФФЕКТА ДЛЯ ЭЛЕМЕНТА СТРОКИ ДЕРЕВА, У КОТОРОГО НИЧЕГО НЕ ИЗМЕНИЛОСЬ
         /// и который не попал ни в одно исключение: клик не дошёл до обработчика строки. Называет
         /// конкретику вместо общего «нет изменений»; `Ok` остаётся false — это дефект, а не
@@ -9503,6 +9567,10 @@ namespace KazistovVvDiagnostics
             /// окном (это решает рантайм при восстановлении).
             /// </summary>
             public string[] RestoreChain;
+
+        /// <summary>Сколько иконок групп уже перебрано при восстановлении веера (сквозной счёт
+        /// между попытками: попытки идут по кругу иконок, а не начинают перебор сначала).</summary>
+        public int FanProbeIndex;
             /// <summary>ИМЯ УРОВНЯ для причины «панель не открыта» («экран «Состояние»»…).</summary>
             public string RestoreScreenTitle = "";
             /// <summary>ПОЧЕМУ ЭКРАН НЕ ВОССТАНОВИЛСЯ (`""` — нечего восстанавливать/восстановилось).</summary>
