@@ -2191,6 +2191,38 @@
     {
       "key": "mr.preset.applied",
       "text": "MR preset applied: render scale below 0.8, shadows simplified, expensive effects off"
+    },
+    {
+      "key": "ar.anchor.disabled",
+      "text": "anchor: marker off — previous behavior (the scene does not follow the camera)"
+    },
+    {
+      "key": "ar.anchor.noworld",
+      "text": "anchor: waiting for the scene to be placed by the marker — use “Place by marker”"
+    },
+    {
+      "key": "ar.anchor.waiting",
+      "text": "anchor: marker not found yet — point the camera at the QR code"
+    },
+    {
+      "key": "ar.anchor.found",
+      "text": "anchor: marker found · distance {0} m"
+    },
+    {
+      "key": "ar.anchor.lost",
+      "text": "anchor: marker lost — pose held"
+    },
+    {
+      "key": "ar.anchor.drift",
+      "text": "anchor: marker gone too long — the scene may drift"
+    },
+    {
+      "key": "cmd.ar.anchor.marker",
+      "text": "Anchor: marker"
+    },
+    {
+      "key": "cmd.ar.anchor.marker.desc",
+      "text": "Keep the table and robot anchored to the QR marker: the scene stays in space while the tablet moves. Off — previous behavior"
     }
   ]
 }

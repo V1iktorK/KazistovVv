@@ -42,7 +42,11 @@ namespace KazistovVvAr
         {
             bool tracking = controller != null &&
                             controller.State == ARSessionState.SessionTracking;
-            if (tracking)
+            // ЯКОРЬ МАРКЕРА ВЕДЁТ МИР КАЖДЫЙ КАДР (`KvArMarkerAnchor.AppliesPose`): если дать
+            // гиро-фолбэку крутить мир параллельно, два вращения сложатся и сцена закрутится
+            // сильнее, чем двигается планшет. Уступаем — так же, как уступаем AR-трекингу.
+            if (!ShouldRotate(tracking, KvArMarkerAnchor.Active != null &&
+                                        KvArMarkerAnchor.Active.AppliesPose))
             {
                 hasLast = false;
                 return;
@@ -79,6 +83,23 @@ namespace KazistovVvAr
                    (controller != null && controller.State == ARSessionState.SessionTracking
                        ? " · трекинг есть (фолбэк выключен)"
                        : " · фолбэк активен");
+        }
+
+        /// <summary>
+        /// ВРАЩАТЬ ЛИ МИР ГИРОСКОПОМ В ЭТОМ КАДРЕ (чистая функция — проверяется тестом).
+        ///
+        /// Два источника вращения мира обязаны быть ВЗАИМОИСКЛЮЧАЮЩИМИМИ:
+        ///   • AR-трекинг (`sessionTracking`) ведёт позу устройства сам — фолбэк выключен;
+        ///   • якорь по QR-маркеру (`markerAnchorActive`) ведёт позу мира каждый кадр — фолбэк
+        ///     тоже выключен, иначе два вращения сложатся и сцена закрутится сильнее устройства.
+        /// Ни того ни другого — фолбэк работает, как и раньше (единственный способ смотреть по
+        /// сторонам на устройстве без трекинга).
+        /// </summary>
+        public static bool ShouldRotate(bool sessionTracking, bool markerAnchorActive)
+        {
+            if (sessionTracking) return false;
+            if (markerAnchorActive) return false;
+            return true;
         }
     }
 }

@@ -2191,6 +2191,38 @@
     {
       "key": "mr.preset.applied",
       "text": "Presección MR aplicada: escala de renderizado por debajo de 0.8, sombras simplificadas, efectos costosos desactivados"
+    },
+    {
+      "key": "ar.anchor.disabled",
+      "text": "ancla: marcador desactivado — comportamiento anterior (la escena no sigue a la cámara)"
+    },
+    {
+      "key": "ar.anchor.noworld",
+      "text": "ancla: esperando a colocar la escena con el marcador — «Por marcador»"
+    },
+    {
+      "key": "ar.anchor.waiting",
+      "text": "ancla: marcador aún no encontrado — apunte la cámara al código QR"
+    },
+    {
+      "key": "ar.anchor.found",
+      "text": "ancla: marcador encontrado · distancia {0} m"
+    },
+    {
+      "key": "ar.anchor.lost",
+      "text": "ancla: marcador perdido — la pose se mantiene"
+    },
+    {
+      "key": "ar.anchor.drift",
+      "text": "ancla: marcador ausente mucho tiempo — la escena puede derivar"
+    },
+    {
+      "key": "cmd.ar.anchor.marker",
+      "text": "Ancla: marcador"
+    },
+    {
+      "key": "cmd.ar.anchor.marker.desc",
+      "text": "Anclar la mesa y el robot al marcador QR: la escena permanece en el espacio mientras mueve la tablet. Desactivado — comportamiento anterior"
     }
   ]
 }

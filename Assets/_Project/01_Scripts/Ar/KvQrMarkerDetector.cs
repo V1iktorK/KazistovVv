@@ -39,6 +39,20 @@ namespace KazistovVvAr
         public static bool TryFindCorners(Color32[] pixels, int width, int height,
             out Vector2[] corners, out string reason)
         {
+            return TryFindCorners(pixels, width, height, null, out corners, out reason);
+        }
+
+        /// <summary>
+        /// ТО ЖЕ С ПЕРЕИСПОЛЬЗУЕМЫМ БУФЕРОМ ЯРКОСТИ (19.11.2026, непрерывный якорь по маркеру).
+        ///
+        /// ЗАЧЕМ. Покадровый скан (15 Гц) иначе выделял бы массив яркости размером с кадр на каждый
+        /// проход — сотни килобайт мусора в секунду и сборки мусора в момент наведения. Буфер
+        /// передаёт вызывающий; если он короче кадра, детектор честно берёт свой (и не читает мимо).
+        /// Геометрия от буфера НЕ ЗАВИСИТ — это закреплено тестом.
+        /// </summary>
+        public static bool TryFindCorners(Color32[] pixels, int width, int height,
+            byte[] luminanceBuffer, out Vector2[] corners, out string reason)
+        {
             corners = null;
             reason = null;
 
@@ -49,7 +63,9 @@ namespace KazistovVvAr
             }
 
             int count = width * height;
-            byte[] lum = new byte[count];
+            byte[] lum = luminanceBuffer != null && luminanceBuffer.Length >= count
+                ? luminanceBuffer
+                : new byte[count];
             int min = 255;
             int max = 0;
             long sum = 0;

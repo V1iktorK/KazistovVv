@@ -93,6 +93,12 @@ namespace KazistovVvAr
         /// <summary>Сторож камеры (окно «ДОСТУП К КАМЕРЕ»).</summary>
         private KvArCameraGate cameraGate;
 
+        /// <summary>
+        /// НЕПРЕРЫВНЫЙ ЯКОРЬ ПО QR-МАРКЕРУ (добавляется в рантайме, как и гиро-фолбэк):
+        /// сцена держится в пространстве по маркеру на столе, а не плывёт за экраном.
+        /// </summary>
+        public KvArMarkerAnchor markerAnchor;
+
         /// <summary>Сколько секунд трекинга без единой плоскости считаем сбоем обнаружения.</summary>
         public float planeWatchdogSeconds = 15f;
 
@@ -221,6 +227,7 @@ namespace KazistovVvAr
             EnsureArUiSupport();
             if (ui != null) BuildScreenButtons();
             EnsureGyroFallback();
+            EnsureMarkerAnchor();
             if (logOnStart) StartCoroutine(LogReadyWhenSessionStarts());
         }
 
@@ -689,6 +696,29 @@ namespace KazistovVvAr
             if (GetComponent<KvArGyroFallback>() == null)
                 gameObject.AddComponent<KvArGyroFallback>();
         }
+
+        /// <summary>
+        /// ЯКОРЬ ПО МАРКЕРУ: сцена держится в пространстве по QR на столешнице (19.11.2026).
+        ///
+        /// ЗАЧЕМ ЗДЕСЬ. Компонент в сцену не вписан (её собирает инструмент), поэтому он
+        /// добавляется в рантайме — как и гиро-фолбэк, камера-сторож и сетка плоскостей.
+        /// Ссылки (постановка, интерфейс, камера) подставляются те же, что уже разведены
+        /// `ResolveReferences`: иначе якорь искал бы их поиском по сцене сам.
+        /// </summary>
+        private void EnsureMarkerAnchor()
+        {
+            markerAnchor = GetComponent<KvArMarkerAnchor>();
+            if (markerAnchor == null)
+                markerAnchor = gameObject.AddComponent<KvArMarkerAnchor>();
+            if (markerAnchor.placement == null) markerAnchor.placement = placement;
+            if (markerAnchor.ui == null) markerAnchor.ui = ui;
+            if (markerAnchor.arCamera == null) markerAnchor.arCamera = arCamera;
+            Debug.Log("[KvAr] ЯКОРЬ МАРКЕРА: непрерывное закрепление сцены по QR включено · " +
+                      "скан " + markerAnchor.ScanRateForLog() + " Гц · сглаживание " +
+                      markerAnchor.positionSmoothTime.ToString("0.00",
+                          System.Globalization.CultureInfo.InvariantCulture) + " с · " +
+                      "переключатель «Якорь: маркер» в меню «Сервис»");
+        }
         private bool yellowDiagnosed;
         private float yellowDiagAt;
 
@@ -1035,6 +1065,9 @@ namespace KazistovVvAr
                       (placed ? " (" + world.AnchorPosition.ToString("0.000") + " м)" : "") +
                       " · робот " + (world != null && world.Robot != null ? "есть" : "нет") +
                       " · кадр/с " + fpsSmoothed.ToString("0") +
+                      (markerAnchor != null && !string.IsNullOrEmpty(markerAnchor.StatusLine)
+                          ? " · " + markerAnchor.StatusLine
+                          : "") +
                       (touch != null ? " · " + touch.Describe() : ""));
             lastPlanes = planes;
             lastPlaced = placed;
@@ -1085,6 +1118,11 @@ namespace KazistovVvAr
             string right = "Камера: " + (cameraOk ? "вкл" : "ждём") +
                            " · Трекинг: " + (tracking ? "да" : "ждём") +
                            " · " + fpsSmoothed.ToString("0") + " кадр/с";
+            // ЯКОРЬ МАРКЕРА — честный статус следования («найден/потерян/выключен») в той же
+            // строке, которую оператор читает постоянно: без него потеря маркера видна только
+            // в журнале, а её обязано быть видно на экране.
+            if (markerAnchor != null && !string.IsNullOrEmpty(markerAnchor.StatusLine))
+                right = right + " · " + markerAnchor.StatusLine;
             ui.SetFooter(left, right);
 
             // Подсказку о постановке ведёт `KvArPlacement` (у него есть состояние и площади);

@@ -2191,6 +2191,38 @@
     {
       "key": "mr.preset.applied",
       "text": "Préréglage MR appliqué : échelle de rendu inférieure à 0,8, ombres simplifiées, effets coûteux désactivés"
+    },
+    {
+      "key": "ar.anchor.disabled",
+      "text": "ancre : marqueur désactivé — comportement précédent (la scène ne suit pas la caméra)"
+    },
+    {
+      "key": "ar.anchor.noworld",
+      "text": "ancre : en attente du placement de la scène par le marqueur — « Par marqueur »"
+    },
+    {
+      "key": "ar.anchor.waiting",
+      "text": "ancre : marqueur pas encore trouvé — dirigez la caméra vers le code QR"
+    },
+    {
+      "key": "ar.anchor.found",
+      "text": "ancre : marqueur trouvé · distance {0} m"
+    },
+    {
+      "key": "ar.anchor.lost",
+      "text": "ancre : marqueur perdu — la pose est maintenue"
+    },
+    {
+      "key": "ar.anchor.drift",
+      "text": "ancre : marqueur absent depuis longtemps — la scène peut dériver"
+    },
+    {
+      "key": "cmd.ar.anchor.marker",
+      "text": "Ancre : marqueur"
+    },
+    {
+      "key": "cmd.ar.anchor.marker.desc",
+      "text": "Ancrer la table et le robot au marqueur QR : la scène reste dans l'espace pendant que la tablette bouge. Désactivé — comportement précédent"
     }
   ]
 }

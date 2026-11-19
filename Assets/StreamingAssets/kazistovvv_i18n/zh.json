@@ -2191,6 +2191,38 @@
     {
       "key": "mr.preset.applied",
       "text": "已应用 MR 预设：渲染缩放低于 0.8，阴影简化，昂贵效果已关闭"
+    },
+    {
+      "key": "ar.anchor.disabled",
+      "text": "锚点: 标记关闭 — 之前的行为（场景不跟随相机）"
+    },
+    {
+      "key": "ar.anchor.noworld",
+      "text": "锚点: 等待用标记放置场景 —「按标记放置」"
+    },
+    {
+      "key": "ar.anchor.waiting",
+      "text": "锚点: 尚未发现标记 — 将相机对准二维码"
+    },
+    {
+      "key": "ar.anchor.found",
+      "text": "锚点: 已发现标记 · 距离 {0} 米"
+    },
+    {
+      "key": "ar.anchor.lost",
+      "text": "锚点: 标记丢失 — 保持位姿"
+    },
+    {
+      "key": "ar.anchor.drift",
+      "text": "锚点: 标记长时间丢失 — 场景可能漂移"
+    },
+    {
+      "key": "cmd.ar.anchor.marker",
+      "text": "锚点: 标记"
+    },
+    {
+      "key": "cmd.ar.anchor.marker.desc",
+      "text": "用二维码标记固定桌子和机器人: 移动平板时场景保持在空间中。关闭 — 之前的行为。"
     }
   ]
 }

@@ -2191,6 +2191,38 @@
     {
       "key": "mr.preset.applied",
       "text": "MR プリセットを適用：レンダースケール 0.8 未満、影を簡素化、高負荷エフェクトを無効化"
+    },
+    {
+      "key": "ar.anchor.disabled",
+      "text": "アンカー: マーカー OFF — 以前の動作（シーンがカメラに追従しない）"
+    },
+    {
+      "key": "ar.anchor.noworld",
+      "text": "アンカー: マーカーによるシーン配置待ち —「マーカーで配置」"
+    },
+    {
+      "key": "ar.anchor.waiting",
+      "text": "アンカー: マーカー未検出 — QR コードをカメラに向けてください"
+    },
+    {
+      "key": "ar.anchor.found",
+      "text": "アンカー: マーカー検出 · 距離 {0} m"
+    },
+    {
+      "key": "ar.anchor.lost",
+      "text": "アンカー: マーカー紛失 — ポーズを維持"
+    },
+    {
+      "key": "ar.anchor.drift",
+      "text": "アンカー: マーカー長時間なし — シーンがずれる可能性あり"
+    },
+    {
+      "key": "cmd.ar.anchor.marker",
+      "text": "アンカー: マーカー"
+    },
+    {
+      "key": "cmd.ar.anchor.marker.desc",
+      "text": "QR マーカーでテーブルとロボットを固定: タブレットを動かしてもシーンは空間に留まります。OFF — 以前の動作。"
     }
   ]
 }

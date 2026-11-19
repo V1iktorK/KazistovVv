@@ -752,6 +752,41 @@ namespace KazistovVvFeatures
                 }
             });
 
+            // --- ЯКОРЬ ПО МАРКЕРУ (19.11.2026, запрос владельца — «Pokémon GO»): ПЕРЕКЛЮЧАТЕЛЬ
+            //     непрерывного следования. Постановка (`ar.place.marker`) ставит стол ОДИН раз,
+            //     а этот якорь держит сцену в пространстве каждый кадр по QR на столешнице:
+            //     планшет двигают/кладут/наводят — робот и стол стоят на месте. Выключение
+            //     возвращает ПРЕЖНЕЕ поведение (ничего не читается и не двигается), поэтому
+            //     пункт обязан быть и видимым, и проверяемым: `IsChecked` красит его в меню.
+            KvCommands.Register(new KvCommand
+            {
+                Id = "ar.anchor.marker",
+                Title = "Якорь: маркер",
+                Description = "Непрерывно закреплять стол и робота по QR-маркеру: сцена стоит " +
+                              "в пространстве, пока двигают планшет. Выкл — прежнее поведение",
+                Icon = "table",
+                MenuPath = "Сервис/Якорь: маркер",
+                Execute = delegate
+                {
+                    KazistovVvAr.KvArMarkerAnchor anchor = KazistovVvAr.KvArMarkerAnchor.Active;
+                    if (anchor == null)
+                    {
+                        Debug.Log("[KvAr] ЯКОРЬ: переключатель доступен только в AR-режиме " +
+                                  "(компонента KvArMarkerAnchor в сцене нет)");
+                        return;
+                    }
+                    anchor.SetEnabled(!anchor.anchorEnabled);
+                    Debug.Log("[Stages2] якорь маркерного следения: " +
+                              (anchor.anchorEnabled ? "ВКЛЮЧЁН" : "ВЫКЛЮЧЕН") +
+                              " · " + anchor.Describe());
+                },
+                IsChecked = delegate
+                {
+                    KazistovVvAr.KvArMarkerAnchor anchor = KazistovVvAr.KvArMarkerAnchor.Active;
+                    return anchor != null && anchor.anchorEnabled;
+                }
+            });
+
             // --- ЭТАП 1: главное меню
             KvCommands.Register(new KvCommand
             {

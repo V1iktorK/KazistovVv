@@ -960,6 +960,9 @@ namespace KazistovVvAr
                         "ui.settings", "view.theme", "lang.cycle", "ui.palette", "help.hotkeys",
                         "features.open", "perf.open", "log.open", "demo.quick", "demo.pickplace",
                         "calib.tab", "payload.tab", "scenarios.open", "scenarios.run",
+                        // Якорь по QR-маркеру: сцена стоит в пространстве, пока двигают планшет
+                        // (переключатель возвращает прежнее поведение — волна 19.11.2026).
+                        "ar.anchor.marker",
                         "pendant.toggle", "gamepad.hud", "eta.toggle", "presentation.toggle"
                     };
                 case "Справка":

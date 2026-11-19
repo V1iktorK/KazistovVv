@@ -2191,6 +2191,38 @@
     {
       "key": "mr.preset.applied",
       "text": "MR-Voreinstellung angewendet: Render-Skala unter 0,8, Schatten vereinfacht, teure Effekte aus"
+    },
+    {
+      "key": "ar.anchor.disabled",
+      "text": "Anker: Marker aus — vorheriges Verhalten (die Szene folgt der Kamera nicht)"
+    },
+    {
+      "key": "ar.anchor.noworld",
+      "text": "Anker: wartet auf die Platzierung der Szene über den Marker — «Nach Marker»"
+    },
+    {
+      "key": "ar.anchor.waiting",
+      "text": "Anker: Marker noch nicht gefunden — richten Sie die Kamera auf den QR-Code"
+    },
+    {
+      "key": "ar.anchor.found",
+      "text": "Anker: Marker gefunden · Entfernung {0} m"
+    },
+    {
+      "key": "ar.anchor.lost",
+      "text": "Anker: Marker verloren — Pose wird gehalten"
+    },
+    {
+      "key": "ar.anchor.drift",
+      "text": "Anker: Marker lange weg — die Szene kann driften"
+    },
+    {
+      "key": "cmd.ar.anchor.marker",
+      "text": "Anker: Marker"
+    },
+    {
+      "key": "cmd.ar.anchor.marker.desc",
+      "text": "Tisch und Roboter dauerhaft am QR-Marker verankern: die Szene bleibt im Raum, während das Tablet bewegt wird. Aus — vorheriges Verhalten"
     }
   ]
 }

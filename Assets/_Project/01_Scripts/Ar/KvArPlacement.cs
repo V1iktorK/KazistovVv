@@ -305,6 +305,9 @@ namespace KazistovVvAr
         /// <summary>ПОСТАНОВКА ПО МАРКЕРУ: последний честный статус — успех или конкретный отказ.</summary>
         public string LastMarkerStatus { get; private set; }
 
+        /// <summary>Буферы кадра для скана QR (переиспользуются, см. `KvMarkerFrame.Buffers`).</summary>
+        private readonly KvMarkerFrame.Buffers frameBuffers = new KvMarkerFrame.Buffers();
+
         /// <summary>Мир поставлен.</summary>
         public bool IsPlaced { get { return world != null && world.IsPlaced; } }
 
@@ -619,9 +622,18 @@ namespace KazistovVvAr
         public bool TryPlaceByMarker(Vector2[] imageCorners, KvMarkerIntrinsics intrinsics,
             bool requireExactIntrinsics = false)
         {
+            return TryPlaceByMarker(KvMarkerPose.Compute(imageCorners, markerSizeMeters,
+                intrinsics, requireExactIntrinsics));
+        }
+
+        /// <summary>
+        /// ПОСТАНОВКА ПО УЖЕ ПОСЧИТАННОЙ ПОЗЕ МАРКЕРА. Отдельная перегрузка нужна, чтобы ОДИН И ТОТ
+        /// ЖЕ путь «постановка по позе» шёл и от кнопки «По маркеру», и от `KvMarkerFrame` — покадровый
+        /// якорь и разовая постановка считают позу одним кодом и не могут разойтись в порогах.
+        /// </summary>
+        public bool TryPlaceByMarker(KvMarkerPoseResult pose)
+        {
             PlaceAttempts++;
-            KvMarkerPoseResult pose = KvMarkerPose.Compute(imageCorners, markerSizeMeters,
-                intrinsics, requireExactIntrinsics);
             LastMarkerPose = pose;
             if (!pose.usable)
             {
@@ -655,95 +667,30 @@ namespace KazistovVvAr
         }
 
         /// <summary>
-        /// СКАН QR И ПОСТАНОВКА: свежий кадр AR-камеры → четыре угла кода
-        /// (`KvQrMarkerDetector`) → `TryPlaceByMarker`. Интринсики настоящие из ARFoundation,
-        /// иначе фолбэк `fx ≈ ширина кадра` с пометкой точности. Каждый шаг отказывает честно.
+        /// СКАН QR И ПОСТАНОВКА: свежий кадр AR-камеры → четыре угла кода (`KvQrMarkerDetector`)
+        /// → `TryPlaceByMarker`. Путь общий с покадровым якорем (`KvMarkerFrame`): один код
+        /// интринсик, порогов и системы координат углов у кнопки и у следования. Каждый шаг
+        /// отказывает честно.
         /// </summary>
         public bool TryPlaceByMarkerFromCamera(bool requireExactIntrinsics = false)
         {
             ARCameraManager cameraManager = FindAnyObjectByType<ARCameraManager>();
             if (cameraManager == null)
             {
-                return MarkerRefuse("камера AR не найдена — сканировать нечего");
+                return MarkerRefuse(KvMarkerFrame.NoCameraReason);
             }
 
-            XRCpuImage image;
-            bool acquired;
-            try
-            {
-                acquired = cameraManager.TryAcquireLatestCpuImage(out image);
-            }
-            catch (Exception error)
-            {
-                image = default(XRCpuImage);
-                acquired = false;
-                Debug.LogWarning("[KvAr] МАРКЕР: кадр не получен (" + error.GetType().Name + ")");
-            }
-            if (!acquired)
-            {
-                return MarkerRefuse("кадр камеры недоступен — повторите попытку");
-            }
-
-            Color32[] pixels;
-            int width;
-            int height;
-            using (image)
-            {
-                width = image.width;
-                height = image.height;
-                // Конструктор ARSubsystems 6000.5 принимает ИСХОДНЫЙ КАДР (а не RectInt):
-                //     new ConversionParams(image, format, transformation)
-                // ставит inputRect и outputDimensions во весь кадр — то же самое, что
-                // было задано явным RectInt'ом (сверено по исходнику ConversionParams.cs).
-                XRCpuImage.ConversionParams conversion = new XRCpuImage.ConversionParams(
-                    image, TextureFormat.RGBA32, XRCpuImage.Transformation.None);
-                Texture2D frame = new Texture2D(width, height, TextureFormat.RGBA32, false);
-                try
-                {
-                    // Без MirrorY: углы должны лежать в той системе кадра, к которой
-                    // относятся интринсики ARFoundation.
-                    image.Convert(conversion, frame.GetRawTextureData<byte>());
-                    frame.Apply();
-                    pixels = frame.GetPixels32();
-                }
-                finally
-                {
-                    if (Application.isPlaying) Destroy(frame);
-                    else DestroyImmediate(frame);
-                }
-            }
-
-            Vector2[] corners;
+            // Буферы кадра живут столько, сколько живёт компонент: разовая постановка не должна
+            // выделять текстуру и массивы пикселей на каждый вызов (как делала раньше).
+            KvMarkerPoseResult pose;
             string reason;
-            if (!KvQrMarkerDetector.TryFindCorners(pixels, width, height, out corners, out reason))
+            if (!KvMarkerFrame.TryPoseFromCamera(cameraManager, markerSizeMeters, frameBuffers,
+                    requireExactIntrinsics, out pose, out reason))
             {
                 return MarkerRefuse(reason);
             }
 
-            KvMarkerIntrinsics intrinsics;
-            XRCameraIntrinsics camIntrinsics;
-            if (cameraManager.TryGetIntrinsics(out camIntrinsics) &&
-                camIntrinsics.resolution.x > 0 && camIntrinsics.resolution.y > 0)
-            {
-                float sx = width / (float)camIntrinsics.resolution.x;
-                float sy = height / (float)camIntrinsics.resolution.y;
-                intrinsics = new KvMarkerIntrinsics
-                {
-                    fx = camIntrinsics.focalLength.x * sx,
-                    fy = camIntrinsics.focalLength.y * sy,
-                    cx = camIntrinsics.principalPoint.x * sx,
-                    cy = camIntrinsics.principalPoint.y * sy,
-                    approximate = false
-                };
-            }
-            else
-            {
-                // ФОЛБЭК без интринсик камеры: fx ≈ ширина кадра — поза считается,
-                // но статус честно скажет, что она приблизительная.
-                intrinsics = KvMarkerIntrinsics.FromFrame(width, height);
-            }
-
-            return TryPlaceByMarker(corners, intrinsics, requireExactIntrinsics);
+            return TryPlaceByMarker(pose);
         }
 
         /// <summary>
