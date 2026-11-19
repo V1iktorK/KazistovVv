@@ -690,26 +690,30 @@ if (-not $headset) {
         if ($install -notmatch 'Success|already') { $problems += "установка: $install" }
     } else { $problems += 'нет VR-APK для установки' }
 
+    & $Adb -s $headset.Id shell am kill-all 2>&1 | Out-Null
+    & $Adb -s $headset.Id shell pm trim-caches 999999999999 2>&1 | Out-Null
     & $Adb -s $headset.Id shell am force-stop $package 2>&1 | Out-Null
     Start-Sleep -Seconds 3
     & $Adb -s $headset.Id logcat -c 2>&1 | Out-Null
     # БУДИТЬ ОБЯЗАТЕЛЬНО (добавлено тестировщиком 16.11). Шлем без движения уходит в сон, и
-    # `monkey` в спящее устройство запускает активность молча: «нет строки [KvEnv]» — хотя код
-    # цел (самопрогон с KEYCODE_WAKEUP проходил на том же APK). Плюс удержание экрана на время
-    # замера и ОДИН повтор — чтобы вердикт не зависел от фазы сна стенда.
+    # запуск в спящее устройство молчит: «нет строки [KvEnv]» — хотя код цел (самопрогон с
+    # KEYCODE_WAKEUP проходил на том же APK). Первый запуск после установки APK тоже медленный —
+    # даём 60 с и ДВА повтора с тяжёлой подготовкой (как в ui-sweep-device).
     & $Adb -s $headset.Id shell input keyevent KEYCODE_WAKEUP 2>&1 | Out-Null
     & $Adb -s $headset.Id shell svc power stayon true 2>&1 | Out-Null
     Start-Sleep -Seconds 2
     & $Adb -s $headset.Id shell am start -n ($package + '/com.unity3d.player.UnityPlayerGameActivity') 2>&1 | Out-Null
-    Start-Sleep -Seconds 40
+    Start-Sleep -Seconds 60
 
     $hlc = (& $Adb -s $headset.Id logcat -d 2>&1) -join "`n"
-    if ($hlc -notmatch '\[KvEnv\]') {
-        Write-Host "    [KvEnv] нет — будилью и повторяю запуск (сон стенда, а не код)"
+    for ($hTry = 1; $hTry -le 2 -and $hlc -notmatch '\[KvEnv\]'; $hTry++) {
+        Write-Host "    [KvEnv] нет — будилью и повторяю запуск $hTry (сон стенда, а не код)"
         & $Adb -s $headset.Id shell input keyevent KEYCODE_WAKEUP 2>&1 | Out-Null
         Start-Sleep -Seconds 2
+        & $Adb -s $headset.Id shell am force-stop $package 2>&1 | Out-Null
+        Start-Sleep -Seconds 2
         & $Adb -s $headset.Id shell am start -n ($package + '/com.unity3d.player.UnityPlayerGameActivity') 2>&1 | Out-Null
-        Start-Sleep -Seconds 30
+        Start-Sleep -Seconds 35
         $hlc = (& $Adb -s $headset.Id logcat -d 2>&1) -join "`n"
     }
     if ($hlc -match 'FATAL EXCEPTION') { $problems += 'падение приложения (FATAL EXCEPTION)' }
