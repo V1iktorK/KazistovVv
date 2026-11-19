@@ -903,19 +903,25 @@ namespace KazistovVvFeatures
 
         /// <summary>
         /// ПРОФИЛЬ, КОТОРЫЙ РЕАЛЬНО ПРИМЕНЯЕТСЯ: в MR поверх профиля оператора ложится
-        /// MR-пресет (<see cref="KvMrPerformance"/>), в VR — оригинал.
+        /// MR-ветка (<see cref="KvMrPerformance"/>), в VR — оригинал.
         ///
-        /// ПОЧЕМУ КОПИЯ, А НЕ ПЕРЕЗАПИСЬ. Пресет оператора живёт в PlayerPrefs и обязан
+        /// ПОЧЕМУ КОПИЯ, А НЕ ПЕРЕЗАПИСЬ. Профиль оператора живёт в PlayerPrefs и обязан
         /// пережить визит в MR: иначе после одного запуска в MR он обнаружил бы выключенные
         /// эффекты и пониженный масштаб как СВОИ настройки, а правка любой графической строки
         /// в MR сохраняла бы дешёвые значения в его профиль.
+        ///
+        /// ЧТО В КОПИЮ ПОПАДАЕТ (19.11.2026, требование владельца «качество обратно»):
+        /// ТОЛЬКО отключение дорогой постобработки — `KvMrPerformance.ApplyEffectsTo`.
+        /// Масштаб отрисовки и тени в копии НЕ МЕНЯЮТСЯ: ровно то, что владелец просил
+        /// вернуть. Полный пресет `KvMrPerformance.ApplyTo` остался опцией с прежней
+        /// семантикой (закреплён тестом `KvMrOptimizationTests`), но сюда больше не идёт.
         /// </summary>
         public static KvGraphicsProfile EffectiveProfileFor(KvGraphicsProfile chosen)
         {
             if (chosen == null) return null;
             if (!KvMrPerformance.IsMrMode()) return chosen;
             KvGraphicsProfile cheap = chosen.Clone();
-            KvMrPerformance.ApplyTo(cheap);
+            KvMrPerformance.ApplyEffectsTo(cheap);
             return cheap;
         }
 
@@ -936,13 +942,12 @@ namespace KazistovVvFeatures
             active = operatorProfile;
             if (mrPreset)
             {
-                // Строка в ОТЧЁТЕ: без неё оператор не отличил бы «MR-пресет сработал» от
+                // Строка в ОТЧЁТЕ: без неё оператор не отличил бы «MR-ветка сработала» от
                 // «графика не применялась» (в пакетном режиме служба честно пишет отказ).
+                // 19.11.2026: текст приведён к факту — масштаб отрисовки и тени в MR НЕ снижаются.
                 applyReport = applyReport + "\n" + KazistovVvUI.KvLoc.T("mr.preset.applied",
-                    "MR-пресет применён: масштаб отрисовки ниже " +
-                    KvMrPerformance.MaxRenderScale.ToString("0.0",
-                        System.Globalization.CultureInfo.InvariantCulture) +
-                    ", тени упрощены, дорогие эффекты выключены");
+                    "MR: дорогая постобработка выключена (SSAO, SSR, объёмный туман, Bloom, " +
+                    "MotionBlur, DOF, трассировка), масштаб отрисовки и тени оператора СОХРАНЕНЫ");
                 report = applyReport;
             }
             return report;

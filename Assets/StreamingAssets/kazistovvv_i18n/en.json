@@ -2190,7 +2190,7 @@
     },
     {
       "key": "mr.preset.applied",
-      "text": "MR preset applied: render scale below 0.8, shadows simplified, expensive effects off"
+      "text": "MR: expensive post-processing disabled (SSAO, SSR, volumetric fog, bloom, motion blur, DoF, ray tracing); the operator's render scale and shadows are kept"
     },
     {
       "key": "ar.anchor.disabled",

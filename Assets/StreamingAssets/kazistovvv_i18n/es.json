@@ -2190,7 +2190,7 @@
     },
     {
       "key": "mr.preset.applied",
-      "text": "Presección MR aplicada: escala de renderizado por debajo de 0.8, sombras simplificadas, efectos costosos desactivados"
+      "text": "MR: posprocesado costoso desactivado (SSAO, SSR, niebla volumétrica, bloom, motion blur, DOF, trazado de rayos); se conservan la escala de renderizado y las sombras del operador"
     },
     {
       "key": "ar.anchor.disabled",

@@ -13,10 +13,13 @@ namespace KazistovVvFeatures
     /// отвечает `KvGraphicsService.EffectiveProfileFor`).
     ///
     /// ЧТО ДЕШЕВЛЕЕ В MR:
-    ///   • масштаб отрисовки — не выше <see cref="MaxRenderScale"/> (меньше пикселей на кадр);
-    ///   • тени — короче дистанция, меньше каскадов и разрешение карты;
     ///   • дорогие эффекты постобработки — SSAO, SSR, объёмный туман, Bloom, размытие в
-    ///     движении, глубина резкости, трассировка лучей, отражения реального времени.
+    ///     движении, глубина резкости, трассировка лучей, отражения реального времени
+    ///     (`ApplyEffectsTo` — вот что реально применяет рантайм);
+    ///   • НЕ применяется к рантайму больше: масштаб отрисовки и тени. Требование владельца
+    ///     19.11.2026 «не снижать графику/разрешение/тени — качество обратно»: полный пресет
+    ///     (`ApplyTo`, потолки <see cref="MaxRenderScale"/> и др.) оставлен как опция,
+    ///     закреплённая тестом, но в шове `KvGraphicsService.EffectiveProfileFor` не вызывается.
     ///
     /// ВТОРОЙ КУСОК — ТРОТТЛИНГ UI/HUD: интервал <see cref="UiUpdateIntervalSeconds"/> длиннее
     /// в MR, чем в VR. Он читается из `Update`-путей панелей (`KvGamepadHud`), где иначе каждый
@@ -69,8 +72,16 @@ namespace KazistovVvFeatures
         }
 
         /// <summary>
-        /// УДЕШЕВИТЬ ПРОФИЛЬ ДЛЯ MR. Вызывается ТОЛЬКО когда режим MR — сама функция режим не
-        /// читает, поэтому её можно проверить на любом профиле, без настройки окружения.
+        /// УДЕШЕВИТЬ ПРОФИЛЬ ДЛЯ MR (ПОЛНЫЙ ПРЕСЕТ — ОПЦИЯ). Вызывается ТОЛЬКО когда режим MR —
+        /// сама функция режим не читает, поэтому её можно проверить на любом профиле, без
+        /// настройки окружения.
+        ///
+        /// ЧЕСТНО О РАНЕЙШЕМ РЕЖИМЕ. 17.11.2026 этот метод снижал и масштаб отрисовки, и тени.
+        /// Владелец 19.11.2026: «не снижать графику/разрешение/тени — качество обратно».
+        /// Поэтому РАНТАЙМ-ШОВ (`KvGraphicsService.EffectiveProfileFor`) больше не зовёт этот
+        /// метод: в шлеме масштаб и тени остаются профиля оператора (см. `ApplyEffectsTo`).
+        /// Сам метод сохранён как проверяемая опция «дешёвый профиль» — его поведение
+        /// закреплено тестом `KvMrOptimizationTests` и менять его без решения владельца нельзя.
         /// </summary>
         public static void ApplyTo(KvGraphicsProfile p)
         {
@@ -83,7 +94,21 @@ namespace KazistovVvFeatures
             if (p.shadowDistance > MaxShadowDistance) p.shadowDistance = MaxShadowDistance;
             if (p.shadowResolution > MaxShadowResolution) p.shadowResolution = MaxShadowResolution;
 
-            // --- дорогая постобработка: в MR её кадр не прощает
+            ApplyEffectsTo(p);
+        }
+
+        /// <summary>
+        /// ВЫКЛЮЧИТЬ ТОЛЬКО ДОРОГУЮ ПОСТОБРАБОТКУ — масштаб отрисовки и тени НЕ ТРОГАЮТСЯ.
+        ///
+        /// ЗАЧЕМ ОТДЕЛЬНЫЙ МЕТОД. Это ровно тот кусок пресета, который остаётся в рантайме:
+        /// постобработка стоит кадра (полноэкранные проходы), а масштаб и тени владелец
+        /// считает качеством и требует вернуть. Метод чистый (без чтения режима) — проверяется
+        /// на любом профиле.
+        /// </summary>
+        public static void ApplyEffectsTo(KvGraphicsProfile p)
+        {
+            if (p == null) return;
+
             p.ssao = false;
             p.ssr = false;
             p.reflectionMode = 0;
@@ -125,6 +150,53 @@ namespace KazistovVvFeatures
             if (now - last < interval) return false;
             last = now;
             return true;
+        }
+
+        /// <summary>
+        /// ЗАМОК СТРОКИ: `true` — значение изменилось и его надо записать в текст (и только тогда
+        /// аллоцируется строка). Без изменения — ни одной аллокации и ни одного вызова сеттера
+        /// `Text.text`, а значит и ни одного лишнего пересобирания канваса (оптимизация MR,
+        /// 19.11.2026: `KvUiStates.Update` собирал строку прогресса каждый кадр).
+        /// </summary>
+        public static bool TextChanged(ref string cache, string value)
+        {
+            if (cache == value) return false;   // сравнение строк без аллокаций, null-безопасно
+            cache = value;
+            return true;
+        }
+
+        /// <summary>
+        /// ЗАМОК ЧИСЛА: тот же смысл для процентов/счётчиков — переписывать текст только при
+        /// смене числа, а не каждый кадр.
+        /// </summary>
+        public static bool Changed(ref int cache, int value)
+        {
+            if (cache == value) return false;
+            cache = value;
+            return true;
+        }
+
+        /// <summary>
+        /// СКОЛЬКО НАСТРОЕК КАЧЕСТВА ПРОФИЛЯ ОСТАЁТСЯ У ОПЕРАТОРА В MR (число для строки метрики
+        /// «MR: настроек качества N · GC/кадр ~0 · пересборок UI/сек M»).
+        ///
+        /// СЧИТАЕТСЯ ОТ РЕФЛЕКСИИ, А НЕ ЗАПОМИНАЕТСЯ РУКОЙ: если в `KvGraphicsProfile` появится
+        /// новое поле, число обновится само, а тест сверит его с числом НЕ тронутых пресетом
+        /// полей. Вычитаются только 8 флагов постобработки (см. `ApplyEffectsTo`).
+        /// </summary>
+        public static int TotalProfileSettings()
+        {
+            return typeof(KvGraphicsProfile).GetFields(
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance).Length;
+        }
+
+        /// <summary>Флагов постобработки, которые пресет выключает в MR.</summary>
+        public const int PostEffectsCutInMr = 8;
+
+        /// <summary>Настроек качества, сохраняемых в MR: всего полей профиля минус постобработка.</summary>
+        public static int QualitySettingsKept()
+        {
+            return TotalProfileSettings() - PostEffectsCutInMr;
         }
     }
 }

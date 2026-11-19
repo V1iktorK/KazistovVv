@@ -2190,7 +2190,7 @@
     },
     {
       "key": "mr.preset.applied",
-      "text": "Préréglage MR appliqué : échelle de rendu inférieure à 0,8, ombres simplifiées, effets coûteux désactivés"
+      "text": "MR : post-traitement coûteux désactivé (SSAO, SSR, brouillard volumétrique, bloom, motion blur, DOF, ray tracing) ; l'échelle de rendu et les ombres de l'opérateur sont conservées"
     },
     {
       "key": "ar.anchor.disabled",

@@ -2190,7 +2190,7 @@
     },
     {
       "key": "mr.preset.applied",
-      "text": "MR-Voreinstellung angewendet: Render-Skala unter 0,8, Schatten vereinfacht, teure Effekte aus"
+      "text": "MR: aufwendige Nachbearbeitung aus (SSAO, SSR, volumetrischer Nebel, Bloom, Motion Blur, Tiefenschärfe, Raytracing); Render-Skalierung und Schatten des Operators bleiben erhalten"
     },
     {
       "key": "ar.anchor.disabled",

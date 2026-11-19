@@ -2190,7 +2190,7 @@
     },
     {
       "key": "mr.preset.applied",
-      "text": "已应用 MR 预设：渲染缩放低于 0.8，阴影简化，昂贵效果已关闭"
+      "text": "MR: 已关闭昂贵的后期处理（SSAO、SSR、体积雾、Bloom、运动模糊、景深、光线追踪），渲染缩放与阴影保持操作者设置"
     },
     {
       "key": "ar.anchor.disabled",
