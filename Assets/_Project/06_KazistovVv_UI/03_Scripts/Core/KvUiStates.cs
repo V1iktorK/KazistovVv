@@ -334,17 +334,42 @@ namespace KazistovVvUI
                 float x = Mathf.Lerp(0f, width * (1f - fraction), t);
                 loadingFill.sizeDelta = new Vector2(width * fraction, -2f);
                 loadingFill.anchoredPosition = new Vector2(x, 0f);
+
+                // СТРОКА ПИШЕТСЯ ТОЛЬКО ПРИ СМЕНЕ ТЕКСТА ИЛИ СОСТОЯНИЯ (оптимизация MR,
+                // 19.11.2026): раньше `loadingText + "…"` аллоцировалась КАЖДЫЙ кадр, пока шла
+                // загрузка. `cachedLoadingState` (1 — «бегущая» полоса) нужен, чтобы после
+                // процентной операции с тем же текстом подпись снова стала «…».
                 if (loadingLabel != null && !string.IsNullOrEmpty(loadingText))
-                    loadingLabel.text = loadingText + "…";
+                {
+                    bool indeterminateTextChanged = KazistovVvFeatures.KvMrPerformance.TextChanged(ref cachedLoadingText, loadingText);
+                    bool indeterminateStateChanged = KazistovVvFeatures.KvMrPerformance.Changed(ref cachedLoadingState, 1);
+                    if (indeterminateTextChanged || indeterminateStateChanged) loadingLabel.text = loadingText + "…";
+                }
                 return;
             }
 
             loadingFill.sizeDelta = new Vector2(Mathf.Max(0f, width * fraction), -2f);
             loadingFill.anchoredPosition = new Vector2(1f, 0f);
-            if (loadingLabel != null)
+            if (loadingLabel == null) return;
+
+            // ПРОЦЕНТ СОБИРАЕТСЯ В СТРОКУ ТОЛЬКО ПРИ СМЕНЕ ЧИСЛА ИЛИ ПОДПИСИ: тот же приём,
+            // что и выше — ни аллокации, ни вызова сеттера (а значит и пересборки канваса)
+            // на кадрах, где ничего не изменилось.
+            int percent = Mathf.RoundToInt(fraction * 100f);
+            bool textChanged = KazistovVvFeatures.KvMrPerformance.TextChanged(ref cachedLoadingText, loadingText);
+            bool percentChanged = KazistovVvFeatures.KvMrPerformance.Changed(ref cachedLoadingPercent, percent);
+            bool stateChanged = KazistovVvFeatures.KvMrPerformance.Changed(ref cachedLoadingState, 0);
+            if (textChanged || percentChanged || stateChanged)
+            {
                 loadingLabel.text = (string.IsNullOrEmpty(loadingText) ? "" : loadingText + " — ") +
-                    Mathf.RoundToInt(fraction * 100f) + " %";
+                                    percent + " %";
+            }
         }
+
+        /// <summary>Последние подписанные значения строки прогресса (замок аллокаций в `Update`).</summary>
+        private string cachedLoadingText;
+        private int cachedLoadingPercent = -1;
+        private int cachedLoadingState = -1;
 
         // ------------------------------------------------------------------ EMPTY STATE
 

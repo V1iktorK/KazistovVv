@@ -76,8 +76,30 @@ namespace KazistovVvXr
         private Canvas canvas;
         private RectTransform canvasRect;
         private readonly List<GameObject> buttons = new List<GameObject>();
-        private string builtSignature = "";
-        private bool builtOnce;
+
+        /// <summary>
+        /// ПОДПИСЬ НАСТРОЕК БЕЗ СТРОК (оптимизация MR, 19.11.2026).
+        ///
+        /// ЧТО БЫЛО. `Update` каждую секунду собирал строку `"shape|hand|count|radius"`
+        /// (4 конкатенации + `ToString("0.000")`) и сравнивал её с построенной: 72 кадра в
+        /// секунду — это ~360 аллокаций строк в секунду в одном `Update`, то есть ровно тот
+        /// мусор, который сборщик мусора отыгрывает рывками («слайд-шоу»).
+        ///
+        /// ЧТО СТАЛО. Тот же набор значений хранится структурой и сравнивается побайтово:
+        /// ни одной аллокации на кадр. Точность радиуса — 0,5 мм, то есть та же, что давала
+        /// подпись с тремя знаками после запятой.
+        /// </summary>
+        private Settings builtSettings;
+        private bool hasBuiltSettings;
+
+        /// <summary>Настройки панели в том виде, в каком они сравниваются (без строк).</summary>
+        public struct Settings
+        {
+            public int shape;
+            public int hand;
+            public int count;
+            public float radius;
+        }
 
         /// <summary>Сколько кнопок реально построено (после отсева неизвестных команд).</summary>
         public int ButtonCount { get { return buttons.Count; } }
@@ -94,7 +116,9 @@ namespace KazistovVvXr
         void Update()
         {
             // Настройки могли измениться в панели настроек — пересобираем только при изменении.
-            if (builtSignature != CurrentSignature()) Rebuild(false);
+            // СРАВНЕНИЕ БЕЗ СТРОК: подпись «shape|hand|count|radius» собиралась каждый кадр
+            // (см. `Settings`) и кормила сборщик мусора вхолостую.
+            if (!hasBuiltSettings || !SameSettings(builtSettings, ReadSettings())) Rebuild(false);
 
             if (canvas == null) return;
 
@@ -105,21 +129,35 @@ namespace KazistovVvXr
             FollowHand();
         }
 
-        /// <summary>Подпись настроек: по ней видно, что панель надо пересобрать.</summary>
-        private string CurrentSignature()
+        /// <summary>Прочитать настройки панели из хранилища (без аллокаций).</summary>
+        private static Settings ReadSettings()
         {
-            return ((int)KvXrSettings.GetQuickPanelShape()) + "|" +
-                   ((int)KvXrSettings.GetQuickPanelHand()) + "|" +
-                   KvXrSettings.GetQuickPanelButtonCount() + "|" +
-                   KvXrSettings.GetQuickPanelRadius().ToString("0.000");
+            Settings s;
+            s.shape = (int)KvXrSettings.GetQuickPanelShape();
+            s.hand = (int)KvXrSettings.GetQuickPanelHand();
+            s.count = KvXrSettings.GetQuickPanelButtonCount();
+            s.radius = KvXrSettings.GetQuickPanelRadius();
+            return s;
+        }
+
+        /// <summary>
+        /// ОДИНАКОВЫ ЛИ НАСТРОЙКИ? Радиус сравнивается с точностью 0,5 мм — той же, что давала
+        /// прежняя подпись `radius.ToString("0.000")`. Вынесено как чистая функция, чтобы
+        /// проверять без шлема и без сцены (тест `KvMrFrameBudgetTests`).
+        /// </summary>
+        public static bool SameSettings(Settings a, Settings b)
+        {
+            return a.shape == b.shape && a.hand == b.hand && a.count == b.count &&
+                   Mathf.Abs(a.radius - b.radius) < 0.0005f;
         }
 
         /// <summary>Собрать (или пересобрать) панель по текущим настройкам. Идемпотентно.</summary>
         public void Rebuild(bool firstTime)
         {
-            builtSignature = CurrentSignature();
-            BuildWith(KvXrSettings.GetQuickPanelShape(), KvXrSettings.GetQuickPanelHand(),
-                KvXrSettings.GetQuickPanelButtonCount(), KvXrSettings.GetQuickPanelRadius(), firstTime);
+            builtSettings = ReadSettings();
+            hasBuiltSettings = true;
+            BuildWith((KvXrQuickShape)builtSettings.shape, (KvXrQuickHand)builtSettings.hand,
+                      builtSettings.count, builtSettings.radius, firstTime);
         }
 
         /// <summary>

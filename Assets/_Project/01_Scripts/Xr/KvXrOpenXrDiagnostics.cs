@@ -76,7 +76,27 @@ namespace KazistovVvXr
 
             // Дольше 12 секунд не шумим: контроллеры появляются, когда шлем уже надет,
             // а слежение за их появлением/пропажей ведёт KvXrInputSource (оно без ограничения).
-            if (elapsed > 34f && deviceReports > 0) finished = true;
+            //
+            // ЖЁСТКИЙ ПРЕДЕЛ (оптимизация MR, 19.11.2026). Раньше `finished` ставился ТОЛЬКО при
+            // `deviceReports > 0`: если XR-подсистема устройств не отдавала вовсе (шлем не надет,
+            // подсистема не поднялась), диагностика работала БЕСКОНЕЧНО — каждую секунду два
+            // описания устройств (StringBuilder + List + строка), то есть мусор в кадре всю
+            // жизнь приложения. Теперь предел есть всегда.
+            if (ShouldStop(elapsed, deviceReports)) finished = true;
+        }
+
+        /// <summary>Сколько секунд периодическая диагностика имеет право работать вообще.</summary>
+        public const float HardDeadlineSeconds = 60f;
+
+        /// <summary>
+        /// ПОРА ОСТАНОВИТЬСЯ? Чистая функция (без состояния и без Unity) — проверяется тестом:
+        /// после 34 с при уже отработанных отчётах и в любом случае после
+        /// <see cref="HardDeadlineSeconds"/>.
+        /// </summary>
+        public static bool ShouldStop(float elapsedSeconds, int deviceReportsMade)
+        {
+            if (elapsedSeconds > HardDeadlineSeconds) return true;
+            return elapsedSeconds > 34f && deviceReportsMade > 0;
         }
 
         private static bool finished;
