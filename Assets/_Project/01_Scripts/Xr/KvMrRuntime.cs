@@ -187,13 +187,61 @@ namespace KazistovVvXr
                     Unity.XR.OpenXR.Features.PICOSupport.PassthroughFeature.EnableVideoSeeThrough = false;
 #endif
                 }
+                else if (Backend == KvMrBackend.Meta && headCamera != null)
+                {
+                    // ВЕТКА META: сквозной вид там держит ARCameraManager (см. `EnableMeta`) —
+                    // без выключения менеджера комната продолжала бы отдаваться камерой, то есть
+                    // MR остался бы «выключенным только на словах».
+                    UnityEngine.XR.ARFoundation.ARCameraManager manager =
+                        headCamera.GetComponent<UnityEngine.XR.ARFoundation.ARCameraManager>();
+                    if (manager != null) manager.enabled = false;
+                }
             }
             catch (Exception e)
             {
                 Debug.LogWarning("[KvMr] не удалось выключить сквозной вид: " + e.GetType().Name + ": " + e.Message);
             }
             PassthroughOn = false;
+            RestoreCameraBackground(headCamera);
             Debug.Log("[KvMr] сквозной вид выключен");
+        }
+
+        // ------------------------------------------- фон камеры (туда и обратно)
+
+        /// <summary>Фон камеры ДО включения пасс-слоя — восстанавливается при выключении.</summary>
+        private static bool backgroundSaved;
+        private static CameraClearFlags savedClearFlags = CameraClearFlags.Skybox;
+        private static Color savedBackgroundColor = Color.black;
+
+        /// <summary>
+        /// ЗАПОМНИТЬ И СДЕЛАТЬ ФОН ПРОЗРАЧНЫМ (MR): прозрачный фон — условие, при котором
+        /// пасс-слой PICO видно. Без запоминания прежнего значения обратный путь был бы
+        /// недостижим: выключив сквозной вид, камера оставалась с `SolidColor` альфой 0, и в VR
+        /// оператор видел бы сцену на чёрном фоне — то есть «VR с остатками MR».
+        /// </summary>
+        private static void MakeCameraBackgroundTransparent(Camera headCamera)
+        {
+            if (headCamera == null) return;
+            if (!backgroundSaved)
+            {
+                savedClearFlags = headCamera.clearFlags;
+                savedBackgroundColor = headCamera.backgroundColor;
+                backgroundSaved = true;
+            }
+            headCamera.clearFlags = CameraClearFlags.SolidColor;
+            headCamera.backgroundColor = new Color(0f, 0f, 0f, 0f);
+        }
+
+        /// <summary>
+        /// ВЕРНУТЬ ФОН КАМЕРЫ К ВИДУ ДО MR (вызывается из `DisablePassthrough`).
+        /// Если запомненного нет (сквозной вид не включался) — ничего не делаем.
+        /// </summary>
+        private static void RestoreCameraBackground(Camera headCamera)
+        {
+            if (headCamera == null || !backgroundSaved) return;
+            headCamera.clearFlags = savedClearFlags;
+            headCamera.backgroundColor = savedBackgroundColor;
+            backgroundSaved = false;
         }
 
         // ------------------------------------------------------------ ветки платформ
@@ -344,18 +392,6 @@ namespace KazistovVvXr
                 // Отсутствие подсистемного API — это тоже «не подтверждено», а не повод падать.
             }
             return false;
-        }
-
-        /// <summary>
-        /// ФОН КАМЕРЫ ДЛЯ ПАСС-СЛОЯ. Требование PICO: фон камеры — сплошной чёрный с нулевой
-        /// альфой; иначе пасс-слой закрашивается фоном. Это НЕ «подмена цвета вместо passthrough»,
-        /// а обязательное условие, чтобы пасс-слой был виден.
-        /// </summary>
-        private static void MakeCameraBackgroundTransparent(Camera headCamera)
-        {
-            if (headCamera == null) return;
-            headCamera.clearFlags = CameraClearFlags.SolidColor;
-            headCamera.backgroundColor = new Color(0f, 0f, 0f, 0f);
         }
 
         private static bool LooksLike(string value, string token)

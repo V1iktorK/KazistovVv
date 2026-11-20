@@ -72,6 +72,20 @@ namespace KazistovVvXr
         /// <summary>Робот, поставленный на стол (найден автоматически или задан вручную).</summary>
         public Transform robotOnTable;
 
+        /// <summary>
+        /// СЕАНС MR ЗАПУЩЕН (`BeginMrSession` отработал) — признак для ВОЗВРАТА В VR (20.11.2026).
+        /// Пока он ложен, а режим переключили в VR, конвейер MR гасится в том же кадре
+        /// (см. `MustEndMrSession` / `EndMrSession`).
+        /// </summary>
+        private bool mrSessionStarted;
+
+        /// <summary>СТЕНД РОБОТА: родитель и локальная поза ДО забора в мировой корень MR.</summary>
+        private Transform robotStandParent;
+        private Vector3 robotStandLocalPosition;
+        private Quaternion robotStandLocalRotation = Quaternion.identity;
+        private Vector3 robotStandLocalScale = Vector3.one;
+        private bool robotStandSaved;
+
         /// <summary>Игровой объект сетки рабочей зоны (создаётся лениво).</summary>
         private GameObject workZoneGrid;
 
@@ -223,6 +237,11 @@ namespace KazistovVvXr
             Debug.Log("[KvMr] === СМЕШАННАЯ РЕАЛЬНОСТЬ: включаю сквозной вид и реальные поверхности ===");
             Debug.Log("[KvMr] " + KvXrCapabilities.DescribeEnabledExtensions());
 
+            // ПРИЧК «СЕАНС ЗАПУЩЕН» СТАВИТСЯ ЗДЕСЬ, А НЕ ПО ФАКТУ ПАСС-СЛОЯ: даже если сквозной
+            // вид не включился, конвейер (робот в мире, поверхности, постановка) уже поднят и
+            // обязан уметь выключиться — иначе возврат в VR остался бы в MR без картинки комнаты.
+            mrSessionStarted = true;
+
             bool passthrough = KvMrRuntime.EnablePassthrough(headCamera);
             if (!passthrough)
             {
@@ -299,6 +318,15 @@ namespace KazistovVvXr
         /// </summary>
         public void ApplyLayers()
         {
+            // ВОЗВРАТ В VR ПО НАЖАТИЮ ПЕРЕКЛЮЧАТЕЛЯ (20.11.2026, жалоба владельца: «режим VR не
+            // переносит на сцену VR, а продолжает работать в MR»). Тумблер пишет ту же настройку,
+            // что и запуск, а `SetInt` шлёт `KvXrSettingsChanged` — сюда, в слушателя. То есть
+            // смена режима здесь видна сразу, и конвейер MR гасится В ЭТОТ ЖЕ кадр, без
+            // перезапуска (обратное направление — включение MR — по-прежнему требует старта:
+            // пасс-слой поднимается только при старте приложения, об этом честно говорит
+            // `KvXrGroupPanel.ModeRestartNote`).
+            if (MustEndMrSession(mrSessionStarted, MrActive)) EndMrSession();
+
             // 1. Виртуальные стенды лаборатории гасятся ТОЛЬКО В MR, иначе они перекрывали бы
             //    реальную комнату. Это и было написано в замысле — но выполнялось ВСЕГДА.
             //
@@ -342,6 +370,89 @@ namespace KazistovVvXr
             }
         }
 
+        // ------------------------------------------- возврат в VR (20.11.2026)
+
+        /// <summary>
+        /// ГАСИТЬ ЛИ КОНВЕЙЕР MR — ЧИСТОЕ ПРАВИЛО (проверяется тестом без шлема).
+        ///
+        /// Два входа: сеанс MR реально запущен (`BeginMrSession`) и режим больше не MR (тумблер
+        /// переключили в VR, либо устройство перестало отдавать MR). Ложное срабатывание
+        /// невозможно в обе стороны: без запущенного сеанса гасить нечего, а при MR-режиме
+        /// гасить нельзя — оператор как раз просил комнату.
+        /// </summary>
+        public static bool MustEndMrSession(bool sessionStarted, bool mrActive)
+        {
+            return sessionStarted && !mrActive;
+        }
+
+        /// <summary>
+        /// ЗАКРЫТЬ СЕАНС СМЕШАННОЙ РЕАЛЬНОСТИ И ВЕРНУТЬСЯ В VR БЕЗ ПЕРЕЗАПУСКА.
+        ///
+        /// ЧТО БЫЛО (жалоба владельца 20.11.2026: «режим VR не переносит на сцену VR, а
+        /// продолжает работать в MR»). Переключатель писал настройку, `MrActive` становился
+        /// ложью, виртуальные стенды возвращались — а сквозной вид ОСТАВАЛСЯ включённым
+        /// (`KvMrRuntime.DisablePassthrough` не звался НИОТКУДА), комната продолжала
+        /// отслеживаться, покрытие рисовалось, робот оставался на реальном столе. То есть
+        /// оператор видел и слой VR, и MR одновременно.
+        ///
+        /// ЧТО СТАЛО — ЧЕТЫРЕ ШАГА ПО ПОРЯДКУ:
+        ///   1. выключается пасс-слой (`KvMrRuntime.DisablePassthrough`) — камера перестаёт
+        ///      отдавать картинку комнаты, а фон камеры возвращается к небу (без этого VR
+        ///      выглядел бы чёрным);
+        ///   2. гасится отслеживание реальных поверхностей и их покрытие — ни пересборки мешей,
+        ///      ни строк «РЕАЛЬНЫЙ СТОЛ», ни линий на месте стола;
+        ///   3. робот возвращается на свой стенд в ту же локальную позу, что была до MR;
+        ///   4. виртуальная лаборатория снова видна — это делает тот же `ApplyLayers`,
+        ///      который сюда и позвал (MR выключен → стенды не гасятся).
+        /// </summary>
+        public void EndMrSession()
+        {
+            mrSessionStarted = false;
+            Debug.Log("[KvMr] === ВОЗВРАТ В VR: выключаю сквозной вид и MR-мир ===");
+
+            KvMrRuntime.DisablePassthrough(headCamera);
+
+            // КОМНАТУ И ПОКРЫТИЕ ИЩЕМ И ЗАПАСНЫМ ПУТЁМ. `Instance` заполняется в `Awake`, а в
+            // EditMode (тесты) `Awake` НЕ вызывается — без запасного пути отключение
+            // отслеживания находило бы пустую ссылку, хотя компонент в сцене есть (урок
+            // KvGapClosureTests: «в EditMode Awake не вызывается»).
+            KvMrSurfaces surfaces = KvMrSurfaces.Instance;
+            if (surfaces == null)
+                surfaces = Object.FindAnyObjectByType<KvMrSurfaces>(FindObjectsInactive.Include);
+            if (surfaces != null) surfaces.StopTracking();
+
+            KvMrSurfacePainter painter = KvMrSurfacePainter.Instance;
+            if (painter == null)
+                painter = Object.FindAnyObjectByType<KvMrSurfacePainter>(FindObjectsInactive.Include);
+            if (painter != null) painter.showSurfaces = false;
+
+            ReturnRobotToStand();
+
+            Debug.Log("[KvMr] сквозной вид " + (KvMrRuntime.PassthroughOn ? "ВКЛЮЧЁН" : "выключен") +
+                      " · отслеживание комнаты " + (surfaces != null && surfaces.Tracking ? "идёт" : "ВЫКЛ") +
+                      " · робот " + (robotOnTable != null ? "на стенде" : "не найден") +
+                      " · режим VR (без перезапуска)");
+        }
+
+        /// <summary>
+        /// ВЕРНУТЬ РОБОТА НА СТЕНД. Локальная поза и родитель записаны при входе в MR
+        /// (`PrepareRobotForWorld`), поэтому на стенде он занимает ровно прежнее место. Если
+        /// стенд неизвестен (робота из стенда не забирали), ничего не трогаем — ломать позу
+        /// без сохранённой было бы хуже, чем оставить как есть.
+        /// </summary>
+        private void ReturnRobotToStand()
+        {
+            if (robotOnTable == null || !robotStandSaved || robotStandParent == null) return;
+
+            robotOnTable.SetParent(robotStandParent, false);
+            robotOnTable.localPosition = robotStandLocalPosition;
+            robotOnTable.localRotation = robotStandLocalRotation;
+            robotOnTable.localScale = robotStandLocalScale;
+            robotOnTable.gameObject.SetActive(true);
+
+            Debug.Log("[KvMr] робот возвращён на стенд «" + robotStandParent.name + "» (поза до MR восстановлена)");
+        }
+
         // ------------------------------------------------------------------ постановка робота
 
         /// <summary>Имя мирового корня MR. Один на весь сеанс (создаётся один раз).</summary>
@@ -370,6 +481,20 @@ namespace KazistovVvXr
             }
 
             Transform world = EnsureWorldRoot();
+
+            // ГДЕ РОБОТ СТОЯЛ ДО MR — СОХРАНЯЕМ ОДИН РАЗ. Забор в мировой корень необратим сам по
+            // себе: без этой записи вернуть робота на стенд при переключении в VR было бы некуда
+            // (20.11.2026, «режим VR не переносит на сцену VR»). Локальная поза сохраняется ДО
+            // перепривязки, поэтому на стенде он встанет ровно там, где стоял.
+            if (!robotStandSaved && root.parent != null)
+            {
+                robotStandParent = root.parent;
+                robotStandLocalPosition = root.localPosition;
+                robotStandLocalRotation = root.localRotation;
+                robotStandLocalScale = root.localScale;
+                robotStandSaved = true;
+            }
+
             if (world != null && root.parent != world) root.SetParent(world, true);
 
             // РОБОТ НЕ ПОКАЗЫВАЕТСЯ, ПОКА ОТКРЫТО МЕНЮ (пункт 1 требования владельца 12.11.2026).

@@ -1330,9 +1330,25 @@ private void ToggleMixedReality()
     bool applied = after == next;
 
     Debug.Log(ModeSwitchLogLine(before, after, applied));
-    Debug.Log("[KvXr] РЕЖИМ VR/MR: для полного включения MR нужен перезапуск приложения — " +
-              "режим сохранён, применится при следующем старте · сейчас выбрано «" +
-              KvXrSettings.ModeLabel(after) + "» · " + KvXrSettings.ModeStatusLine());
+
+    // СРОК ВСТУПЛЕНИЯ В СИЛУ ЗАВИСИТ ОТ НАПРАВЛЕНИЯ (правка 20.11.2026).
+    //   VR ← MR: применяется СРАЗУ — `KvXrMrRoom.EndMrSession` гасит пасс-слой, отслеживание
+    //             комнаты, покрытие и возвращает робота на стенд в том же кадре (жалоба владельца
+    //             «режим VR продолжает работать в MR» закрыта здесь);
+    //   MR ← VR: по-прежнему после перезапуска — пасс-слой поднимается только при старте
+    //             приложения, и обещать «нажал и заработало» было бы неправдой.
+    if (after == KvXrSettings.ModeVr)
+    {
+        Debug.Log("[KvXr] РЕЖИМ VR/MR: выбран VR — сквозной вид и MR-мир выключаются БЕЗ перезапуска" +
+                  " · сейчас выбрано «" + KvXrSettings.ModeLabel(after) + "» · " +
+                  KvXrSettings.ModeStatusLine());
+    }
+    else
+    {
+        Debug.Log("[KvXr] РЕЖИМ VR/MR: для полного включения MR нужен перезапуск приложения — " +
+                  "режим сохранён, применится при следующем старте · сейчас выбрано «" +
+                  KvXrSettings.ModeLabel(after) + "» · " + KvXrSettings.ModeStatusLine());
+    }
     Rebuild();
 }
 
