@@ -103,5 +103,24 @@ namespace KazistovVvFeatures
             Debug.Log(Describe(SystemInfo.graphicsDeviceType, SystemInfo.graphicsDeviceName,
                 SystemInfo.deviceModel, SystemInfo.operatingSystem, Application.identifier));
         }
+
+        private static bool logged;
+
+        /// <summary>
+        /// ГАРАНТИРОВАННЫЙ ВЫВОД С ПЕРВОГО КАДРА ЖИВОГО КОМПОНЕНТА (страховка тестировщика 20.11).
+        ///
+        /// ЧТО БЫЛО. Оба хука `[RuntimeInitializeOnLoadMethod]` есть в сборке (проверено по
+        /// global-metadata.dat: KvEnvBanner, [KvEnv], LogOnStartup, EmitOnStart — все на месте),
+        /// но в живом прогоне шлема строка не печаталась ни разу (замер: 271 строка журнала
+        /// запуска — [KvEnv] 0 штук). Причина молчания хуков не выяснена; оператору от неё не
+        /// легче. Печать с первого кадра `KvXrFlowBridge.Update` — компонент доказанно жив
+        /// (его строки видны в каждом прогоне), значит строка окружения появится всегда.
+        /// </summary>
+        public static void EnsureLogged()
+        {
+            if (logged) return;
+            logged = true;
+            LogOnStartup();
+        }
     }
 }

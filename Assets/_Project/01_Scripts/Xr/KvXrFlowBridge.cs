@@ -295,6 +295,7 @@ namespace KazistovVvXr
 
         void Update()
         {
+            KazistovVvFeatures.KvEnvBanner.EnsureLogged();
             GuardVisuals();
             if (!feedAim) return;
             if (flow == null && !EnsureFlow()) return;
