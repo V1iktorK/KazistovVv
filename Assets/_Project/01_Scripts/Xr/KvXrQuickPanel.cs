@@ -41,7 +41,10 @@ namespace KazistovVvXr
         public float upOffset = 0.06f;
 
         /// <summary>Размер кнопки в пикселях канваса.</summary>
-        public float buttonSize = 76f;
+        public const float DefaultButtonSize = 76f;
+
+        /// <inheritdoc cref="DefaultButtonSize"/>
+        public float buttonSize = DefaultButtonSize;
 
         /// <summary>
         /// ЗАПАСНОЕ ПОЛОЖЕНИЕ ПАНЕЛИ, КОГДА РУКИ НЕ ВИДНО (нет контроллеров). Панель встаёт
@@ -57,7 +60,10 @@ namespace KazistovVvXr
         private bool fallbackLogged;
 
         /// <summary>Размер канваса панели в пикселях (квадрат).</summary>
-        public float canvasSize = 420f;
+        public const float DefaultCanvasSize = 420f;
+
+        /// <inheritdoc cref="DefaultCanvasSize"/>
+        public float canvasSize = DefaultCanvasSize;
 
         /// <summary>
         /// КОМАНДЫ ПАНЕЛИ ПО УМОЛЧАНИЮ — те, что нужны в шлеме чаще всего. Идентификаторы взяты
@@ -110,11 +116,25 @@ namespace KazistovVvXr
         void Start()
         {
             if (headCamera == null) headCamera = GetComponentInParent<Camera>();
+
+            // ВТОРОЙ ЯРУС СКРЫТ ПО УМОЛЧАНИЮ (владелец 20.11.2026: «оставить тот, что с меньшими
+            // кружочками»). Строить и журналировать невидимую панель незачем: сборка и строка
+            // уходят впустую, а включить ярус можно на ходу (`menu.quickLayer=1`) — тогда панель
+            // соберётся в следующем кадре (`Update` → `Rebuild`).
+            if (!KvXrTuning.QuickLayerEnabled) return;
+
             Rebuild(true);
         }
 
         void Update()
         {
+            // ЯРУС ВКЛЮЧЕН? Пока нет — ничего не собираем и не держим на сцене (см. `Start`).
+            if (!KvXrTuning.QuickLayerEnabled)
+            {
+                HideLayer();
+                return;
+            }
+
             // Настройки могли измениться в панели настроек — пересобираем только при изменении.
             // СРАВНЕНИЕ БЕЗ СТРОК: подпись «shape|hand|count|radius» собиралась каждый кадр
             // (см. `Settings`) и кормила сборщик мусора вхолостую.
@@ -122,11 +142,60 @@ namespace KazistovVvXr
 
             if (canvas == null) return;
 
-            bool visible = KvXrSettings.GetQuickPanelVisible() && KvXrInputSource.HeadsetPresent;
+            bool visible = LayerVisible(true, KvXrSettings.GetQuickPanelVisible(),
+                KvXrInputSource.HeadsetPresent);
             if (canvas.gameObject.activeSelf != visible) canvas.gameObject.SetActive(visible);
             if (!visible) return;
 
             FollowHand();
+        }
+
+        /// <summary>
+        /// ВИДНА ЛИ ПАНЕЛЬ БЫСТРЫХ КОМАНД — ЧИСТОЕ ПРАВИЛО ТРЁХ УСЛОВИЙ (проверяется тестом).
+        ///
+        /// Три входа и одна цель — у левой руки НИКОГДА не два яруса меню сразу:
+        ///   • включён ли сам второй ярус (`menu.quickLayer` / настройка; по умолчанию — НЕТ);
+        ///   • не погасил ли его общий тумблер панели у руки (кнопка Y);
+        ///   • есть ли шлем на голове (без него панель некому показывать).
+        /// </summary>
+        public static bool LayerVisible(bool layerEnabled, bool masterVisible, bool headsetPresent)
+        {
+            return layerEnabled && masterVisible && headsetPresent;
+        }
+
+        /// <summary>Спрятать канвас второго яруса (один раз на смену состояния — без дребезга).</summary>
+        private void HideLayer()
+        {
+            if (canvas != null && canvas.gameObject.activeSelf) canvas.gameObject.SetActive(false);
+            if (layerHiddenLogged) return;
+            layerHiddenLogged = true;
+            Debug.Log("[KvXr] МЕНЮ У РУКИ: второй ярус (панель быстрых команд) СКРЫТ по умолчанию — " +
+                      "у руки один ярус, панель групп с меньшими кружочками (решение владельца " +
+                      "20.11.2026; вернуть второй ярус: menu.quickLayer=1 в файле подстройки)");
+        }
+
+        /// <summary>Сказано ли в журнал про скрытый второй ярус (одна строка за сеанс).</summary>
+        private bool layerHiddenLogged;
+
+        /// <summary>
+        /// МАСШТАБ КАНВАСА ПАНЕЛИ (метры одного пикселя) — ЧИСТАЯ ФУНКЦИЯ.
+        /// Держит формулой ровно то, во что панель рисуется, чтобы «диаметр кнопки» из теста и
+        /// реальный кружочек не разошлись.
+        /// </summary>
+        public static float CanvasScale(float radiusMeters, float canvasSizePx)
+        {
+            if (canvasSizePx <= 0f) return 0f;
+            return (KvXrQuickPanelLayout.ClampRadius(radiusMeters) * 2.6f) / canvasSizePx;
+        }
+
+        /// <summary>
+        /// ДИАМЕТР КНОПКИ-КРУЖОЧКА В МЕТРАХ — ЧИСТАЯ ФУНКЦИЯ (проверяется тестом).
+        /// Сравнивается с `KvXrGroupPanelLayout.IconSizeMeters`: владелец просил оставить ярус
+        /// С МЕНЬШИМИ кружочками, поэтому выбор яруса закрепляется числом, а не глазами.
+        /// </summary>
+        public static float ButtonDiameterMeters(float radiusMeters, float canvasSizePx, float buttonSizePx)
+        {
+            return CanvasScale(radiusMeters, canvasSizePx) * buttonSizePx;
         }
 
         /// <summary>Прочитать настройки панели из хранилища (без аллокаций).</summary>
@@ -184,7 +253,7 @@ namespace KazistovVvXr
             }
 
             int count = KvXrQuickPanelLayout.ClampCount(resolved.Count);
-            float scale = (KvXrQuickPanelLayout.ClampRadius(radius) * 2.6f) / canvasSize;
+            float scale = CanvasScale(radius, canvasSize);
             canvasRect.localScale = new Vector3(scale, scale, scale);
 
             for (int i = 0; i < resolved.Count; i++)

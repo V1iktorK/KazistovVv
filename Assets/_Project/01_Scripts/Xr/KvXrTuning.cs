@@ -92,6 +92,19 @@ namespace KazistovVvXr
         /// </summary>
         public const string KeySecondaryRay = "ray.secondary";
 
+        /// <summary>
+        /// ВТОРОЙ ЯРУС МЕНЮ У РУКИ (`menu.quickLayer`): `1` — показать панель быстрых команд
+        /// поверх панели групп, `0` — скрыть. Ключа нет — решает НАСТРОЙКА
+        /// (`KvXrSettings.DefaultQuickLayerVisible` = скрыт).
+        ///
+        /// ЗАЧЕМ. Владелец 20.11.2026: «два слоя менюшек на левой руке — оставить тот, что с
+        /// меньшими кружочками». По умолчанию остаётся один ярус (панель групп, кружочки 4,2 см),
+        /// а второй (крупные кнопки 7,5 см) выключен. Ключ в файле подстройки возвращает его
+        /// НА ХОДУ, без пересборки — ровно для того случая, если владелец захочет сравнить глазами.
+        /// </summary>
+        public const string KeyQuickLayer = "menu.quickLayer";
+
+
         // ------------------------------------------------------------------ границы
 
         /// <summary>Границы выноса панели вперёд от контроллера, метры.</summary>
@@ -520,6 +533,27 @@ namespace KazistovVvXr
             if (map == null) return true;
             string raw;
             if (!map.TryGetValue(KeySecondaryRay, out raw) || string.IsNullOrEmpty(raw)) return true;
+
+            string v = raw.Trim().ToLowerInvariant();
+            if (v == "0" || v == "off" || v == "выкл" || v == "нет" || v == "false") return false;
+            return true;
+        }
+
+        /// <summary>Включён ли второй ярус меню у руки (файл подстройки → иначе настройка).</summary>
+        public static bool QuickLayerEnabled
+        {
+            get { return ResolveQuickLayer(values, KvXrSettings.GetQuickLayerVisible()); }
+        }
+
+        /// <summary>
+        /// Разбор `menu.quickLayer` как чистая функция (для тестов): ключа нет или значение
+        /// пустое — решает настройка; `0/off/выкл/нет/false` — выключить, прочее — включить.
+        /// </summary>
+        public static bool ResolveQuickLayer(Dictionary<string, string> map, bool fallback)
+        {
+            if (map == null) return fallback;
+            string raw;
+            if (!map.TryGetValue(KeyQuickLayer, out raw) || string.IsNullOrEmpty(raw)) return fallback;
 
             string v = raw.Trim().ToLowerInvariant();
             if (v == "0" || v == "off" || v == "выкл" || v == "нет" || v == "false") return false;

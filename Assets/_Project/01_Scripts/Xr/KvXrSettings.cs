@@ -50,6 +50,15 @@ namespace KazistovVvXr
 
         // Настройки панели быстрого выбора у руки (решение владельца [D20], сессия §32).
         public const string KeyQuickPanelVisible = "KazistovVv.XR.Quick.Visible";
+
+        /// <summary>
+        /// ВТОРОЙ ЯРУС МЕНЮ У РУКИ (`KvXrQuickPanel` — восемь крупных кнопок-кружочков).
+        /// Отдельный ключ, а не тот же `KeyQuickPanelVisible`: общий тумблер включает и гасит
+        /// ОБА яруса сразу, и тогда выбор «какой ярус оставить» был бы невозможен (см.
+        /// `DefaultQuickLayerVisible`).
+        /// </summary>
+        public const string KeyQuickLayerVisible = "KazistovVv.XR.QuickLayer.Visible";
+
         public const string KeyQuickPanelShape = "KazistovVv.XR.Quick.Shape";
         public const string KeyQuickPanelHand = "KazistovVv.XR.Quick.Hand";
         public const string KeyQuickPanelRadius = "KazistovVv.XR.Quick.Radius";
@@ -197,6 +206,36 @@ namespace KazistovVvXr
         public static void SetQuickPanelVisible(bool visible)
         {
             SetInt(KeyQuickPanelVisible, visible ? 1 : 0);
+        }
+
+        // ---------------------------------------------------- второй ярус меню у руки (20.11.2026)
+
+        /// <summary>
+        /// ВТОРОЙ ЯРУС У РУКИ ПО УМОЛЧАНИЮ СКРЫТ — СЛОВО ВЛАДЕЛЬЦА 20.11.2026:
+        /// «два слоя менюшек на левой руке — оставить тот, что с меньшими кружочками».
+        ///
+        /// ЧТО БЫЛО. На левой руке висели ДВЕ панели сразу: `KvXrGroupPanel` (иконки групп,
+        /// кружочки ~4,2 см) и `KvXrQuickPanel` (восемь частых команд, кружочки ~7,5 см) — у
+        /// общей настройки видимости был один ключ, поэтому включались и выключались они
+        /// вместе, и развести ярусы было нечем.
+        ///
+        /// ЧТО СТАЛО. У крупного яруса свой ключ с нулём по умолчанию: по умолчанию у руки ОДИН
+        /// ярус — с меньшими кружочками (`KvXrGroupPanelLayout.IconSizeMeters`). Вернуть второй
+        /// ярус можно без пересборки: строка `menu.quickLayer=1` в файле подстройки
+        /// (`KvXrTuning.KeyQuickLayer`) перекрывает это значение.
+        /// </summary>
+        public const int DefaultQuickLayerVisible = 0;
+
+        /// <summary>Включён ли второй ярус меню у руки (по умолчанию — НЕТ).</summary>
+        public static bool GetQuickLayerVisible()
+        {
+            return PlayerPrefs.GetInt(KeyQuickLayerVisible, DefaultQuickLayerVisible) != 0;
+        }
+
+        /// <summary>Включить или выключить второй ярус меню у руки.</summary>
+        public static void SetQuickLayerVisible(bool visible)
+        {
+            SetInt(KeyQuickLayerVisible, visible ? 1 : 0);
         }
 
         /// <summary>Форма панели. Значение вне диапазона приводится к полумесяцу, а не падает.</summary>
