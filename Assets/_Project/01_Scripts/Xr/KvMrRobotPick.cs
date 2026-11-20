@@ -679,11 +679,25 @@ namespace KazistovVvXr
         private void ReportMiss(string reason)
         {
             if (reason == lastMissReason) return;
+
+            // ИНТЕРВАЛ НА СМЕНУ ПРИЧИНЫ (20.11.2026, деградация MR). Проверки по тексту было НЕ
+            // достаточно: причины в журнале ЧЕРЕДОВАЛИСЬ («в пустоте» ↔ «не горизонтальная
+            // поверхность»), ключ менялся туда-обратно, и за прогон набежало 40 строк. Теперь
+            // смена причины печатается не чаще раза в `MissReportIntervalSeconds` — первая строка
+            // идёт сразу (счётчик от нуля), а дальше журнал держит ритм.
+            if (Time.unscaledTime < nextMissReport) return;
+            nextMissReport = Time.unscaledTime + MissReportIntervalSeconds;
+
             lastMissReason = reason;
             Debug.LogWarning(LogPrefix + "ВЫБОР МЕСТА РОБОТА: робот НЕ переставлен — " + reason +
                              (HasLastValidPoint ? " · последняя валидная позиция сохранена: " +
                                                   Num(LastValidPoint) + " м" : " · валидной позиции ещё не было"));
         }
+
+        /// <summary>Интервал строки «робот НЕ переставлен», секунды (5) — см. `ReportMiss`.</summary>
+        public const float MissReportIntervalSeconds = 5f;
+
+        private float nextMissReport;
 
         /// <summary>СЛОВАМИ, ПОЧЕМУ ПОПАДАНИЯ НЕТ (или почему поверхность не годится).</summary>
         private string DescribeNoHit()

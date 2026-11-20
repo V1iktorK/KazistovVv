@@ -868,18 +868,19 @@ namespace KazistovVvXr
 
             string state = DescribeState();
             bool stateChanged = state != lastState;
-            if (stateChanged)
-            {
-                lastState = state;
-                nextShapeLog = Time.realtimeSinceStartup + 2f;
-                Debug.Log("[KvXr] " + Describe());
-                return;
-            }
+            if (stateChanged) lastState = state;
 
+            // 20.11.2026 (деградация MR): «смена состояния печаталась СРАЗУ» оказалось ловушкой —
+            // у PICO отслеживание кистей дёргается, и состояние «Л- / П-» ↔ «Л25 / П25» менялось
+            // десятки раз за прогон (74 строки в журнале MR). Теперь и смена состояния, и просто
+            // числа идут ОДНИМ интервалом: не чаще раза в `StateLogIntervalSeconds` секунд.
             if (Time.realtimeSinceStartup < nextShapeLog) return;
-            nextShapeLog = Time.realtimeSinceStartup + 2f;
+            nextShapeLog = Time.realtimeSinceStartup + StateLogIntervalSeconds;
             Debug.Log("[KvXr] " + Describe());
         }
+
+        /// <summary>Как часто печатать строку о кистях, секунды (5) — см. `LogStateOnChange`.</summary>
+        public const float StateLogIntervalSeconds = 5f;
 
         private float nextShapeLog;
 

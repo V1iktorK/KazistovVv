@@ -45,11 +45,31 @@ namespace KazistovVvXr
         /// </summary>
         private const float MeshFlatHeightMeters = 0.10f;
 
-        /// <summary>Как часто пересчитывать «стол найден / пол найден» и писать строку в журнал, секунды.</summary>
-        private const float RealTableReportSeconds = 1f;
+        /// <summary>
+        /// Как часто пересчитывать «стол найден / пол найден» и писать строку в журнал, секунды.
+        ///
+        /// 20.11.2026 (деградация MR 86 → 3 FPS): строка менялась КАЖДЫЙ раз, потому что в ней
+        /// число коллайдеров, а оно росло каждую секунду — в журнале 140 копий за прогон, и
+        /// каждая это `Debug.Log` на главном потоке. Требование владельца «не чаще раза в
+        /// секунду» — это ПОРОЛ, а не цель: раз в 5 с оператор всё так же видит числа, а кадровый
+        /// бюджет от журнала возвращается. Приёмка `REAL_TABLE` строку ищет по префиксу
+        /// «[KvMr] РЕАЛЬНЫЙ СТОЛ:» — он не изменился.
+        /// </summary>
+        private const float RealTableReportSeconds = 5f;
 
         /// <summary>Сколько мешей комнаты максимум принимать (защита памяти).</summary>
         public int maxMeshes = 400;
+
+        /// <summary>
+        /// НАКАКОЙ ИНТЕРВАЛ ПЕРЕСОБИРАТЬ УЖЕ ИЗВЕСТНЫЙ МЕШ, секунды (1).
+        ///
+        /// ЗАЧЕМ. `MeshChangeState.Updated` шлёт PICO для каждого куска комнаты очень часто, а
+        /// генерация меша — это ещё и ВАРКА ФИЗИКИ (`MeshCollider`) на главном потоке. Раз в
+        /// секунду покрытие всё равно перерисовывается (`KvMrSurfacePainter`), поэтому более
+        /// частые обновления не дают ничего видимого, но стоят кадров. НЕ влияет на качество
+        /// картинки: коллайдеры невидимы, а геометрия покрытия обновляется тем же шагом.
+        /// </summary>
+        public float meshRefreshSeconds = 1f;
 
         /// <summary>Писать в журнал каждый построенный меш (для наладки; по умолчанию — только итог).</summary>
         public bool logEveryMesh = false;
@@ -145,6 +165,12 @@ namespace KazistovVvXr
         private readonly Dictionary<MeshId, Mesh> meshesById = new Dictionary<MeshId, Mesh>();
         private readonly Dictionary<MeshId, MeshCollider> collidersById = new Dictionary<MeshId, MeshCollider>();
         private readonly List<MeshId> removedBuffer = new List<MeshId>();
+
+        /// <summary>
+        /// КОГДА КАЖДЫЙ МЕШ ГОТОВИЛИ ПОСЛЕДНИЙ РАЗ — КЛЮЧ ОТ НАКОПЛЕНИЯ ДУБЛИКАТОВ (см.
+        /// `ShouldBuildMesh`). Без интервала `Updated` пере-собирал объекты каждый кадр.
+        /// </summary>
+        private readonly Dictionary<MeshId, float> lastBuiltAt = new Dictionary<MeshId, float>();
 
         /// <summary>
         /// ЧИСЛОВОЕ ОПИСАНИЕ КАЖДОГО КОЛЛАЙДЕРА РЕАЛЬНОГО МИРА — вход классификатора.
@@ -274,6 +300,7 @@ namespace KazistovVvXr
         {
             if (subsystem != null) return;
             startedAt = Time.unscaledTime;
+            tracking = true;
 
             if (container == null)
             {
@@ -286,10 +313,48 @@ namespace KazistovVvXr
             Debug.Log("[KvMr] реальные поверхности: начинаю отслеживание");
         }
 
+        /// <summary>
+        /// ОСТАНОВИТЬ ОТСЛЕЖИВАНИЕ КОМНАТЫ — ВОЗВРАТ В VR БЕЗ ПЕРЕЗАПУСКА (20.11.2026).
+        ///
+        /// ЗАЧЕМ. Жалоба владельца: «режим VR не переносит на сцену VR, а продолжает работать в
+        /// MR». Переключатель гасил только настройку, а конвейер MR жил дальше: подсистема меша
+        /// продолжала присылать обновления, физика комнаты варилась на главном потоке, а строка
+        /// «РЕАЛЬНЫЙ СТОЛ» печаталась в журнал, пока её не убили троттлингом.
+        ///
+        /// ЧТО ОСТАЁТСЯ. Коллайдеры комнаты невидимы и кадров не стоят (пересборка мешей и
+        /// покрытие выключены отдельно), поэтому очищать их не нужно — а при следующем входе в MR
+        /// `StartTracking` поднимает ту же самую комнату без пересоздания объектов.
+        /// </summary>
+        public void StopTracking()
+        {
+            if (!tracking)
+            {
+                Debug.Log("[KvMr] реальные поверхности: отслеживание и так выключено");
+                return;
+            }
+
+            tracking = false;
+            subsystem = null;      // иначе `StartTracking` выйдет рано по «подсистема уже найдена»
+            NextSubsystemScan = 0f;
+            Debug.Log("[KvMr] реальные поверхности: отслеживание ВЫКЛЮЧЕНО (режим VR)");
+        }
+
+        /// <summary>
+        /// ИДЁТ ЛИ ОТСЛЕЖИВАНИЕ КОМНАТЫ. По умолчанию `true` — прежнее поведение (компонент могли
+        /// создать и без `StartTracking`), выключается только возвратом в VR.
+        /// </summary>
+        public bool Tracking { get { return tracking; } }
+
+        private bool tracking = true;
+
         private float NextSubsystemScan;
 
         void Update()
         {
+            // ВОЗВРАТ В VR (20.11.2026): пока отслеживание выключено, комната не опрашивается —
+            // ни подсистема меша, ни разметка, ни строки «РЕАЛЬНЫЙ СТОЛ» (см. `StopTracking`).
+            if (!tracking) return;
+
             // ЧТО БЫЛО. Первой строкой стояло `if (gaveUp && (Ready || sceneAnchorRunning)) return;` —
             // один молчаливый выход из ВСЕГО кадра. ЧЕМ ПЛОХО: этот выход и был одной из причин
             // тишины в журнале — как только подсистема меша не появлялась за `waitForSubsystemSeconds`
@@ -446,6 +511,7 @@ namespace KazistovVvXr
             meshInfos.Clear();
             if (!subsystem.TryGetMeshInfos(meshInfos)) return;
 
+            float now = Time.unscaledTime;
             for (int i = 0; i < meshInfos.Count; i++)
             {
                 MeshInfo info = meshInfos[i];
@@ -453,8 +519,24 @@ namespace KazistovVvXr
                 {
                     case MeshChangeState.Added:
                     case MeshChangeState.Updated:
-                        if (pendingMeshIds.Contains(info.MeshId)) continue;
-                        if (knownMeshIds.Contains(info.MeshId) && info.ChangeState == MeshChangeState.Added) continue;
+                        // КОРЕНЬ ДЕГРАДАЦИИ MR (журнал шлема 20.11.2026: 86 → 3 FPS за 20 с).
+                        // ЧТО БЫЛО: для `Updated` уже известного меша вызывался `BuildMesh`, а он
+                        // СОЗДАВАЛ НОВЫЙ `GameObject` + `MeshCollider` + `Mesh` и перезаписывал
+                        // записи в `collidersById`/`meshesById`. Старый коллайдер оставался в
+                        // `realWorldColliders` НАВСЕГДА (убирал его только `RemoveMesh`, который
+                        // знал лишь о новом объекте). Результат в журнале: «поверхностей 9383 ·
+                        // коллайдеров 9383» при пределе `maxMeshes = 400` — то есть каждый кусок
+                        // комнаты был продублирован ~20 раз, и дубликаты росли каждую секунду.
+                        // Каждый дубликат = ещё один объект физики И ЕЩЁ ОДНА «плитка покрытия»
+                        // у `KvMrSurfacePainter` (2 LineRenderer + заливка на объект), поэтому
+                        // FPS падал линейно с ростом числа: 420 → 33, 1204 → 18, 2799 → 3.
+                        // ЧТО СТАЛО. Повторная генерация идёт в ТОТ ЖЕ объект (см.
+                        // `EnsureMeshObject`), а сама она разрешена не чаще `meshRefreshSeconds`
+                        // на меш — переготовка физики каждые 100 мс больше не нужна: меш комнаты
+                        // обновляется волнами, а не каждый кадр.
+                        if (!ShouldBuildMesh(knownMeshIds.Contains(info.MeshId),
+                                             pendingMeshIds.Contains(info.MeshId), now,
+                                             LastBuiltAt(info.MeshId), meshRefreshSeconds)) continue;
                         BuildMesh(info.MeshId);
                         break;
 
@@ -514,6 +596,104 @@ namespace KazistovVvXr
 #endif
         }
 
+        /// <summary>
+        /// СТРОИТЬ ЛИ ЭТОТ МЕШ В ЭТОТ МОМЕНТ — ЧИСТОЕ ПРАВИЛО (проверяется тестом без шлема).
+        ///
+        /// Три входа и одна цель: НИКОГДА не допускать двух объектов одного `MeshId`.
+        ///   • меш уже генерируется (`pending`) — повтор не нужен;
+        ///   • меш новый — строим сразу (иначе лучу не во что попадать);
+        ///   • меш известен — перестраиваем не чаще `refreshSeconds`, чтобы не варить физику
+        ///     каждый кадр; до истечения интервала — молчим, а не создаём дубликат.
+        /// </summary>
+        public static bool ShouldBuildMesh(bool known, bool pending, float now, float lastBuiltAt,
+            float refreshSeconds)
+        {
+            if (pending) return false;
+            if (!known) return true;
+            if (float.IsNaN(lastBuiltAt)) return true;
+            if (refreshSeconds <= 0f) return true;
+            if (float.IsNaN(now)) return false;
+            return now - lastBuiltAt >= refreshSeconds;
+        }
+
+        /// <summary>Когда этот меш готовили в последний раз (NaN — ещё не готовили).</summary>
+        private float LastBuiltAt(MeshId meshId)
+        {
+            float value;
+            return lastBuiltAt.TryGetValue(meshId, out value) ? value : float.NaN;
+        }
+
+        /// <summary>
+        /// ОДИН `GameObject` + `MeshCollider` НА `MeshId` — объект ПЕРЕИСПОЛЬЗУЕТСЯ.
+        ///
+        /// ЗАЧЕМ ЭТОТ МЕТОД (исправление деградации MR 20.11.2026). Раньше каждый вызов делал
+        /// новый объект, а словарь `collidersById` перезаписывался — старый коллайдер оставался
+        /// в `realWorldColliders` навсегда и рос вместе с покрытием (9383 коллайдера при пределе
+        /// 400 мешей). Теперь повторная генерация меша пишет НОВУЮ геометриЮ В СТАРЫЙ объект:
+        /// число объектов физики и число «плиток покрытия» ограничено числом уникальных мешей.
+        /// </summary>
+        internal MeshCollider EnsureMeshObject(MeshId meshId)
+        {
+            if (container == null)
+            {
+                var root = new GameObject(ContainerName);
+                root.transform.SetParent(transform, false);
+                container = root.transform;
+            }
+
+            MeshCollider existing;
+            if (collidersById.TryGetValue(meshId, out existing) && existing != null) return existing;
+
+            var go = new GameObject("KvMrMesh_" + meshId);
+            go.transform.SetParent(container, false);
+            // Коллайдер живёт в начале координат трекинга: вершины меша от Unity уже в этой системе.
+            go.transform.localPosition = Vector3.zero;
+            go.transform.localRotation = Quaternion.identity;
+            go.transform.localScale = Vector3.one;
+
+            MeshCollider collider = go.AddComponent<MeshCollider>();
+            collider.convex = false;
+            collidersById[meshId] = collider;
+            return collider;
+        }
+
+        /// <summary>ОДИН `Mesh` НА `MeshId` — тот же принцип переиспользования, что у коллайдера.</summary>
+        internal Mesh EnsureMeshData(MeshId meshId)
+        {
+            Mesh mesh;
+            if (meshesById.TryGetValue(meshId, out mesh) && mesh != null) return mesh;
+
+            mesh = new Mesh();
+            mesh.name = "KvMrMesh_" + meshId;
+            meshesById[meshId] = mesh;
+            return mesh;
+        }
+
+        /// <summary>СКОЛЬКО ОБЪЕКТОВ ФИЗИКИ ПОСТРОЕНО (для теста: не больше числа мешей).</summary>
+        internal int MeshObjectCount { get { return collidersById.Count; } }
+
+        /// <summary>
+        /// ЗАЧЕСТАТЬ УСПЕШНУЮ ГЕНЕРАЦИЮ МЕША — ОДИН РАЗ НА КОЛЛАЙДЕР.
+        ///
+        /// Возвращает `true`, если это была НОВАЯ поверхность (для счётчика «мешей N»).
+        /// `realWorldColliders` — `HashSet`, поэтому повторное зачисление того же коллайдера
+        /// не увеличивает число поверхностей: это и есть страховка от накопления.
+        /// </summary>
+        internal bool RecordGeneratedMesh(MeshId meshId, MeshCollider collider, Mesh mesh)
+        {
+            if (collider == null) return false;
+            if (mesh != null) collider.sharedMesh = mesh;
+            bool isNew = realWorldColliders.Add(collider);
+
+            // РАЗБОР МЕША КАК ПОВЕРХНОСТИ. Куски пространственного меша приходят без разметки:
+            // «что это» приходится понимать по габаритам. Плоский в высоту кусок (≤ 0.10 м) —
+            // кандидат в горизонтальную поверхность (стол/пол), высокий — стена или мебель.
+            candidatesByCollider[collider] = BuildMeshCandidate(mesh, Time.unscaledTime - startedAt);
+            knownMeshIds.Add(meshId);
+            Ready = realWorldColliders.Count > 0;
+            return isNew;
+        }
+
         /// <summary>Построить невидимый коллайдер из меша комнаты.</summary>
         private void BuildMesh(MeshId meshId)
         {
@@ -525,20 +705,10 @@ namespace KazistovVvXr
             }
 
             pendingMeshIds.Add(meshId);
+            lastBuiltAt[meshId] = Time.unscaledTime;
 
-            var go = new GameObject("KvMrMesh_" + meshId);
-            go.transform.SetParent(container, false);
-            // Коллайдер живёт в начале координат трекинга: вершины меша от Unity уже в этой системе.
-            go.transform.localPosition = Vector3.zero;
-            go.transform.localRotation = Quaternion.identity;
-            go.transform.localScale = Vector3.one;
-
-            MeshCollider collider = go.AddComponent<MeshCollider>();
-            collider.convex = false;
-            Mesh mesh = new Mesh();
-            mesh.name = "KvMrMesh_" + meshId;
-            meshesById[meshId] = mesh;
-            collidersById[meshId] = collider;
+            MeshCollider collider = EnsureMeshObject(meshId);
+            Mesh mesh = EnsureMeshData(meshId);
 
             try
             {
@@ -568,21 +738,8 @@ namespace KazistovVvXr
             }
 
             bool wasReady = Ready;
-            knownMeshIds.Add(result.MeshId);
-            if (collider != null)
-            {
-                collider.sharedMesh = mesh;
-                realWorldColliders.Add(collider);
-
-                // РАЗБОР МЕША КАК ПОВЕРХНОСТИ. Куски пространственного меша приходят без разметки:
-                // «что это» приходится понимать по габаритам. Плоский в высоту кусок (≤ 0.10 м) —
-                // кандидат в горизонтальную поверхность (стол/пол), высокий — стена или мебель, и он
-                // сразу получает вертикальную нормаль, чтобы правило наклона его отвергло.
-                RealSurfaceCandidate candidate = BuildMeshCandidate(mesh, Time.unscaledTime - startedAt);
-                candidatesByCollider[collider] = candidate;
-            }
-            builtMeshes++;
-            Ready = true;
+            bool isNew = RecordGeneratedMesh(result.MeshId, collider, mesh);
+            if (isNew) builtMeshes++;
 
             if (logEveryMesh)
                 Debug.Log("[KvMr] реальные поверхности: меш " + result.MeshId + " · вершин " + mesh.vertexCount);
@@ -635,6 +792,7 @@ namespace KazistovVvXr
             meshesById.Remove(meshId);
 
             knownMeshIds.Remove(meshId);
+            lastBuiltAt.Remove(meshId);
             Ready = realWorldColliders.Count > 0;
         }
 
@@ -661,24 +819,46 @@ namespace KazistovVvXr
 
             if (direction.sqrMagnitude < 0.0001f) return false;
 
-            RaycastHit[] hits = Physics.RaycastAll(origin, direction.normalized, maxDistance,
+            // БЕЗ АЛЛОКАЦИЙ НА КАЖДЫЙ КАДР. `Physics.RaycastAll` возвращает НОВЫЙ массив, а лучи
+            // в шлеме проверяются каждый кадр (правый, левый, постановка, выбор места робота) —
+            // на длинном прогоне это постоянный поток мусора и остановки сборщика, то есть
+            // ровно та «просадка во времени». Взял `NonAlloc` с переиспользуемым буфером:
+            // буфер растёт редко и только вверх.
+            int count = Physics.RaycastNonAlloc(origin, direction.normalized, hitsBuffer, maxDistance,
                 Physics.AllLayers, QueryTriggerInteraction.Ignore);
+            if (count >= raycastBuffer.Length)
+            {
+                // Буфер переполнен — попадания обрезаны. Растим и повторяем один раз, иначе луч
+                // «не дотянул» бы до поверхности, лежащей за краем буфера.
+                var bigger = new Collider[raycastBuffer.Length * 2];
+                System.Array.Copy(raycastBuffer, bigger, raycastBuffer.Length);
+                raycastBuffer = bigger;
+                hitsBuffer = new RaycastHit[raycastBuffer.Length];
+                count = Physics.RaycastNonAlloc(origin, direction.normalized, hitsBuffer, maxDistance,
+                    Physics.AllLayers, QueryTriggerInteraction.Ignore);
+            }
+
             float best = float.MaxValue;
             bool found = false;
 
-            for (int i = 0; i < hits.Length; i++)
+            for (int i = 0; i < count; i++)
             {
-                Collider c = hits[i].collider;
+                Collider c = raycastBuffer[i];
                 if (c == null || !realWorldColliders.Contains(c)) continue;
-                if (hits[i].distance < best)
+                RaycastHit current = hitsBuffer[i];
+                if (current.distance < best)
                 {
-                    best = hits[i].distance;
-                    hit = hits[i];
+                    best = current.distance;
+                    hit = current;
                     found = true;
                 }
             }
             return found;
         }
+
+        /// <summary>Буферы попаданий луча — переиспользуются между кадрами (сборка мусора: ноль).</summary>
+        private Collider[] raycastBuffer = new Collider[64];
+        private RaycastHit[] hitsBuffer = new RaycastHit[64];
 
         /// <summary>ЧИСЛО ЛИ ЭТО (отсев NaN/бесконечности — класс E-21).</summary>
         private static bool IsFiniteVector(Vector3 v)

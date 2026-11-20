@@ -52,8 +52,24 @@ namespace KazistovVvXr
         /// НЕ ЧАЩЕ РАЗА В СЕКУНДУ. Требование владельца дословно: «не чаще раза в секунду и только
         /// при изменении». Два условия сразу: по времени И по тексту строки — иначе одна и та же
         /// строка повторялась бы каждую секунду и в журнале шлема утонуло бы остальное.
+        ///
+        /// 20.11.2026: значение поднято с 1 до 5 с. Причина не в правке требования, а в том, что
+        /// строка содержала ЧИСЛО объектов, а оно росло каждую секунду (см. деградацию MR 86 → 3
+        /// FPS): в журнале 137 копий за прогон. Пять секунд — тот самый «раз в 5–10 с», которого
+        /// просили; «только при изменении» сохраняется, поэтому изменившаяся строка (стол нашёлся,
+        /// покрытие очистилось) появляется в журнале не позже чем через 5 с.
         /// </summary>
-        public const float ReportIntervalSeconds = 1f;
+        public const float ReportIntervalSeconds = 5f;
+
+        /// <summary>
+        /// ШАГ ПЕРЕРИСОВКИ ПОКРЫТИЯ, секунды (1) — ОТДЕЛЁН ОТ ИНТЕРВАЛА ЖУРНАЛА.
+        ///
+        /// ЗАЧЕМ РАЗДЕЛЕНИЕ. Раньше одна константа управляла и перерисовкой, и журналом, поэтому
+        /// поднятие интервала журнала замедлило бы и обновление покрытия (плитка елозила бы по
+        /// 5 с — это уже НЕ то же изображение). Теперь перерисовка идёт раз в секунду, как и
+        /// обещано владельцу («не чаще раза в секунду»), а в журнал строка уходит реже.
+        /// </summary>
+        public const float RepaintIntervalSeconds = 1f;
 
         /// <summary>Сколько сегментов сетки по каждой оси (как в AR — `GridDivisions` = 4).</summary>
         public const int GridDivisions = 4;
@@ -105,11 +121,23 @@ namespace KazistovVvXr
             public float sideB;
             public Vector3 center;
             public Vector3 up;
+
+            /// <summary>Форма уже задавалась (проверка «двигалось ли что-то» — см. `ShapeChanged`).</summary>
+            public bool shaped;
         }
 
         private readonly Dictionary<Collider, Entry> entries = new Dictionary<Collider, Entry>();
         private readonly List<Collider> stale = new List<Collider>();
-        private readonly List<Collider> alive = new List<Collider>();
+
+        /// <summary>
+        /// ЖИВЫЕ КОЛЛАЙДЕРЫ ТЕКУЩЕГО ПЕРЕРИСОВАНИЯ — `HashSet`, А НЕ `List`.
+        ///
+        /// ЧТО БЫЛО. Уборка «чего больше нет» делалась через `List.Contains` для КАЖДОГО ключа
+        /// словаря: O(n²). При 9383 поверхностях это ≈ 87 миллионов сравнений КАЖДУЮ секунду на
+        /// главном потоке шлема — то есть ~весь кадровый бюджет уходил на уборку.
+        /// ЧТО СТАЛО. O(n): каждый живой коллайдер проверяется за одно хэширование.
+        /// </summary>
+        private readonly HashSet<Collider> alive = new HashSet<Collider>();
 
         private Material materialHorizontalOutline;
         private Material materialHorizontalGrid;
@@ -149,13 +177,21 @@ namespace KazistovVvXr
             return go.AddComponent<KvMrSurfacePainter>();
         }
 
+        /// <summary>
+        /// ОДИН РИСОВАЛЬЩИК ПОКРЫТИЯ НА ПРИЛОЖЕНИЕ. Нужен при возврате в VR (20.11.2026):
+        /// `KvXrMrRoom.EndMrSession` гасит покрытие, не разыскивая компонент по сцене.
+        /// </summary>
+        public static KvMrSurfacePainter Instance { get; private set; }
+
         void Awake()
         {
+            Instance = this;
             CreateMaterials();
         }
 
         void OnDestroy()
         {
+            if (Instance == this) Instance = null;
             ClearAll();
             DestroyMaterial(ref materialHorizontalOutline);
             DestroyMaterial(ref materialHorizontalGrid);
@@ -177,7 +213,7 @@ namespace KazistovVvXr
             }
 
             if (Time.unscaledTime < nextRepaint) return;
-            nextRepaint = Time.unscaledTime + ReportIntervalSeconds;
+            nextRepaint = Time.unscaledTime + RepaintIntervalSeconds;
 
             Repaint();
             ReportIfChanged();
@@ -304,12 +340,25 @@ namespace KazistovVvXr
 
             Quaternion rotation = RotationFor(up);
             Vector3 center = candidate.Center + up * LiftMeters;
+
+            // ГЕОМЕТРИЮ ПЕРЕСОБИРАТЬ НЕ ЗАЧЕМ, ЕСЛИ НИЧЕГО НЕ ИЗМЕНИЛОСЬ.
+            //
+            // ЧТО БЫЛО. Каждую секунду `Repaint` обновлял ВСЕ поверхности: 4 точки контура,
+            // 18 точек сетки и матрица заливки на каждую плитку. При тысячах плиток это была
+            // перезагрузка тысяч линейных мешей в секунду — на главном потоке, в шлеме.
+            // ЧТО СТАЛО. Сравниваем форму с уже нарисованной (`ShapeChanged`) и молчим, пока
+            // кусок меша стоит на месте: он и стоит на месте почти всегда. Вид НЕ меняется —
+            // меняется только то, пересобирается ли меш, который в итоге выглядит так же.
+            if (entry.shaped && !ShapeChanged(entry.center, entry.up, entry.sideA, entry.sideB,
+                                              center, up, sideA, sideB)) return;
+
             entry.root.transform.SetPositionAndRotation(center, rotation);
             entry.root.transform.localScale = Vector3.one;
             entry.sideA = sideA;
             entry.sideB = sideB;
             entry.center = center;
             entry.up = up;
+            entry.shaped = true;
 
             // КОНТУР: четыре угла прямоугольника.
             Vector3 halfA = rotation * Vector3.right * (sideA * 0.5f);
@@ -372,6 +421,34 @@ namespace KazistovVvXr
         {
             Vector3 normal = up.sqrMagnitude > 0.0001f ? up.normalized : Vector3.up;
             return Quaternion.FromToRotation(Vector3.up, normal);
+        }
+
+        /// <summary>
+        /// ИЗМЕНИЛАСЬ ЛИ ФОРМА ПОВЕРХНОСТИ — ЧИСТАЯ ФУНКЦИЯ (проверяется тестом без сцены).
+        ///
+        /// ЗАЧЕМ. Каждую секунду покрытие перерисовывается, и раньше это значило «пересобрать
+        /// линии и заливку у КАЖДОЙ плитки», даже если кусок меша стоял на месте. Функция
+        /// отвечает на вопрос «стоит ли вообще трогать этот объект», а допуски — миллиметровые:
+        /// движение куска меша на 0,1 мм и меньше на вид неотличимо и перерисовки не требует.
+        ///
+        /// ДОПУСКИ ЗАДАНЫ ЯВНО, А НЕ «на глаз»: позиция 1 мм, габарит 1 мм, нормаль — по
+        /// квадрату длины (0,001² = 1e-6), то есть поворот поверхности меньше 0,05°.
+        /// </summary>
+        public static bool ShapeChanged(Vector3 beforeCenter, Vector3 beforeUp, float beforeSideA,
+            float beforeSideB, Vector3 afterCenter, Vector3 afterUp, float afterSideA, float afterSideB)
+        {
+            const float positionToleranceMeters = 0.001f;
+            const float sideToleranceMeters = 0.001f;
+            const float upToleranceSqr = 1e-6f;
+
+            if (float.IsNaN(beforeSideA) || float.IsNaN(beforeSideB) ||
+                float.IsNaN(afterSideA) || float.IsNaN(afterSideB)) return true;
+            if (Mathf.Abs(beforeSideA - afterSideA) > sideToleranceMeters) return true;
+            if (Mathf.Abs(beforeSideB - afterSideB) > sideToleranceMeters) return true;
+            if ((beforeCenter - afterCenter).sqrMagnitude > positionToleranceMeters * positionToleranceMeters)
+                return true;
+            if ((beforeUp - afterUp).sqrMagnitude > upToleranceSqr) return true;
+            return false;
         }
 
         private void ApplyStyle(Entry entry, KvMrSurfaceStyle style)
@@ -642,7 +719,8 @@ namespace KazistovVvXr
                 return "покрытие поверхностей: " + (showSurfaces ? "включено" : "ВЫКЛЮЧЕНО") +
                        " · нарисовано " + entries.Count +
                        " · стол " + (tableFound ? "найден" : "не найден") +
-                       " · шаг пересчёта " + ReportIntervalSeconds.ToString("0.0", c) + " с";
+                       " · шаг пересчёта " + RepaintIntervalSeconds.ToString("0.0", c) + " с" +
+                       " · строка журнала раз в " + ReportIntervalSeconds.ToString("0.0", c) + " с";
             }
         }
     }

@@ -804,6 +804,26 @@ namespace KazistovVvFeatures
                 "selon la spécification, la mise à l'échelle adaptative n'agit qu'en VR-Ready — " +
                 "seul un avertissement a été journalisé",
                 "仕様により適応スケーリングは VR-Ready のみ — ここでは警告のみ記録しました"),
+            // ЗАПРЕТ ВЛАДЕЛЬЦА НА СНЯТИЕ МАСШТАБА (20.11.2026): служба больше не урезает масштаб
+            // при просадке, а только пишет в журнал. Ключ обязателен: без него `KvGraphicsService`
+            // показал бы русский текст посреди переведённого интерфейса (тест
+            // `KvLocalizationFileTests.KeysRequestedByCode_ExistInDictionaries`).
+            Row("graphics.adaptive.owner",
+                "масштаб отрисовки НЕ снижаю (запрет владельца: качество не трогаем) — " +
+                "осталось только предупреждение в журнале; смотрите причину просадки, а не картинку",
+                "render scale is NOT lowered (owner's rule: quality stays untouched) — only the log " +
+                "warning remains; look at the cause of the frame drop, not at the picture",
+                "不降低渲染缩放（业主规则：画质不动）— 只剩日志警告；请看掉帧的原因，而不是画面",
+                "no se reduce la escala de renderizado (regla del propietario: la calidad no se toca) — " +
+                "solo queda el aviso en el registro; mire la causa de la caída, no la imagen",
+                "die Render-Skalierung wird NICHT gesenkt (Regel des Eigentümers: Qualität bleibt " +
+                "unangetastet) — im Journal bleibt nur der Hinweis; sehen Sie die Ursache des " +
+                "Einbruchs an, nicht das Bild",
+                "l'échelle de rendu n'est pas réduite (règle du propriétaire : la qualité reste " +
+                "intacte) — seul l'avertissement reste dans le journal ; regardez la cause de la " +
+                "chute, pas l'image",
+                "レンダー倍率は下げません（オーナーの規則：画質は触らない）— ジャーナルには警告のみ；" +
+                "絵ではなく落ちの原因を見てください"),
 
             // ---------------------------------------------------------- диагностика
             Row("graphics.diag.state", "Состояние: ", "State: ", "状态：", "Estado: ", "Status: ",

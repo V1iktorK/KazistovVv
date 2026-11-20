@@ -381,6 +381,51 @@ namespace KazistovVvXr
             // не нарушено ли правило привязок по рукам, сколько устройств видит XR-подсистема.
             // Без этих строк «контроллеров нет» остаётся догадкой — ровно как было в §35.
             KvXrOpenXrDiagnostics.Tick();
+
+            // ЧЕСТАЯ МЕТРИКА КАДРОВ В ЖУРНАЛЕ — «[KvXr] MR: FPS N» (или VR). Владелец просил, чтобы
+            // замер было видно в логах: строка печатается раз в 5 с независимо от того, идёт ли
+            // сейчас диагностика ввода, и называет режим по факту (`MrActive`), а не по выбору в
+            // меню. Считается по `smoothDeltaTime` — то есть это НЕ «цель кадрового лимита», а
+            // реально отработанные кадры.
+            TickFpsReport();
+        }
+
+        /// <summary>Интервал строки о кадровой частоте, секунды (5).</summary>
+        public const float FpsReportIntervalSeconds = 5f;
+
+        private float nextFpsReport;
+        private float fpsSmoothed = -1f;
+
+        /// <summary>
+        /// СТРОКА О КАДРАХ ДЛЯ ЖУРНАЛА — ЧИСТАЯ ФУНКЦИЯ (проверяется тестом без шлема).
+        ///
+        /// ФОРМА (то, что просил владелец): `[KvXr] MR: FPS 50 · цель 72`. Режим подаётся строкой,
+        /// чтобы правило «MR или VR» проверялось отдельно от текста, а текст — отдельно от сцены.
+        /// </summary>
+        public static string DescribeFps(string mode, int fps, int target)
+        {
+            string where = string.IsNullOrEmpty(mode) ? "XR" : mode;
+            int measured = fps < 0 ? 0 : fps;
+            int goal = target < 0 ? 0 : target;
+            return "[KvXr] " + where + ": FPS " + measured + " · цель " + goal;
+        }
+
+        /// <summary>Как называть режим в строке о кадрах: MR по факту включения комнаты, иначе VR.</summary>
+        public static string FpsModeLabel()
+        {
+            KvXrMrRoom room = KvXrMrRoom.Instance;
+            return room != null && room.MrActive ? "MR" : "VR";
+        }
+
+        /// <summary>Раз в 5 секунд: одна строка о реальных кадрах (см. `FpsReportIntervalSeconds`).</summary>
+        private void TickFpsReport()
+        {
+            if (Time.unscaledTime < nextFpsReport) return;
+            nextFpsReport = Time.unscaledTime + FpsReportIntervalSeconds;
+
+            float instant = Time.smoothDeltaTime > 0.000001f ? 1f / Time.smoothDeltaTime : 0f;
+            fpsSmoothed = fpsSmoothed < 0f ? instant : Mathf.Lerp(fpsSmoothed, instant, 0.5f);
+            Debug.Log(DescribeFps(FpsModeLabel(), Mathf.RoundToInt(fpsSmoothed), targetFrameRate));
         }
 
         /// <summary>

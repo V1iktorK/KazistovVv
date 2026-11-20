@@ -492,18 +492,34 @@ namespace KazistovVvXr
             Debug.Log(Describe(true, flow.Robot.robotName, VisibleVisualizers()));
         }
 
-        /// <summary>СТРОКА-ДИАГНОСТИКА ЗОН раз в секунду ([S2] №6): сколько видно и почему нет.</summary>
+        /// <summary>
+        /// СТРОКА-ДИАГНОСТИКА ЗОН — РЕЖЕ И БЕЗ ПОВТОРОВ ([S2] №6, правка 20.11.2026).
+        ///
+        /// ЧТО БЫЛО. Раз в секунду печаталась строка БЕЗ сравнения с прошлой: в журнале MR 139 копий
+        /// одного и того же «ЗОНЫ: видимо 0 · причина скрытия «в этой позе показывать нечего»» за
+        /// прогон. Каждая копия — `Debug.Log` на главном потоке шлема.
+        /// ЧТО СТАЛО. Интервал 5 с И проверка «изменился ли текст»: новое состояние видно сразу после
+        /// интервала, а одно и то же состояние больше не пишется вовсе.
+        /// </summary>
         private void LogZones()
         {
             if (!logOnBind) return;
             if (Time.unscaledTime < nextZoneLog) return;
-            nextZoneLog = Time.unscaledTime + 1f;
+            nextZoneLog = Time.unscaledTime + ZoneLogIntervalSeconds;
 
             int visible = VisibleVisualizers();
             bool robotBound = flow != null && flow.Robot != null;
             string reason = KvXrVisuals.Reason(flow != null, robotBound, true, visible > 0, false);
-            Debug.Log(KvXrVisuals.Describe(visible, reason));
+            string line = KvXrVisuals.Describe(visible, reason);
+            if (line == lastZoneLine) return;
+            lastZoneLine = line;
+            Debug.Log(line);
         }
+
+        /// <summary>Интервал строки о зонах, секунды (5) — см. `LogZones`.</summary>
+        public const float ZoneLogIntervalSeconds = 5f;
+
+        private string lastZoneLine = string.Empty;
 
         /// <summary>
         /// СКОЛЬКО ВИЗУАЛИЗАЦИЙ РЕАЛЬНО ВИДНО (§42/Д21). Раньше считались только две (зона достижимости
