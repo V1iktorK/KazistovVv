@@ -1190,7 +1190,16 @@ namespace KazistovVvFeatures
             try
             {
                 string path = System.IO.Path.Combine(MacrosFolder, Safe(macroName) + ".kvs");
-                return System.IO.File.Exists(path) ? System.IO.File.ReadAllText(path, Encoding.UTF8) : "";
+                if (!System.IO.File.Exists(path))
+                {
+                    // ОБРАТНАЯ СВЯЗЬ (тестировщик 20.11; замер самопрогона: «Загрузить» дал
+                    // «нет изменений»). Раньше кнопка при отсутствии макроса молчала — оператор
+                    // видел «ничего не произошло» без причины. Причина теперь в строке макроса
+                    // тем же способом, каким туда попадает «загружено макросов: N».
+                    Report("загрузка: макрос «" + macroName + "» не найден");
+                    return "";
+                }
+                return System.IO.File.ReadAllText(path, Encoding.UTF8);
             }
             catch (Exception) { return ""; }
         }
