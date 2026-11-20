@@ -50,6 +50,19 @@ namespace KazistovVvFeatures
         /// ИМЯ API ДЛЯ ЧЕЛОВЕКА. `GraphicsDeviceType` печатается как `OpenGLES3`, а в разговоре
         /// владельца и тестировщика звучит «GLES3» — поэтому у двух значений есть короткие имена.
         /// </summary>
+        /// <summary>
+        /// ВЫВОД СТРОКИ ПРИ СТАРТЕ. Требование P4-19 п.4: строка окружения в журнале ЗАПУСКА.
+        /// До 17.11 функция Describe существовала, но её НИКТО не вызывал — [KvEnv] не печатался
+        /// и проверка HEADSET честно говорила «нет строки [KvEnv]» (замер: вызывающими были только
+        /// тесты). Крючок исполняется в любом билде приложения независимо от сцены.
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        private static void EmitOnStart()
+        {
+            Debug.Log(Describe(SystemInfo.graphicsDeviceType, SystemInfo.graphicsDeviceName,
+                SystemInfo.deviceModel, SystemInfo.operatingSystem, Application.identifier));
+        }
+
         public static string ApiName(GraphicsDeviceType api)
         {
             switch (api)
