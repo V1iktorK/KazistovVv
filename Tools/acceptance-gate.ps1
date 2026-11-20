@@ -703,17 +703,22 @@ if (-not $headset) {
     & $Adb -s $headset.Id shell svc power stayon true 2>&1 | Out-Null
     Start-Sleep -Seconds 2
     & $Adb -s $headset.Id shell am start -n ($package + '/com.unity3d.player.UnityPlayerGameActivity') 2>&1 | Out-Null
-    Start-Sleep -Seconds 60
+    Start-Sleep -Seconds 90
 
     $hlc = (& $Adb -s $headset.Id logcat -d 2>&1) -join "`n"
-    for ($hTry = 1; $hTry -le 2 -and $hlc -notmatch '\[KvEnv\]'; $hTry++) {
+    # ТЕРПЕНИЕ КАК У СУДЬИ САМОПРОГОНА (усилено 20.11.2026). Замер захода 8: шлем провалился в
+    # глубокий сон на ЧАСЫ (пробелы прогонов 09:09 → 14:09 при 2-минутном окне запуска), тогда
+    #    как ui-sweep-device терпит по 15 минут и добивается своего. Пять повторов по 45 с + 90 с
+    #    на первый запуск — сравнимое терпение; будильник на каждом повторе.
+    for ($hTry = 1; $hTry -le 5 -and $hlc -notmatch '\[KvEnv\]'; $hTry++) {
         Write-Host "    [KvEnv] нет — будилью и повторяю запуск $hTry (сон стенда, а не код)"
         & $Adb -s $headset.Id shell input keyevent KEYCODE_WAKEUP 2>&1 | Out-Null
+        & $Adb -s $headset.Id shell svc power stayon true 2>&1 | Out-Null
         Start-Sleep -Seconds 2
         & $Adb -s $headset.Id shell am force-stop $package 2>&1 | Out-Null
         Start-Sleep -Seconds 2
         & $Adb -s $headset.Id shell am start -n ($package + '/com.unity3d.player.UnityPlayerGameActivity') 2>&1 | Out-Null
-        Start-Sleep -Seconds 35
+        Start-Sleep -Seconds 45
         $hlc = (& $Adb -s $headset.Id logcat -d 2>&1) -join "`n"
     }
     if ($hlc -match 'FATAL EXCEPTION') { $problems += 'падение приложения (FATAL EXCEPTION)' }
