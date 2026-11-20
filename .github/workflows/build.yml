@@ -1,0 +1,70 @@
+name: Build Unity Project
+
+# ================================================================================================
+#  СБОРКА ПРОЕКТА (Android + Windows x64) на SELF-HOSTED раннере этого ПК.
+#  Адаптировано 20.11.2026 под конвенции репозитория (см. nightly.yml):
+#    • unityVersion фиксирован — 6000.5.6f1 (как в ProjectSettings/ProjectVersion.txt);
+#    • Android: экспорт androidPackage (APK), имя сборки KazistovVv, без авто-версионирования;
+#    • подпись APK — теми же секретами ANDROID_KEYSTORE_*, что и ночной конвейер;
+#    • actions/upload-artifact@v4: v3 отключён GitHub'ом (с 30.01.2025) — v3 в исходнике не работал.
+#
+#  СЕКРЕТЫ (Settings → Secrets and variables → Actions):
+#    UNITY_LICENSE — содержимое .ulf (достаточно одного этого), либо UNITY_EMAIL + UNITY_PASSWORD.
+#    ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASS, ANDROID_KEYALIAS_NAME, ANDROID_KEYALIAS_PASS
+#      — для подписи APK (без них Android-джоба соберёт только debug-подпись).
+# ================================================================================================
+
+on:
+  push:
+    branches: [ main, feature/** ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  UNITY_VERSION: '6000.5.6f1'
+
+jobs:
+  build:
+    runs-on: self-hosted
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        targetPlatform: [Android, StandaloneWindows64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-build-${{ matrix.targetPlatform }}-${{ env.UNITY_VERSION }}-${{ hashFiles('Packages/packages-lock.json', 'ProjectSettings/ProjectVersion.txt') }}
+          restore-keys: |
+            Library-build-${{ matrix.targetPlatform }}-${{ env.UNITY_VERSION }}-
+            Library-build-${{ matrix.targetPlatform }}-
+
+      - name: Build
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          ANDROID_KEYALIAS_NAME: ${{ secrets.ANDROID_KEYALIAS_NAME }}
+          ANDROID_KEYALIAS_PASS: ${{ secrets.ANDROID_KEYALIAS_PASS }}
+        with:
+          unityVersion: ${{ env.UNITY_VERSION }}
+          targetPlatform: ${{ matrix.targetPlatform }}
+          androidExportType: androidPackage
+          buildName: KazistovVv
+          versioning: None
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Build-${{ matrix.targetPlatform }}
+          path: build/
+          if-no-files-found: error
+          retention-days: 14
