@@ -478,8 +478,15 @@ if ($SkipUnity) {
     for ($e2eTry = 1; $e2eTry -le 2; $e2eTry++) {
         if (Test-Path $e2eLog) { Remove-Item $e2eLog -Force }
         if (Test-Path $e2eRep) { Remove-Item $e2eRep -Force }
+        # ЗАПАС НА МЕДЛЕННУЮ МАШИНУ (22.11.2026, восстановление после гибели волн). Было 25 мин —
+        # и на перегруженной машине Unity убивалась ДО вызова `KvE2eSettingsDiag.Run` (в логе только
+        # компиляция и доменные перезагрузки по 3 минуты, отчёт не создан, код 124). Отдельный прогон
+        # с большим таймаутом на свободной машине: 37 из 37 проверок, ~6,5 мин — то есть прогон не
+        # висит, ему просто нужно время на импорт/компиляцию/перезагрузку домена. 60 мин — это запас
+        # на загрузку машины, а не обход проверки: диаг по-прежнему сам выходит кодом 0/2 и содержит
+        # свой сторож зависания (`PlayModeBudgetSeconds`).
         $code = Invoke-Unity @('-batchmode', '-projectPath', ('"' + $ProjectPath + '"'),
-            '-executeMethod', 'KvE2eSettingsDiag.Run', '-logFile', ('"' + $e2eLog + '"')) 25
+            '-executeMethod', 'KvE2eSettingsDiag.Run', '-logFile', ('"' + $e2eLog + '"')) 60
         $e2eVerdict = Get-E2eVerdict -ReportPath $e2eRep -LogPath $e2eLog -Code $code -Note $e2eNote
         if (-not $e2eVerdict.Retry) { break }
         # Причина первого отказа не теряется: она печатается в консоль гейта до повтора.
