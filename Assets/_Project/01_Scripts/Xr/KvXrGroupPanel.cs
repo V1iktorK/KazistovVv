@@ -1337,19 +1337,27 @@ private void ToggleMixedReality()
     //             «режим VR продолжает работать в MR» закрыта здесь);
     //   MR ← VR: по-прежнему после перезапуска — пасс-слой поднимается только при старте
     //             приложения, и обещать «нажал и заработало» было бы неправдой.
-    if (after == KvXrSettings.ModeVr)
-    {
-        Debug.Log("[KvXr] РЕЖИМ VR/MR: выбран VR — сквозной вид и MR-мир выключаются БЕЗ перезапуска" +
-                  " · сейчас выбрано «" + KvXrSettings.ModeLabel(after) + "» · " +
-                  KvXrSettings.ModeStatusLine());
-    }
-    else
-    {
-        Debug.Log("[KvXr] РЕЖИМ VR/MR: для полного включения MR нужен перезапуск приложения — " +
-                  "режим сохранён, применится при следующем старте · сейчас выбрано «" +
-                  KvXrSettings.ModeLabel(after) + "» · " + KvXrSettings.ModeStatusLine());
-    }
+    Debug.Log("[KvXr] РЕЖИМ VR/MR: " + ModeDeadlineNote(after) +
+              " · сейчас выбрано «" + KvXrSettings.ModeLabel(after) + "» · " +
+              KvXrSettings.ModeStatusLine());
     Rebuild();
+}
+
+/// <summary>
+/// СРОК ВСТУПЛЕНИЯ В СИЛУ ПЕРЕКЛЮЧАТЕЛЯ — ПО НАПРАВЛЕНИЮ (чистая функция, проверяется тестом).
+///
+/// ЗАЧЕМ ОТДЕЛЬНАЯ ФУНКЦИЯ (21.11.2026, P4-3). Строка журнала собиралась прямо в
+/// `ToggleMixedReality`, и проверить её можно было только прочитав ФАЙЛ исходника: текстовый
+/// греп ломался от правки комментария и ПРОХОДИЛ на сломанном коде. Теперь срок считает чистая
+/// функция — тест `KvVrSwitchRuntimeTests.ToggleLog_DistinguishesImmediateVrFromRestartedMr`
+/// проверяет ЕЁ вывод для обоих направлений, а журнал печатает ровно эту строку.
+/// </summary>
+public static string ModeDeadlineNote(int modeIndex)
+{
+    if (modeIndex == KvXrSettings.ModeVr)
+        return "выбран VR — сквозной вид и MR-мир выключаются БЕЗ перезапуска";
+    return "для полного включения MR нужен перезапуск приложения — режим сохранён, " +
+           "применится при следующем старте";
 }
 
 /// <summary>
@@ -2956,6 +2964,22 @@ if (target == null && hovered == null) labelDwell = 0f;
 public string TitleAt(int index)
 {
             return index >= 0 && index < iconTitles.Count ? iconTitles[index] : string.Empty;
+}
+
+/// <summary>
+/// ИМЯ ОБЪЕКТА ИКОНКИ ПО НОМЕРУ (`Cmd_<id>` у команд, иначе пустая строка).
+///
+/// ЗАЧЕМ НАРУЖУ (21.11.2026, красный UI_SWEEP). У иконки веера имя объекта — это id команды
+/// (`Cmd_robot.stop`, `Cmd_robot.model.thor`). Самопрогон видит только ПОДПИСЬ («Остановка»),
+/// и не мог отличить рабочую кнопку от кнопки, которую реестр выключил: нажатие не доходило до
+/// `KvCommands.ExecutedCount`, эффекта не было, и рабочая (по замыслу) кнопка попадала в
+/// «без эффекта». Теперь обход читает id у самой иконки и спрашивает реестр.
+/// </summary>
+public string IconNameAt(int index)
+{
+            return index >= 0 && index < icons.Count && icons[index] != null
+                ? icons[index].name
+                : string.Empty;
 }
 
 /// <summary>

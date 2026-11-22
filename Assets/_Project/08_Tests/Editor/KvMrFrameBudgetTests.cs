@@ -25,7 +25,7 @@
 //  ОКРУЖЕНИЕ: режим MR/VR живёт в PlayerPrefs — тест обязан вернуть всё как было.
 // ================================================================================================
 
-using System.IO;
+using System;
 using KazistovVvFeatures;
 using KazistovVvUI;
 using KazistovVvXr;
@@ -57,19 +57,6 @@ namespace KazistovVvTests
             if (hadSavedPassthrough) PlayerPrefs.SetInt(KvXrSettings.KeyPassthrough, savedPassthrough);
             else PlayerPrefs.DeleteKey(KvXrSettings.KeyPassthrough);
             PlayerPrefs.Save();
-        }
-
-        private static string ProjectRoot
-        {
-            get { return Path.GetFullPath(Path.Combine(Application.dataPath, "..")); }
-        }
-
-        private static string ReadAsset(params string[] parts)
-        {
-            string path = ProjectRoot;
-            for (int i = 0; i < parts.Length; i++) path = Path.Combine(path, parts[i]);
-            Assert.IsTrue(File.Exists(path), "нет файла " + path);
-            return File.ReadAllText(path);
         }
 
         /// <summary>«Дорогой» профиль — такой, каким MR-ветка раньше резала качество.</summary>
@@ -160,19 +147,53 @@ namespace KazistovVvTests
         }
 
         /// <summary>
-        /// В ШОВЕ ВЫЗВАН `ApplyEffectsTo`, А НЕ ПОЛНЫЙ ПРЕСЕТ.
+        /// В ШОВЕ ПРИМЕНЯЕТСЯ ТОЛЬКО ОТКЛЮЧЕНИЕ ПОСТОБРАБОТКИ, А НЕ ПОЛНЫЙ ПРЕСЕТ.
         ///
         /// Что ловит: правку шва «обратно на ApplyTo» — качество снова срезалось бы, а все
-        /// проверки выше (на самой функции) оставались бы зелёными.
+        /// проверки выше (на самой функции) оставались бы зелёными. Проверяется РЕЗУЛЬТАТ
+        /// работы `EffectiveProfileFor`, а не текст исходника: прежний греп файла проходил бы
+        /// на сломанном коде («строка вызова есть», а вызывается другой метод) и ломался бы
+        /// от правки комментария.
         /// </summary>
         [Test]
         public void GraphicsServiceSeam_CallsEffectsOnlyPreset()
         {
-            string source = ReadAsset("Assets", "_Project", "01_Scripts", "Features", "KvGraphicsService.cs");
-            StringAssert.Contains("KvMrPerformance.ApplyEffectsTo(cheap)", source,
-                "шов MR обязан вызывать ApplyEffectsTo — только постобработка");
-            Assert.IsFalse(source.Contains("KvMrPerformance.ApplyTo(cheap)"),
-                "шов MR НЕ обязан вызывать ApplyTo — он срезает масштаб и тени");
+            KvXrSettings.SetModeIndex(KvXrSettings.ModeMr);
+            KvGraphicsProfile source = ExpensiveProfile();
+            KvGraphicsProfile inMr = KvGraphicsService.EffectiveProfileFor(source);
+
+            Assert.AreNotSame(source, inMr,
+                "в MR обязана применяться копия — иначе съедается профиль оператора");
+            Assert.IsTrue(KvMrPerformance.ExpensiveEffectsOff(inMr),
+                "шов MR обязан выключить дорогую постобработку — это единственное, что он меняет");
+
+            // РОВНО ТО, ЧТО ДЕЛАЕТ ApplyEffectsTo, — И НИЧЕГО БОЛЬШЕ.
+            KvGraphicsProfile expected = source.Clone();
+            KvMrPerformance.ApplyEffectsTo(expected);
+            Assert.AreEqual(expected.renderScale, inMr.renderScale, 0.0001f,
+                "масштаб отрисовки в MR обязан СОХРАНИТЬСЯ (требование владельца 19.11)");
+            Assert.AreEqual(expected.shadowQuality, inMr.shadowQuality,
+                "качество теней в MR обязано СОХРАНИТЬСЯ");
+            Assert.AreEqual(expected.shadowResolution, inMr.shadowResolution,
+                "разрешение карты теней в MR обязано СОХРАНИТЬСЯ");
+            Assert.AreEqual(expected.shadowDistance, inMr.shadowDistance, 0.0001f,
+                "дистанция теней в MR обязанa СОХРАНИТЬСЯ");
+            Assert.AreEqual(expected.shadowCascades, inMr.shadowCascades,
+                "каскады теней в MR обязаны СОХРАНИТЬСЯ");
+
+            // АНТИ-ВАКУУМ: сравнение обязано быть ОТЛИЧАЮЩИМ. Если капы `ApplyTo` перестанут
+            // отличаться от профиля оператора, проверка шва ничего не поймает — и это тоже
+            // надо увидеть сразу, а не получить тихо зелёный тест.
+            Assert.Less(KvMrPerformance.MaxRenderScale, source.renderScale,
+                "кап масштаба обязан быть ниже профиля оператора — иначе проверка шва вакуумна");
+            Assert.Less(KvMrPerformance.MaxShadowQuality, source.shadowQuality,
+                "кап качества теней обязан быть ниже профиля оператора");
+            Assert.Less(KvMrPerformance.MaxShadowResolution, source.shadowResolution,
+                "кап разрешения теней обязан быть ниже профиля оператора");
+            Assert.Less(KvMrPerformance.MaxShadowDistance, source.shadowDistance,
+                "кап дистанции теней обязан быть ниже профиля оператора");
+            Assert.Less(KvMrPerformance.MaxShadowCascades, source.shadowCascades,
+                "кап каскадов теней обязан быть ниже профиля оператора");
         }
 
         // ==================================================== 2. GC В КАДРЕ
@@ -207,11 +228,31 @@ namespace KazistovVvTests
             Assert.IsTrue(KvXrQuickPanel.SameSettings(a, radiusNoise),
                 "дребезг радиуса меньше 0,5 мм НЕ обязан пересобирать панель");
 
-            string source = ReadAsset("Assets", "_Project", "01_Scripts", "Xr", "KvXrQuickPanel.cs");
-            Assert.IsFalse(source.Contains("CurrentSignature"),
-                "строковая подпись настроек обязана быть убрана из Update панели");
-            Assert.IsFalse(source.Contains("builtSignature"),
-                "поле строки-подписи обязано быть убрано — оно и есть источник аллокаций");
+            // СТРОКА-ПОДПИСЬ ОТСУТСТВУЕТ В САМОМ ТИПЕ, А НЕ В ФАЙЛЕ: поле-кэш строки,
+            // пересобираемое в `Update`, — ровно тот источник аллокаций, который ловил прежний
+            // греп исходника. Рефлексия смотрит на СКОМПИЛИРОВАННЫЙ тип: она проходит только при
+            // отсутствии самого поля (переименование не поможет) и не ломается от правки
+            // комментария в файле.
+            var suspects = new System.Collections.Generic.List<string>();
+            foreach (System.Reflection.FieldInfo f in typeof(KvXrQuickPanel).GetFields(
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static |
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
+            {
+                if (f.Name.IndexOf('<') >= 0) continue;   // backing-поля автосвойств — не кэш в Update
+                if (f.FieldType == typeof(string)) suspects.Add("поле " + f.Name);
+                if (f.Name.IndexOf("Signature",
+                    StringComparison.OrdinalIgnoreCase) >= 0) suspects.Add("поле " + f.Name);
+            }
+            foreach (System.Reflection.PropertyInfo p in typeof(KvXrQuickPanel).GetProperties(
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static |
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
+            {
+                if (p.Name.IndexOf("Signature", StringComparison.OrdinalIgnoreCase) >= 0)
+                    suspects.Add("свойство " + p.Name);
+            }
+            Assert.IsEmpty(suspects,
+                "строковые поля/подписи в панели быстрых команд — это аллокации в Update: " +
+                string.Join(", ", suspects.ToArray()));
         }
 
         /// <summary>

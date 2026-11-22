@@ -19,7 +19,6 @@
 //    5) масштаб отрисовки НИКОГДА не снижается автоматически (запрет владельца).
 // ================================================================================================
 
-using System.IO;
 using KazistovVvFeatures;
 using KazistovVvXr;
 using NUnit.Framework;
@@ -154,11 +153,20 @@ namespace KazistovVvTests
                 "метрика кадров — служебная строка, ей хватит одного раза в 5 с");
 
             // «Стол найден / не найден» считается и печатается по своему интервалу — и он тоже
-            // не чаще раза в 5 с (в журнале MR — 140 строк).
-            string source = File.ReadAllText(Path.Combine(Application.dataPath,
-                "_Project", "01_Scripts", "Xr", "KvMrSurfaces.cs"));
-            StringAssert.Contains("RealTableReportSeconds = 5f", source,
-                "периодическая строка «РЕАЛЬНЫЙ СТОЛ» обязана быть ужата до 5 с");
+            // не чаще раза в 5 с (в журнале MR — 140 строк). Проверяется ЗНАЧЕНИЕ константы у
+            // самого типа (рефлексия), а не текст файла: прежний греп исходника проходил бы на
+            // сломанном коде («строка есть» ≠ «интервал 5 с») и ломался от правки комментария.
+            System.Reflection.FieldInfo report = typeof(KvMrSurfaces).GetField(
+                "RealTableReportSeconds",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+            Assert.IsNotNull(report,
+                "интервал периодической строки «РЕАЛЬНЫЙ СТОЛ» обязан существовать как константа " +
+                "KvMrSurfaces — без неё строка печатается каждый кадр");
+            float reportSeconds = (float)report.GetRawConstantValue();
+            Assert.GreaterOrEqual(reportSeconds, 5f,
+                "периодическая строка «РЕАЛЬНЫЙ СТОЛ» обязана уходить не чаще раза в 5 с " +
+                "(в журнале MR — 140 строк), а фактический интервал " +
+                reportSeconds.ToString("0.###") + " с");
         }
 
         // ==================================================== 3. МЕТРИКА КАДРОВ В ЖУРНАЛЕ
