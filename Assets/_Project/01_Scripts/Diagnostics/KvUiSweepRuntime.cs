@@ -348,6 +348,25 @@
 //       визуализатора в сцене вовсе нет — честная причина «панель лимитов не появится:
 //       визуализатор рабочей области в сцене отсутствует»;
 //
+//  ДОРАБОТКА ПО КРАСНОМУ ГЕЙТУ 21.11.2026 (шлем: VR/MR 59/55 элементов вместо 96/92 и 8 «без
+//  эффекта»; планшет: 1 «без эффекта»):
+//   57) ВТОРОЙ ЯРУС МЕНЮ ЛЕВОЙ РУКИ ВКЛЮЧАЕТСЯ НА ВРЕМЯ ОБХОДА. Решение владельца 20.11.2026
+//       («оставить тот, что с меньшими кружочками») спрятало `KvXrQuickPanel` по умолчанию, а
+//       канвас яруса не строится, пока ярус выключен, — и ~7 кнопок яруса ВЫПАЛИ из инвентаря
+//       молча (в VR/MR стало 59/55 вместо 96/92). Теперь перед сбором ярус включается
+//       (`EnableHiddenQuickLayerForSweep`), а в `Finish`/аварийном завершении настройка
+//       ВОЗВРАЩАЕТСЯ к исходному значению; оба факта печатаются строкой `ВТОРОЙ ЯРУС: …`.
+//       Скрытый из вида элемент — худший вид поломки самопрогона: отчёт выглядит зелёным на
+//       меньшем наборе;
+//   58) ПРИЧИНЫ ВМЕСТО ЛОЖНЫХ «БЕЗ ЭФФЕКТА» — ПО ФАКТУ СОСТОЯНИЯ. (а) Кнопка, чья КОМАНДА
+//       выключена в реестре (`robot.stop`/`robot.playpause` — робот не запущен; `robot.model.*`
+//       — у модели нет геометрии либо в сцене нет стола), получает
+//       `exempt=команда недоступна (состояние реестра): <id> — <факт>`; id берётся у САМОЙ
+//       иконки (`KvXrGroupPanel.IconNameAt`), поэтому включённая команда без эффекта остаётся
+//       настоящей находкой. (б) Смена режима отрисовки на планшете никогда не идёт сама —
+//       сначала запрос, потом подтверждение оператора; пока подтверждения нет,
+//       `exempt=режим отрисовки запрошен, но НЕ применён — ждёт подтверждения`.
+//
 //  ЧЕСТНАЯ ГРАНИЦА. Таймаут на элемент измеряется по ФАКТИЧЕСКОМУ времени: Unity не даёт прервать
 //  вызов, который уже выполняется в главном потоке, поэтому «завис навсегда» виден как обрыв файла
 //  отчёта сразу после строки `press=` (виновник назван), а «завис на 5 секунд» — как `ok=0 timeout`
@@ -2471,6 +2490,63 @@ namespace KazistovVvDiagnostics
         /// <summary>Эффект для элемента, который прогон не нажал, потому что он недоступен.</summary>
         public const string UnavailableEffect =
             "не нажимали — недоступен оператору (interactable=false/IsEnabled=false)";
+
+        // ---------------------------------- КНОПКИ, КОТОРЫЕ РЕЕСТР ВЫКЛЮЧИЛ (21.11.2026)
+        //
+        // ЗАЧЕМ. Красный прогон UI_SWEEP 21.11.2026: в шлеме 8 «без эффекта» — «Остановка»,
+        // «Запуск / пауза» и «Робот: …» в VR/MR. Все эти кнопки нарисованы и кликаются
+        // (uGUI не выключен), но их КОМАНДЫ в реестре выключены по факту состояния:
+        //   • `robot.stop` / `robot.playpause` — `IsEnabled = Motion.IsRunning`, то есть
+        //     «нечего останавливать/ставить на паузу: робот не запущен»;
+        //   • `robot.model.*` — `IsEnabled = есть геометрия модели И есть стол в сцене`.
+        // Нажатие реально ничего не делает (счётчик `KvCommands.ExecutedCount` не растёт),
+        // поэтому это НЕ дефект кнопки и НЕ «прогон не дождался», а названное состояние
+        // реестра. Причина даётся ТОЛЬКО когда команда есть и выключена: включённая команда
+        // без эффекта остаётся настоящей находкой.
+
+        /// <summary>ID КОМАНДЫ ИЗ ИМЕНИ ИКОНКИ ПАНЕЛИ (`Cmd_robot.stop` → `robot.stop`).</summary>
+        public static string CommandIdOfIconName(string iconName)
+        {
+            if (string.IsNullOrEmpty(iconName)) return "";
+            const string prefix = "Cmd_";
+            return iconName.StartsWith(prefix, StringComparison.Ordinal)
+                ? iconName.Substring(prefix.Length)
+                : "";
+        }
+
+        /// <summary>
+        /// ПРИЧИНА ДЛЯ КНОПКИ С ВЫКЛЮЧЕННОЙ КОМАНДОЙ (`""` — команда включена или не найдена).
+        /// Текст называет СОСТОЯНИЕ, а не «не работает»: оператор обязан увидеть, почему.
+        /// </summary>
+        public static string DisabledCommandReason(string commandId, bool commandEnabled)
+        {
+            if (string.IsNullOrEmpty(commandId) || commandEnabled) return "";
+            string why = "";
+            if (commandId == "robot.stop" || commandId == "robot.playpause")
+                why = "робот не запущен — движение идёт только при работающей траектории";
+            else if (commandId.StartsWith("robot.model.", StringComparison.Ordinal))
+                why = "модель без геометрии либо в сцене нет стола";
+            return "команда недоступна (состояние реестра): " + commandId +
+                   (why.Length > 0 ? " — " + why : "");
+        }
+
+        /// <summary>
+        /// ПРИЧИНА ДЛЯ «РЕЖИМ ОТРИСОВКИ» (AR, 21.11.2026). Смена шейдерного режима НИКОГДА не
+        /// идёт сама: тяжёлая операция, поэтому сначала запрос, потом подтверждение оператора
+        /// (`KvGraphicsService.RequestLitShaderMode` → строка «Подтвердите смену режима»).
+        /// Нажатие поэтому не меняет применённый режим — и это честный факт окна, а не
+        /// «кнопка мертва».
+        /// </summary>
+        public static string RasterPendingReason(string path, bool litShaderPending)
+        {
+            if (!litShaderPending) return "";
+            if (string.IsNullOrEmpty(path) || path.IndexOf("GraphSeg", StringComparison.Ordinal) < 0
+                && path.IndexOf("Режим отрисовки", StringComparison.Ordinal) < 0)
+                return "";
+            return "режим отрисовки запрошен, но НЕ применён — ждёт подтверждения " +
+                   "(кнопка «Подтвердить смену режима»)";
+        }
+
 
         /// <summary>Эффект для `edit.undo` при пустом стеке отмены.</summary>
         public const string NothingToUndoEffect = "не нажимали — нечего отменять: стек отмены пуст";
@@ -4619,6 +4695,21 @@ namespace KazistovVvDiagnostics
                      platform + " — сквозной вид применяется после ПЕРЕЗАПУСКА. Прогон идёт в " +
                      "фактическом режиме, и отчёт называет именно его");
 
+            // 3б. ВТОРОЙ ЯРУС МЕНЮ ЛЕВОЙ РУКИ — НА ВРЕМЯ ОБХОДА (21.11.2026, красный UI_SWEEP).
+            //
+            // ЧТО БЫЛО. Решение владельца 20.11.2026 («оставить тот, что с меньшими кружочками»)
+            // спрятало второй ярус `KvXrQuickPanel` по умолчанию, и обход перестал его видеть:
+            // канвас яруса не строится, пока ярус выключен, — в VR/MR инвентарь стал 59/55
+            // элементов вместо 96/92, и ~7 кнопок яруса ВЫПАЛИ из замера молча. Потерянный из
+            // вида элемент — худший вид поломки самопрогона: отчёт выглядит зелёным на меньшем
+            // наборе.
+            //
+            // ЧТО СТАЛО. Перед сбором инвентаря скрытый ярус ВКЛЮЧАЕТСЯ (панель собирается сама в
+            // следующем кадре — `KvXrQuickPanel.Update`), а в `Finish` настройка ВОЗВРАЩАЕТСЯ к
+            // исходному значению, чтобы прогон не оставил владельцу лишний ярус. Оба факта
+            // печатаются строкой: тестировщик видит, что второй ярус был включён осознанно.
+            yield return EnableHiddenQuickLayerForSweep();
+
             // 4. ПАНЕЛИ ПОСТРОЕНЫ? Ноль панелей — это ПРОВАЛ с причиной, а не «нечего проверять».
             int panels = CountPanels();
             if (panels == 0)
@@ -5135,6 +5226,21 @@ namespace KazistovVvDiagnostics
                 // `refreshCount` считается только для этих двух кнопок, чужим она не достаётся.
                 if (honest.Length == 0)
                     honest = KvUiSweepRefresh.NothingToRefreshReason(c.Path, refreshCount);
+                // КНОПКИ, КОТОРЫЕ РЕЕСТР ВЫКЛЮЧИЛ (21.11.2026, красный UI_SWEEP: «Остановка»,
+                // «Запуск / пауза», «Робот: …» в шлеме). Команда есть, но `IsEnabled` ложь по
+                // факту состояния (робот не запущен / у модели нет геометрии / нет стола) —
+                // нажатие физически ничего не делает, и это НАЗВАННОЕ СОСТОЯНИЕ, а не дефект.
+                // Включённая команда без эффекта сюда не попадает — она остаётся находкой.
+                if (honest.Length == 0)
+                {
+                    string commandId = CommandIdFor(c);
+                    honest = KvUiSweepExemptions.DisabledCommandReason(commandId,
+                        CommandEnabledById(commandId));
+                }
+                // «РЕЖИМ ОТРИСОВКИ» НИКОГДА НЕ МЕНЯЕТСЯ САМ (AR): сначала запрос, потом
+                // подтверждение оператора — факт читается из сервиса графики.
+                if (honest.Length == 0)
+                    honest = KvUiSweepExemptions.RasterPendingReason(c.Path, LitShaderPendingNow());
                 if (honest.Length > 0)
                 {
                     if (string.IsNullOrEmpty(element.ExemptReason)) element.ExemptReason = honest;
@@ -8891,6 +8997,62 @@ namespace KazistovVvDiagnostics
             for (int f = 0; f < SettleFrames; f++) yield return null;
         }
 
+        // ------------------------------------ ВТОРОЙ ЯРУС МЕНЮ ЛЕВОЙ РУКИ (21.11.2026)
+
+        /// <summary>Прогон включил второй ярус — значит, настройку обязан вернуть в `Finish`.</summary>
+        private bool quickLayerForced;
+
+        /// <summary>Значение настройки второго яруса ДО включения прогоном.</summary>
+        private bool quickLayerSettingBefore;
+
+        /// <summary>Сколько кадров ждём, пока панель второго яруса соберётся и покажется.</summary>
+        private const int QuickLayerSettleFrames = 10;
+
+        /// <summary>
+        /// ВКЛЮЧИТЬ СКРЫТЫЙ ВТОРОЙ ЯРУС НА ВРЕМЯ ОБХОДА (макеты vr/mr) — чтобы его кнопки
+        /// попали в инвентарь, а не выпали из замера молча. См. комментарий в `Sweep`.
+        /// </summary>
+        private IEnumerator EnableHiddenQuickLayerForSweep()
+        {
+            quickLayerForced = false;
+            // В макетах ar/pc панели шлема нет вовсе — включать нечего.
+            if (run == null || (run.Layout != "vr" && run.Layout != "mr")) yield break;
+            if (KvXrTuning.QuickLayerEnabled)
+            {
+                Line("[KvUiSweep] ВТОРОЙ ЯРУС: уже включён — инвентарь соберёт оба яруса");
+                yield break;
+            }
+
+            quickLayerSettingBefore = KvXrSettings.GetQuickLayerVisible();
+            KvXrSettings.SetQuickLayerVisible(true);
+            quickLayerForced = true;
+            for (int f = 0; f < QuickLayerSettleFrames; f++) yield return null;
+
+            if (!KvXrTuning.QuickLayerEnabled)
+            {
+                // Файл подстройки может запретить ярус жёстко (`menu.quickLayer=0`) — тогда
+                // включить нечего, и это называется прямо, а не тонет в «элементов 59».
+                Line("[KvUiSweep] ВТОРОЙ ЯРУС: включить не удалось (файл подстройки держит " +
+                     "menu.quickLayer=0) — кнопки второго яруса в инвентарь не попадут");
+                yield break;
+            }
+
+            Line("[KvUiSweep] ВТОРОЙ ЯРУС: скрытый ярус (KvXrQuickPanel) включён на время обхода, " +
+                 "исходное состояние: " + (quickLayerSettingBefore ? "включён" : "скрыт") +
+                 " — возвращается в Finish");
+        }
+
+        /// <summary>Вернуть настройку второго яруса к той, что была ДО прогона (вызывается из Finish).</summary>
+        private void RestoreHiddenQuickLayerForSweep()
+        {
+            if (!quickLayerForced) return;
+            quickLayerForced = false;
+            KvXrSettings.SetQuickLayerVisible(quickLayerSettingBefore);
+            Line("[KvUiSweep] ВТОРОЙ ЯРУС: исходное состояние восстановлено — " +
+                 (quickLayerSettingBefore ? "включён" : "скрыт") +
+                 " (настройка владельца прогоном не изменена)");
+        }
+
         /// <summary>Проиграть путь «сначала иконки групп» — база для любого уровня панели.</summary>
         private static void RestoreBase(KvXrGroupPanel panel)
         {
@@ -9027,6 +9189,42 @@ namespace KazistovVvDiagnostics
             if (id.Length == 0) return false;
             KvCommand command = KvCommands.Get(id);
             return command != null && command.Enabled;
+        }
+
+        /// <summary>
+        /// ID КОМАНДЫ ДЛЯ ЭЛЕМЕНТА (21.11.2026): у иконки панели шлема это имя объекта
+        /// (`Cmd_robot.stop`), у строки тулбара — id, вырезанный из пути. Пустая строка —
+        /// элемент не командный (переключатель, вкладка), и причина «реестр выключил» к нему
+        /// не применяется.
+        /// </summary>
+        private static string CommandIdFor(Candidate c)
+        {
+            if (c == null) return "";
+            if (c.IsPanelIcon && c.Panel != null)
+            {
+                string fromIcon = KvUiSweepExemptions.CommandIdOfIconName(
+                    c.Panel.IconNameAt(c.Index));
+                if (fromIcon.Length > 0) return fromIcon;
+            }
+            return KvUiSweepExemptions.CommandIdOfPath(c.Path);
+        }
+
+        /// <summary>
+        /// ВКЛЮЧЕНА ЛИ КОМАНДА ПО РЕЕСТРУ. «Команды нет» — это НЕ «выключена»: причину даём
+        /// только там, где реестр отвечает `Enabled == false`.
+        /// </summary>
+        private static bool CommandEnabledById(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return true;
+            KvCommand command = KvCommands.Get(id);
+            return command == null || command.Enabled;
+        }
+
+        /// <summary>ЖДЁТ ЛИ СМЕНЫ РЕЖИМА ОТРИСОВКИ (запрошено, но не подтверждено оператором).</summary>
+        private static bool LitShaderPendingNow()
+        {
+            KvGraphicsService graphics = KvGraphicsService.Current;
+            return graphics != null && graphics.LitShaderPending;
         }
 
         /// <summary>
@@ -9262,6 +9460,8 @@ namespace KazistovVvDiagnostics
             // корутина стоит на кадре, а приложение уже ушло в фон и отчёт записан.
             if (finished) yield break;
             finished = true;
+            // ВТОРОЙ ЯРУС ВОЗВРАЩАЕТСЯ ДО ИТОГА: настройка владельца не должна пережить прогон.
+            RestoreHiddenQuickLayerForSweep();
             float seconds = Time.realtimeSinceStartup - startedAt;
 
             if (!string.IsNullOrEmpty(forcedFailure))
@@ -9334,6 +9534,10 @@ namespace KazistovVvDiagnostics
         {
             if (finished) return;
             finished = true;
+
+            // И ЗДЕСЬ ТОЖЕ: даже аварийный отчёт не должен оставить владельцу лишний ярус.
+            try { RestoreHiddenQuickLayerForSweep(); }
+            catch (Exception e) { Debug.LogWarning("[KvUiSweep] второй ярус не восстановлен: " + e.GetType().Name); }
 
             try
             {

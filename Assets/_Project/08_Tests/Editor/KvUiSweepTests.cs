@@ -3464,5 +3464,182 @@ namespace KazistovVvTests
                     (int)KvXrStartSection.Tables, 0),
                 "чужому элементу причина про урны не выдаётся");
         }
+
+        // ===================== 21.11.2026: ПРИЧИНЫ КРАСНОГО UI_SWEEP (8 «без эффекта») =====================
+
+        /// <summary>
+        /// ПРИЧИНЫ ДЛЯ КНОПОК, КОТОРЫЕ РЕЕСТР ВЫКЛЮЧИЛ, И ДЛЯ «РЕЖИМА ОТРИСОВКИ» — ПО ФАКТУ.
+        ///
+        /// Что ловит: возврат пустых причин — тогда «Остановка», «Запуск / пауза» и «Робот: …»
+        /// в шлеме снова попадут в «без эффекта» (кнопка нарисована, команда выключена по
+        /// состоянию: робот не запущен / у модели нет геометрии), а смена режима отрисовки на
+        /// планшете снова будет выглядеть мёртвой, хотя она ждёт подтверждения оператора.
+        /// </summary>
+        [Test]
+        public void DisabledCommandAndRasterReasons_NameTheState()
+        {
+            // 1) ID КОМАНДЫ — ИЗ ИМЕНИ ИКОНКИ ПАНЕЛИ (иначе у PanelIcon id вообще не взять).
+            Assert.AreEqual("robot.stop",
+                KvUiSweepExemptions.CommandIdOfIconName("Cmd_robot.stop"),
+                "имя иконки Cmd_<id> обязано давать id команды");
+            Assert.AreEqual("robot.model.thor",
+                KvUiSweepExemptions.CommandIdOfIconName("Cmd_robot.model.thor"),
+                "длинный id обязан сохраняться целиком");
+            Assert.AreEqual("", KvUiSweepExemptions.CommandIdOfIconName("Screen_Close"),
+                "иконка без команды не должна превращаться в ложный id");
+            Assert.AreEqual("", KvUiSweepExemptions.CommandIdOfIconName(""),
+                "пустое имя — пустой id, а не исключение");
+
+            // 2) ВЫКЛЮЧЕННАЯ КОМАНДА → ПРИЧИНА С НАЗВАННЫМ СОСТОЯНИЕМ. Включённая — никогда:
+            //    иначе рабочая кнопка без эффекта получила бы оправдание и стала бы находкой.
+            Assert.AreEqual("", KvUiSweepExemptions.DisabledCommandReason("robot.stop", true),
+                "включённая команда причину не получает — её молчание это находка");
+            Assert.AreEqual("", KvUiSweepExemptions.DisabledCommandReason("", false),
+                "без id причину приклеивать не к чему");
+
+            string stop = KvUiSweepExemptions.DisabledCommandReason("robot.stop", false);
+            StringAssert.Contains("состояние реестра", stop,
+                "причина обязана называть источник: реестр, а не «не работает» — " + stop);
+            StringAssert.Contains("robot.stop", stop, "причина обязана называть команду: " + stop);
+            StringAssert.Contains("робот не запущен", stop,
+                "останавливать нечего обязано быть сказано фактом: " + stop);
+
+            string play = KvUiSweepExemptions.DisabledCommandReason("robot.playpause", false);
+            StringAssert.Contains("робот не запущен", play,
+                "пауза при незапущенном роботе — то же состояние: " + play);
+
+            string model = KvUiSweepExemptions.DisabledCommandReason("robot.model.thor", false);
+            StringAssert.Contains("геометрии", model,
+                "модель без геометрии обязана назвать причину: " + model);
+            StringAssert.Contains("robot.model.thor", model, "id обязан быть в причине");
+
+            string other = KvUiSweepExemptions.DisabledCommandReason("view.workspace", false);
+            StringAssert.Contains("view.workspace", other,
+                "неизвестная команда всё равно называется: " + other);
+            Assert.IsFalse(other.Contains("робот не запущен"),
+                "причина про робота не должна приклеиваться к чужой команде");
+
+            // 3) «РЕЖИМ ОТРИСОВКИ» ЖДЁТ ПОДТВЕРЖДЕНИЯ — только у строки графики и только когда
+            //    подтверждения действительно не хватает.
+            string segPath = "KazistovVv_UI/KazistovVvDockCanvas/Dock_Настройки/Body/Scroll/" +
+                             "Content/GraphSeg#1/Seg_Seg/Seg2«Обе (Forward + Deferred)»";
+            StringAssert.Contains("подтверждения",
+                KvUiSweepExemptions.RasterPendingReason(segPath, true),
+                "запрошенный, но неподтверждённый режим обязан быть назван: " +
+                KvUiSweepExemptions.RasterPendingReason(segPath, true));
+            Assert.AreEqual("", KvUiSweepExemptions.RasterPendingReason(segPath, false),
+                "подтверждения не ждём — готовой причины нет, элемент остаётся находкой");
+            Assert.AreEqual("", KvUiSweepExemptions.RasterPendingReason(
+                    "KazistovVv_UI/…/Switch_Фонарик«Фонарик: вкл»", true),
+                "чужой элемент причину про режим отрисовки не получает");
+        }
+
+        // ===================== 22.11.2026: ОБА ЯРУСА МЕНЮ В ИНВЕНТАРЕ ОБХОДА =====================
+
+        /// <summary>
+        /// ПРОГОН ВКЛЮЧАЕТ СКРЫТЫЙ ВТОРОЙ ЯРУС НА ВРЕМЯ ОБХОДА И ВОЗВРАЩАЕТ НАСТРОЙКУ ВЛАДЕЛЬЦА.
+        ///
+        /// ОТКУДА (шлем, отчёт 21.11.2026): решение владельца 20.11.2026 спрятало `KvXrQuickPanel`
+        /// по умолчанию, канвас яруса не строится, пока ярус выключен, — и ~13 кнопок яруса ВЫПАЛИ
+        /// из инвентаря молча: в VR/MR обход нашёл 59/55 элементов, в AR (где ярус виден) — 771,
+        /// включая 13 строк `XrRig/XrQuickPanel/…`. Потерянный из вида элемент — худший вид поломки
+        /// самопрогона: отчёт выглядит зелёным на меньшем наборе.
+        ///
+        /// ЧТО ПРОВЕРЯЕТСЯ ФАКТОМ (а не текстом исходника): корутина обхода РЕАЛЬНО переключает
+        /// настройку включённой и РЕАЛЬНО возвращает исходное значение владельца. Вторая половина
+        /// правила не менее важна: прогон не вправе оставить владельцу лишний ярус после себя.
+        /// </summary>
+        [Test]
+        public void Sweep_ForceEnablesHiddenQuickLayer_AndRestoresOwnerSetting()
+        {
+            bool hadLayer = PlayerPrefs.HasKey(KvXrSettings.KeyQuickLayerVisible);
+            int layerValue = PlayerPrefs.GetInt(KvXrSettings.KeyQuickLayerVisible, 0);
+            GameObject host = new GameObject("KvUiSweepTests_QuickLayer");
+            try
+            {
+                KvXrSettings.SetQuickLayerVisible(false);
+                Assert.IsFalse(KvXrSettings.GetQuickLayerVisible(),
+                    "подготовка: второй ярус скрыт — решение владельца 20.11.2026");
+
+                KvUiSweepRuntime runtime = host.AddComponent<KvUiSweepRuntime>();
+                SetPrivateField(runtime, "run", new KvUiSweepRun { Layout = "vr" });
+
+                var enabler = (System.Collections.IEnumerator)InvokePrivate(runtime,
+                    "EnableHiddenQuickLayerForSweep");
+                Assert.IsNotNull(enabler, "корутина включения яруса не найдена — зонд устарел");
+                while (enabler.MoveNext()) { }   // в EditMode кадров нет — корутина считается шагами
+
+                Assert.IsTrue(KvXrSettings.GetQuickLayerVisible(),
+                    "перед сбором инвентаря прогон обязан включить скрытый ярус: иначе его кнопки " +
+                    "выпадают из обхода молча (в шлеме их 13 — в AR они видны, в VR/MR нет)");
+                // САМ ФАКТ, ИЗ-ЗА КОТОРОГО ЯРУС ПОПАДАЕТ В ИНВЕНТАРЬ: канвас `KvXrQuickPanel`
+                // строится только при `KvXrTuning.QuickLayerEnabled` (см. `Start`/`Update` панели).
+                // Настройки одной недостаточно — обязана совпасть и она.
+                Assert.IsTrue(KvXrTuning.QuickLayerEnabled,
+                    "после включения настройки ярус обязан стать активным — иначе панель " +
+                    "KvXrQuickPanel останется собранной и её 13 кнопок снова не будут в инвентаре");
+                Assert.IsTrue(ReadPrivateField<bool>(runtime, "quickLayerForced"),
+                    "прогон обязан помнить, что включал ярус сам — без этого настройку владельца не вернуть");
+
+                InvokePrivate(runtime, "RestoreHiddenQuickLayerForSweep");
+
+                Assert.IsFalse(KvXrSettings.GetQuickLayerVisible(),
+                    "после обхода настройка владельца обязана вернуться: прогон не вправе оставить " +
+                    "второй ярус включённым");
+                Assert.IsFalse(ReadPrivateField<bool>(runtime, "quickLayerForced"),
+                    "восстановление обязано снять признак — повторный вызов не должен трогать настройку");
+            }
+            finally
+            {
+                if (hadLayer) PlayerPrefs.SetInt(KvXrSettings.KeyQuickLayerVisible, layerValue);
+                else PlayerPrefs.DeleteKey(KvXrSettings.KeyQuickLayerVisible);
+                PlayerPrefs.Save();
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        /// <summary>
+        /// ВНЕ ШЛЕМОВЫХ РАСКЛАДОК ЯРУС НЕ ТРОГАЕТСЯ: в `ar`/`pc` панели шлема в обход не входят,
+        /// и включать настройку владельца там незачем. Что ловит: расширение правила на все
+        /// макеты — тогда прогон на планшете менял бы настройку шлема, которой оператор не пользовался.
+        /// </summary>
+        [Test]
+        public void Sweep_DoesNotTouchQuickLayerOutsideHelmetLayouts()
+        {
+            bool hadLayer = PlayerPrefs.HasKey(KvXrSettings.KeyQuickLayerVisible);
+            int layerValue = PlayerPrefs.GetInt(KvXrSettings.KeyQuickLayerVisible, 0);
+            GameObject host = new GameObject("KvUiSweepTests_QuickLayerAr");
+            try
+            {
+                KvXrSettings.SetQuickLayerVisible(false);
+
+                KvUiSweepRuntime runtime = host.AddComponent<KvUiSweepRuntime>();
+                SetPrivateField(runtime, "run", new KvUiSweepRun { Layout = "ar" });
+
+                var enabler = (System.Collections.IEnumerator)InvokePrivate(runtime,
+                    "EnableHiddenQuickLayerForSweep");
+                while (enabler.MoveNext()) { }
+
+                Assert.IsFalse(KvXrSettings.GetQuickLayerVisible(),
+                    "в раскладке ar обход не входит в шлем — настройку второго яруса менять нельзя");
+                Assert.IsFalse(ReadPrivateField<bool>(runtime, "quickLayerForced"),
+                    "вне шлема прогон не должен помнить о «включённом» ярусе");
+            }
+            finally
+            {
+                if (hadLayer) PlayerPrefs.SetInt(KvXrSettings.KeyQuickLayerVisible, layerValue);
+                else PlayerPrefs.DeleteKey(KvXrSettings.KeyQuickLayerVisible);
+                PlayerPrefs.Save();
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        /// <summary>Прочитать приватное поле зонда (те же правила поиска, что и у `SetPrivateField`).</summary>
+        private static T ReadPrivateField<T>(object target, string name)
+        {
+            FieldInfo field = target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsNotNull(field, "поле " + name + " не найдено — зонд устарел");
+            return (T)field.GetValue(target);
+        }
     }
 }
