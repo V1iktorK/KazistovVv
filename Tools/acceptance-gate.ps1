@@ -595,6 +595,7 @@ if (-not $tablet) {
 
     & $Adb -s $tablet.Id shell am force-stop $package 2>&1 | Out-Null
     Start-Sleep -Seconds 3
+    & $Adb -s $tablet.Id logcat -G 16M 2>&1 | Out-Null
     & $Adb -s $tablet.Id logcat -c 2>&1 | Out-Null
     & $Adb -s $tablet.Id shell monkey -p $package -c android.intent.category.LAUNCHER 1 2>&1 | Out-Null
     Start-Sleep -Seconds 35
@@ -701,6 +702,11 @@ if (-not $headset) {
     & $Adb -s $headset.Id shell pm trim-caches 999999999999 2>&1 | Out-Null
     & $Adb -s $headset.Id shell am force-stop $package 2>&1 | Out-Null
     Start-Sleep -Seconds 3
+    # БУФЕР LOGCAT — 16 МБ (добавлено 24.11.2026). Замер: приложение шлёт сотни строк в секунду
+    # (поверхности + трассы стека), и стандартные 256 КБ КРУГОВОГО буфера вытесняли строку
+    # [KvEnv] (печать на 2-й секунде запуска) ЗАДОЛГО до дампа судьи на 60–90-й секунде —
+    # при живом приложении и целом коде судья честно, но неверно говорила «нет строки [KvEnv]».
+    & $Adb -s $headset.Id logcat -G 16M 2>&1 | Out-Null
     & $Adb -s $headset.Id logcat -c 2>&1 | Out-Null
     # БУДИТЬ ОБЯЗАТЕЛЬНО (добавлено тестировщиком 16.11). Шлем без движения уходит в сон, и
     # запуск в спящее устройство молчит: «нет строки [KvEnv]» — хотя код цел (самопрогон с
