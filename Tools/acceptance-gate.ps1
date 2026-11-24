@@ -222,7 +222,20 @@ try {
     $codeCommitTime = [DateTimeOffset]::FromUnixTimeSeconds($codeCommitUnix).LocalDateTime
     $allCode = @(Get-ChildItem -LiteralPath (Join-Path $ProjectPath 'Assets') -Recurse -File -Include *.cs,*.asmdef -ErrorAction SilentlyContinue)
     $shippedCode = @($allCode | Where-Object { $_.FullName -notmatch '[\\/]08_Tests[\\/]' -and $_.FullName -notmatch '[\\/]Editor[\\/]' })
-    $baseline = if ($shippedCode.Count -gt 0) { ($shippedCode | Measure-Object -Property LastWriteTime -Maximum).Maximum } else { $codeCommitTime }
+    # ЧЕТВЁРТАЯ ПРАВКА (24.11.2026). Мутационный прогон (gate-mut) ПЕРЕПИСЫВАЕТ восстановленные
+    # файлы: содержимое не меняется, а LastWriteTime скачет — и любой прогон после мутаций объявлял
+    # APK «устаревшим» без единой реальной правки (замер 24.11: код не менялся с 22.11, а эталон
+    # уехал на 23.11 01:27 — время восстановления файла мутатором). Теперь в эталон идут только
+    # файлы, чьё содержимое РАСХОДИТСЯ с HEAD (git status по Assets/ProjectSettings): у них mtime —
+    # настоящий признак правки. Известное ограничение: «собрал → закоммитил» без пересборки
+    # сверяется временем коммита (codeCommitTime) — это честный компромисс, а не ложь.
+    $dirtyRaw = @(git -C $ProjectPath status --porcelain -- Assets ProjectSettings 2>&1)
+    $dirtyRel = @($dirtyRaw | ForEach-Object { ($_ -replace '^.{3}', '') -replace '"', '' })
+    $dirtyCode = @($shippedCode | Where-Object {
+        $rel = $_.FullName.Substring($ProjectPath.Length).TrimStart('\', '/') -replace '\\', '/'
+        ($dirtyRel | Where-Object { $rel -eq $_ -or $rel -eq ($_ -replace '\\', '/') }).Count -gt 0
+    })
+    $baseline = if ($dirtyCode.Count -gt 0) { ($dirtyCode | Measure-Object -Property LastWriteTime -Maximum).Maximum } else { $codeCommitTime }
 
     $staleList = @()
     foreach ($pair in @(@('VR', $vr), @('AR', $ar))) {
