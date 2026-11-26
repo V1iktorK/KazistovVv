@@ -2223,6 +2223,182 @@
     {
       "key": "cmd.ar.anchor.marker.desc",
       "text": "Tisch und Roboter dauerhaft am QR-Marker verankern: die Szene bleibt im Raum, während das Tablet bewegt wird. Aus — vorheriges Verhalten"
+    },
+    {
+      "key": "blender.shell.title",
+      "text": "KazistovVv · Bediener-Trainer"
+    },
+    {
+      "key": "blender.shell.mode",
+      "text": "Modus: "
+    },
+    {
+      "key": "blender.layout.blender",
+      "text": "Blender"
+    },
+    {
+      "key": "blender.layout.classic",
+      "text": "Klassisch"
+    },
+    {
+      "key": "blender.theme.dark",
+      "text": "Dunkel"
+    },
+    {
+      "key": "blender.theme.light",
+      "text": "Hell"
+    },
+    {
+      "key": "blender.theme.current",
+      "text": "Aktuelles Design: "
+    },
+    {
+      "key": "blender.commands.hint",
+      "text": "Befehlspalette: Strg+K"
+    },
+    {
+      "key": "blender.commands.open",
+      "text": "Befehlspalette öffnen"
+    },
+    {
+      "key": "blender.commands.close",
+      "text": "Palette schließen"
+    },
+    {
+      "key": "blender.joints.live",
+      "text": "Telemetrie aktiv"
+    },
+    {
+      "key": "blender.joints.nodata",
+      "text": "keine Daten: kein Roboter gewählt"
+    },
+    {
+      "key": "blender.toasts.title",
+      "text": "Letzte Meldungen: "
+    },
+    {
+      "key": "blender.queue.take",
+      "text": "Aufgabe aus der Warteschlange"
+    },
+    {
+      "key": "blender.queue.clear",
+      "text": "Warteschlange leeren"
+    },
+    {
+      "key": "blender.queue.count",
+      "text": "Aufgaben in der Warteschlange: "
+    },
+    {
+      "key": "blender.minimap.robot",
+      "text": "Roboter: "
+    },
+    {
+      "key": "blender.minimap.camera",
+      "text": "Kamera: "
+    },
+    {
+      "key": "blender.camera.yaw",
+      "text": "Gieren: "
+    },
+    {
+      "key": "blender.camera.nodata",
+      "text": "keine Daten: Kamera nicht gefunden"
+    },
+    {
+      "key": "blender.timeline.nodata",
+      "text": "keine Daten: kein Szenario läuft"
+    },
+    {
+      "key": "blender.timeline.running",
+      "text": "Szenario: "
+    },
+    {
+      "key": "blender.favorites.pin",
+      "text": "Befehls-ID zum Anheften…"
+    },
+    {
+      "key": "blender.favorites.add",
+      "text": "Anheften"
+    },
+    {
+      "key": "blender.favorites.count",
+      "text": "Angeheftet: "
+    },
+    {
+      "key": "blender.console.count",
+      "text": "Journaleinträge: "
+    },
+    {
+      "key": "blender.panel.zones",
+      "text": "Zonen und Kollisionen"
+    },
+    {
+      "key": "blender.panel.joints",
+      "text": "Gelenke-HUD"
+    },
+    {
+      "key": "blender.panel.minimap",
+      "text": "Minikarte"
+    },
+    {
+      "key": "blender.panel.theme",
+      "text": "Design"
+    },
+    {
+      "key": "blender.panel.hotkeys",
+      "text": "Tastenkürzel"
+    },
+    {
+      "key": "blender.panel.gestures",
+      "text": "Gesten"
+    },
+    {
+      "key": "blender.panel.favorites",
+      "text": "Favoriten"
+    },
+    {
+      "key": "blender.panel.camera",
+      "text": "Kamera-Gizmo"
+    },
+    {
+      "key": "blender.panel.timeline",
+      "text": "Zeitachse"
+    },
+    {
+      "key": "blender.panel.queue",
+      "text": "Aufgabenwarteschlange"
+    },
+    {
+      "key": "blender.panel.console",
+      "text": "Konsole"
+    },
+    {
+      "key": "blender.panel.toasts",
+      "text": "Toasts"
+    },
+    {
+      "key": "blender.panel.commands",
+      "text": "Befehle"
+    },
+    {
+      "key": "cmd.ui.layout.blender",
+      "text": "Anordnung: Klassisch/Blender"
+    },
+    {
+      "key": "cmd.ui.layout.blender.desc",
+      "text": "Wechselt die Interface-Anordnung: klassisch oder die neue Blender-Anordnung mit Glasfenstern und Docks"
+    },
+    {
+      "key": "cmd.ui.toolbar.large",
+      "text": "Große Symbolleisten-Symbole"
+    },
+    {
+      "key": "cmd.ui.toolbar.large.desc",
+      "text": "Modus großer Symbolleisten-Symbole (größere Klickziele) in der Blender-Anordnung"
+    },
+    {
+      "key": "menu.extra.Сценарии",
+      "text": "Szenarien"
     }
   ]
-}
+}

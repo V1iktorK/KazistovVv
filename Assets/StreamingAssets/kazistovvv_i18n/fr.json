@@ -2223,6 +2223,182 @@
     {
       "key": "cmd.ar.anchor.marker.desc",
       "text": "Ancrer la table et le robot au marqueur QR : la scène reste dans l'espace pendant que la tablette bouge. Désactivé — comportement précédent"
+    },
+    {
+      "key": "blender.shell.title",
+      "text": "KazistovVv · Entraîneur d'opérateurs"
+    },
+    {
+      "key": "blender.shell.mode",
+      "text": "Mode : "
+    },
+    {
+      "key": "blender.layout.blender",
+      "text": "Blender"
+    },
+    {
+      "key": "blender.layout.classic",
+      "text": "Classique"
+    },
+    {
+      "key": "blender.theme.dark",
+      "text": "Sombre"
+    },
+    {
+      "key": "blender.theme.light",
+      "text": "Clair"
+    },
+    {
+      "key": "blender.theme.current",
+      "text": "Thème actuel : "
+    },
+    {
+      "key": "blender.commands.hint",
+      "text": "Palette de commandes : Ctrl+K"
+    },
+    {
+      "key": "blender.commands.open",
+      "text": "Ouvrir la palette de commandes"
+    },
+    {
+      "key": "blender.commands.close",
+      "text": "Fermer la palette"
+    },
+    {
+      "key": "blender.joints.live",
+      "text": "télémétrie active"
+    },
+    {
+      "key": "blender.joints.nodata",
+      "text": "aucune donnée : robot non sélectionné"
+    },
+    {
+      "key": "blender.toasts.title",
+      "text": "Messages récents : "
+    },
+    {
+      "key": "blender.queue.take",
+      "text": "Prendre une tâche de la file"
+    },
+    {
+      "key": "blender.queue.clear",
+      "text": "Vider la file"
+    },
+    {
+      "key": "blender.queue.count",
+      "text": "Tâches en file : "
+    },
+    {
+      "key": "blender.minimap.robot",
+      "text": "Robot : "
+    },
+    {
+      "key": "blender.minimap.camera",
+      "text": "Caméra : "
+    },
+    {
+      "key": "blender.camera.yaw",
+      "text": "Lacet : "
+    },
+    {
+      "key": "blender.camera.nodata",
+      "text": "aucune donnée : caméra introuvable"
+    },
+    {
+      "key": "blender.timeline.nodata",
+      "text": "aucune donnée : scénario non lancé"
+    },
+    {
+      "key": "blender.timeline.running",
+      "text": "Scénario : "
+    },
+    {
+      "key": "blender.favorites.pin",
+      "text": "id de commande à épingler…"
+    },
+    {
+      "key": "blender.favorites.add",
+      "text": "Épingler"
+    },
+    {
+      "key": "blender.favorites.count",
+      "text": "Épinglés : "
+    },
+    {
+      "key": "blender.console.count",
+      "text": "Entrées du journal : "
+    },
+    {
+      "key": "blender.panel.zones",
+      "text": "Zones et collisions"
+    },
+    {
+      "key": "blender.panel.joints",
+      "text": "HUD des articulations"
+    },
+    {
+      "key": "blender.panel.minimap",
+      "text": "Minicarte"
+    },
+    {
+      "key": "blender.panel.theme",
+      "text": "Thème"
+    },
+    {
+      "key": "blender.panel.hotkeys",
+      "text": "Raccourcis"
+    },
+    {
+      "key": "blender.panel.gestures",
+      "text": "Gestes"
+    },
+    {
+      "key": "blender.panel.favorites",
+      "text": "Favoris"
+    },
+    {
+      "key": "blender.panel.camera",
+      "text": "Gizmo caméra"
+    },
+    {
+      "key": "blender.panel.timeline",
+      "text": "Chronologie"
+    },
+    {
+      "key": "blender.panel.queue",
+      "text": "File de tâches"
+    },
+    {
+      "key": "blender.panel.console",
+      "text": "Console"
+    },
+    {
+      "key": "blender.panel.toasts",
+      "text": "Notifications"
+    },
+    {
+      "key": "blender.panel.commands",
+      "text": "Commandes"
+    },
+    {
+      "key": "cmd.ui.layout.blender",
+      "text": "Disposition : Classique/Blender"
+    },
+    {
+      "key": "cmd.ui.layout.blender.desc",
+      "text": "Change la disposition de l'interface : classique ou la nouvelle disposition Blender avec fenêtres vitrées et docks"
+    },
+    {
+      "key": "cmd.ui.toolbar.large",
+      "text": "Grandes icônes de la barre"
+    },
+    {
+      "key": "cmd.ui.toolbar.large.desc",
+      "text": "Mode grandes icônes de la barre (cibles de clic plus grandes) dans la disposition Blender"
+    },
+    {
+      "key": "menu.extra.Сценарии",
+      "text": "Scénarios"
     }
   ]
-}
+}

@@ -2223,6 +2223,182 @@
     {
       "key": "cmd.ar.anchor.marker.desc",
       "text": "Anclar la mesa y el robot al marcador QR: la escena permanece en el espacio mientras mueve la tablet. Desactivado — comportamiento anterior"
+    },
+    {
+      "key": "blender.shell.title",
+      "text": "KazistovVv · Entrenador de operadores"
+    },
+    {
+      "key": "blender.shell.mode",
+      "text": "Modo: "
+    },
+    {
+      "key": "blender.layout.blender",
+      "text": "Blender"
+    },
+    {
+      "key": "blender.layout.classic",
+      "text": "Clásico"
+    },
+    {
+      "key": "blender.theme.dark",
+      "text": "Oscuro"
+    },
+    {
+      "key": "blender.theme.light",
+      "text": "Claro"
+    },
+    {
+      "key": "blender.theme.current",
+      "text": "Tema actual: "
+    },
+    {
+      "key": "blender.commands.hint",
+      "text": "Paleta de comandos: Ctrl+K"
+    },
+    {
+      "key": "blender.commands.open",
+      "text": "Abrir paleta de comandos"
+    },
+    {
+      "key": "blender.commands.close",
+      "text": "Cerrar paleta"
+    },
+    {
+      "key": "blender.joints.live",
+      "text": "telemetría activa"
+    },
+    {
+      "key": "blender.joints.nodata",
+      "text": "sin datos: robot no seleccionado"
+    },
+    {
+      "key": "blender.toasts.title",
+      "text": "Mensajes recientes: "
+    },
+    {
+      "key": "blender.queue.take",
+      "text": "Tomar tarea de la cola"
+    },
+    {
+      "key": "blender.queue.clear",
+      "text": "Vaciar la cola"
+    },
+    {
+      "key": "blender.queue.count",
+      "text": "Tareas en cola: "
+    },
+    {
+      "key": "blender.minimap.robot",
+      "text": "Robot: "
+    },
+    {
+      "key": "blender.minimap.camera",
+      "text": "Cámara: "
+    },
+    {
+      "key": "blender.camera.yaw",
+      "text": "Guiñada: "
+    },
+    {
+      "key": "blender.camera.nodata",
+      "text": "sin datos: cámara no encontrada"
+    },
+    {
+      "key": "blender.timeline.nodata",
+      "text": "sin datos: escenario no iniciado"
+    },
+    {
+      "key": "blender.timeline.running",
+      "text": "Escenario: "
+    },
+    {
+      "key": "blender.favorites.pin",
+      "text": "id de comando para fijar…"
+    },
+    {
+      "key": "blender.favorites.add",
+      "text": "Fijar"
+    },
+    {
+      "key": "blender.favorites.count",
+      "text": "Fijados: "
+    },
+    {
+      "key": "blender.console.count",
+      "text": "Entradas de registro: "
+    },
+    {
+      "key": "blender.panel.zones",
+      "text": "Zonas y colisiones"
+    },
+    {
+      "key": "blender.panel.joints",
+      "text": "HUD de articulaciones"
+    },
+    {
+      "key": "blender.panel.minimap",
+      "text": "Minimapa"
+    },
+    {
+      "key": "blender.panel.theme",
+      "text": "Tema"
+    },
+    {
+      "key": "blender.panel.hotkeys",
+      "text": "Atajos"
+    },
+    {
+      "key": "blender.panel.gestures",
+      "text": "Gestos"
+    },
+    {
+      "key": "blender.panel.favorites",
+      "text": "Favoritos"
+    },
+    {
+      "key": "blender.panel.camera",
+      "text": "Gizmo de cámara"
+    },
+    {
+      "key": "blender.panel.timeline",
+      "text": "Línea de tiempo"
+    },
+    {
+      "key": "blender.panel.queue",
+      "text": "Cola de tareas"
+    },
+    {
+      "key": "blender.panel.console",
+      "text": "Consola"
+    },
+    {
+      "key": "blender.panel.toasts",
+      "text": "Avisos"
+    },
+    {
+      "key": "blender.panel.commands",
+      "text": "Comandos"
+    },
+    {
+      "key": "cmd.ui.layout.blender",
+      "text": "Diseño: Clásico/Blender"
+    },
+    {
+      "key": "cmd.ui.layout.blender.desc",
+      "text": "Cambia el diseño de la interfaz: clásico o el nuevo diseño Blender con ventanas de vidrio y acoplamientos"
+    },
+    {
+      "key": "cmd.ui.toolbar.large",
+      "text": "Iconos grandes de la barra"
+    },
+    {
+      "key": "cmd.ui.toolbar.large.desc",
+      "text": "Modo de iconos grandes de la barra (mayores objetivos de clic) en el diseño Blender"
+    },
+    {
+      "key": "menu.extra.Сценарии",
+      "text": "Escenarios"
     }
   ]
-}
+}

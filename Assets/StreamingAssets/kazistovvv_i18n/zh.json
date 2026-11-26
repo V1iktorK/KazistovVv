@@ -2223,6 +2223,182 @@
     {
       "key": "cmd.ar.anchor.marker.desc",
       "text": "用二维码标记固定桌子和机器人: 移动平板时场景保持在空间中。关闭 — 之前的行为。"
+    },
+    {
+      "key": "blender.shell.title",
+      "text": "KazistovVv · 操作员训练器"
+    },
+    {
+      "key": "blender.shell.mode",
+      "text": "模式："
+    },
+    {
+      "key": "blender.layout.blender",
+      "text": "Blender"
+    },
+    {
+      "key": "blender.layout.classic",
+      "text": "经典"
+    },
+    {
+      "key": "blender.theme.dark",
+      "text": "深色"
+    },
+    {
+      "key": "blender.theme.light",
+      "text": "浅色"
+    },
+    {
+      "key": "blender.theme.current",
+      "text": "当前主题："
+    },
+    {
+      "key": "blender.commands.hint",
+      "text": "命令面板：Ctrl+K"
+    },
+    {
+      "key": "blender.commands.open",
+      "text": "打开命令面板"
+    },
+    {
+      "key": "blender.commands.close",
+      "text": "关闭面板"
+    },
+    {
+      "key": "blender.joints.live",
+      "text": "遥测已启用"
+    },
+    {
+      "key": "blender.joints.nodata",
+      "text": "无数据：未选择机器人"
+    },
+    {
+      "key": "blender.toasts.title",
+      "text": "最近消息："
+    },
+    {
+      "key": "blender.queue.take",
+      "text": "从队列取任务"
+    },
+    {
+      "key": "blender.queue.clear",
+      "text": "清空队列"
+    },
+    {
+      "key": "blender.queue.count",
+      "text": "队列中任务："
+    },
+    {
+      "key": "blender.minimap.robot",
+      "text": "机器人："
+    },
+    {
+      "key": "blender.minimap.camera",
+      "text": "相机："
+    },
+    {
+      "key": "blender.camera.yaw",
+      "text": "偏航："
+    },
+    {
+      "key": "blender.camera.nodata",
+      "text": "无数据：未找到相机"
+    },
+    {
+      "key": "blender.timeline.nodata",
+      "text": "无数据：场景未运行"
+    },
+    {
+      "key": "blender.timeline.running",
+      "text": "场景："
+    },
+    {
+      "key": "blender.favorites.pin",
+      "text": "要固定的命令 id…"
+    },
+    {
+      "key": "blender.favorites.add",
+      "text": "固定"
+    },
+    {
+      "key": "blender.favorites.count",
+      "text": "已固定："
+    },
+    {
+      "key": "blender.console.count",
+      "text": "日志条目："
+    },
+    {
+      "key": "blender.panel.zones",
+      "text": "区域与碰撞"
+    },
+    {
+      "key": "blender.panel.joints",
+      "text": "关节 HUD"
+    },
+    {
+      "key": "blender.panel.minimap",
+      "text": "小地图"
+    },
+    {
+      "key": "blender.panel.theme",
+      "text": "主题"
+    },
+    {
+      "key": "blender.panel.hotkeys",
+      "text": "快捷键"
+    },
+    {
+      "key": "blender.panel.gestures",
+      "text": "手势"
+    },
+    {
+      "key": "blender.panel.favorites",
+      "text": "收藏夹"
+    },
+    {
+      "key": "blender.panel.camera",
+      "text": "相机坐标轴"
+    },
+    {
+      "key": "blender.panel.timeline",
+      "text": "时间线"
+    },
+    {
+      "key": "blender.panel.queue",
+      "text": "任务队列"
+    },
+    {
+      "key": "blender.panel.console",
+      "text": "控制台"
+    },
+    {
+      "key": "blender.panel.toasts",
+      "text": "通知"
+    },
+    {
+      "key": "blender.panel.commands",
+      "text": "命令"
+    },
+    {
+      "key": "cmd.ui.layout.blender",
+      "text": "布局：经典/Blender"
+    },
+    {
+      "key": "cmd.ui.layout.blender.desc",
+      "text": "切换界面布局：经典布局或带玻璃窗口和停靠栏的新 Blender 布局"
+    },
+    {
+      "key": "cmd.ui.toolbar.large",
+      "text": "大号工具栏图标"
+    },
+    {
+      "key": "cmd.ui.toolbar.large.desc",
+      "text": "Blender 布局中的大号工具栏图标模式（更大的点击目标）"
+    },
+    {
+      "key": "menu.extra.Сценарии",
+      "text": "场景"
     }
   ]
-}
+}

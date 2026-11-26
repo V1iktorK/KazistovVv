@@ -2223,6 +2223,182 @@
     {
       "key": "cmd.ar.anchor.marker.desc",
       "text": "Keep the table and robot anchored to the QR marker: the scene stays in space while the tablet moves. Off — previous behavior"
+    },
+    {
+      "key": "blender.shell.title",
+      "text": "KazistovVv · Operator trainer"
+    },
+    {
+      "key": "blender.shell.mode",
+      "text": "Mode: "
+    },
+    {
+      "key": "blender.layout.blender",
+      "text": "Blender"
+    },
+    {
+      "key": "blender.layout.classic",
+      "text": "Classic"
+    },
+    {
+      "key": "blender.theme.dark",
+      "text": "Dark"
+    },
+    {
+      "key": "blender.theme.light",
+      "text": "Light"
+    },
+    {
+      "key": "blender.theme.current",
+      "text": "Current theme: "
+    },
+    {
+      "key": "blender.commands.hint",
+      "text": "Command palette: Ctrl+K"
+    },
+    {
+      "key": "blender.commands.open",
+      "text": "Open command palette"
+    },
+    {
+      "key": "blender.commands.close",
+      "text": "Close palette"
+    },
+    {
+      "key": "blender.joints.live",
+      "text": "telemetry active"
+    },
+    {
+      "key": "blender.joints.nodata",
+      "text": "no data: no robot selected"
+    },
+    {
+      "key": "blender.toasts.title",
+      "text": "Recent messages: "
+    },
+    {
+      "key": "blender.queue.take",
+      "text": "Take task from queue"
+    },
+    {
+      "key": "blender.queue.clear",
+      "text": "Clear queue"
+    },
+    {
+      "key": "blender.queue.count",
+      "text": "Tasks in queue: "
+    },
+    {
+      "key": "blender.minimap.robot",
+      "text": "Robot: "
+    },
+    {
+      "key": "blender.minimap.camera",
+      "text": "Camera: "
+    },
+    {
+      "key": "blender.camera.yaw",
+      "text": "Yaw: "
+    },
+    {
+      "key": "blender.camera.nodata",
+      "text": "no data: camera not found"
+    },
+    {
+      "key": "blender.timeline.nodata",
+      "text": "no data: no scenario running"
+    },
+    {
+      "key": "blender.timeline.running",
+      "text": "Scenario: "
+    },
+    {
+      "key": "blender.favorites.pin",
+      "text": "command id to pin…"
+    },
+    {
+      "key": "blender.favorites.add",
+      "text": "Pin"
+    },
+    {
+      "key": "blender.favorites.count",
+      "text": "Pinned: "
+    },
+    {
+      "key": "blender.console.count",
+      "text": "Journal entries: "
+    },
+    {
+      "key": "blender.panel.zones",
+      "text": "Zones and collisions"
+    },
+    {
+      "key": "blender.panel.joints",
+      "text": "Joints HUD"
+    },
+    {
+      "key": "blender.panel.minimap",
+      "text": "Minimap"
+    },
+    {
+      "key": "blender.panel.theme",
+      "text": "Theme"
+    },
+    {
+      "key": "blender.panel.hotkeys",
+      "text": "Hotkeys"
+    },
+    {
+      "key": "blender.panel.gestures",
+      "text": "Gestures"
+    },
+    {
+      "key": "blender.panel.favorites",
+      "text": "Favorites"
+    },
+    {
+      "key": "blender.panel.camera",
+      "text": "Camera gizmo"
+    },
+    {
+      "key": "blender.panel.timeline",
+      "text": "Timeline"
+    },
+    {
+      "key": "blender.panel.queue",
+      "text": "Task queue"
+    },
+    {
+      "key": "blender.panel.console",
+      "text": "Console"
+    },
+    {
+      "key": "blender.panel.toasts",
+      "text": "Toasts"
+    },
+    {
+      "key": "blender.panel.commands",
+      "text": "Commands"
+    },
+    {
+      "key": "cmd.ui.layout.blender",
+      "text": "Layout: Classic/Blender"
+    },
+    {
+      "key": "cmd.ui.layout.blender.desc",
+      "text": "Switches the interface layout: classic or the new Blender layout with glass windows and docks"
+    },
+    {
+      "key": "cmd.ui.toolbar.large",
+      "text": "Large toolbar icons"
+    },
+    {
+      "key": "cmd.ui.toolbar.large.desc",
+      "text": "Large toolbar icon mode (bigger click targets) in the Blender layout"
+    },
+    {
+      "key": "menu.extra.Сценарии",
+      "text": "Scenarios"
     }
   ]
-}
+}

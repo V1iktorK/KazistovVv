@@ -2223,6 +2223,182 @@
     {
       "key": "cmd.ar.anchor.marker.desc",
       "text": "QR マーカーでテーブルとロボットを固定: タブレットを動かしてもシーンは空間に留まります。OFF — 以前の動作。"
+    },
+    {
+      "key": "blender.shell.title",
+      "text": "KazistovVv · オペレーター訓練器"
+    },
+    {
+      "key": "blender.shell.mode",
+      "text": "モード："
+    },
+    {
+      "key": "blender.layout.blender",
+      "text": "Blender"
+    },
+    {
+      "key": "blender.layout.classic",
+      "text": "クラシック"
+    },
+    {
+      "key": "blender.theme.dark",
+      "text": "ダーク"
+    },
+    {
+      "key": "blender.theme.light",
+      "text": "ライト"
+    },
+    {
+      "key": "blender.theme.current",
+      "text": "現在のテーマ："
+    },
+    {
+      "key": "blender.commands.hint",
+      "text": "コマンドパレット：Ctrl+K"
+    },
+    {
+      "key": "blender.commands.open",
+      "text": "コマンドパレットを開く"
+    },
+    {
+      "key": "blender.commands.close",
+      "text": "パレットを閉じる"
+    },
+    {
+      "key": "blender.joints.live",
+      "text": "テレメトリ有効"
+    },
+    {
+      "key": "blender.joints.nodata",
+      "text": "データなし：ロボット未選択"
+    },
+    {
+      "key": "blender.toasts.title",
+      "text": "最近のメッセージ："
+    },
+    {
+      "key": "blender.queue.take",
+      "text": "キューからタスクを取得"
+    },
+    {
+      "key": "blender.queue.clear",
+      "text": "キューをクリア"
+    },
+    {
+      "key": "blender.queue.count",
+      "text": "キュー内のタスク："
+    },
+    {
+      "key": "blender.minimap.robot",
+      "text": "ロボット："
+    },
+    {
+      "key": "blender.minimap.camera",
+      "text": "カメラ："
+    },
+    {
+      "key": "blender.camera.yaw",
+      "text": "ヨー："
+    },
+    {
+      "key": "blender.camera.nodata",
+      "text": "データなし：カメラが見つかりません"
+    },
+    {
+      "key": "blender.timeline.nodata",
+      "text": "データなし：シナリオ未実行"
+    },
+    {
+      "key": "blender.timeline.running",
+      "text": "シナリオ："
+    },
+    {
+      "key": "blender.favorites.pin",
+      "text": "ピン留めするコマンド id…"
+    },
+    {
+      "key": "blender.favorites.add",
+      "text": "ピン留め"
+    },
+    {
+      "key": "blender.favorites.count",
+      "text": "ピン留め済み："
+    },
+    {
+      "key": "blender.console.count",
+      "text": "ジャーナル記録："
+    },
+    {
+      "key": "blender.panel.zones",
+      "text": "ゾーンと衝突"
+    },
+    {
+      "key": "blender.panel.joints",
+      "text": "関節 HUD"
+    },
+    {
+      "key": "blender.panel.minimap",
+      "text": "ミニマップ"
+    },
+    {
+      "key": "blender.panel.theme",
+      "text": "テーマ"
+    },
+    {
+      "key": "blender.panel.hotkeys",
+      "text": "ホットキー"
+    },
+    {
+      "key": "blender.panel.gestures",
+      "text": "ジェスチャー"
+    },
+    {
+      "key": "blender.panel.favorites",
+      "text": "お気に入り"
+    },
+    {
+      "key": "blender.panel.camera",
+      "text": "カメラギズモ"
+    },
+    {
+      "key": "blender.panel.timeline",
+      "text": "タイムライン"
+    },
+    {
+      "key": "blender.panel.queue",
+      "text": "タスクキュー"
+    },
+    {
+      "key": "blender.panel.console",
+      "text": "コンソール"
+    },
+    {
+      "key": "blender.panel.toasts",
+      "text": "トースト"
+    },
+    {
+      "key": "blender.panel.commands",
+      "text": "コマンド"
+    },
+    {
+      "key": "cmd.ui.layout.blender",
+      "text": "レイアウト：クラシック/Blender"
+    },
+    {
+      "key": "cmd.ui.layout.blender.desc",
+      "text": "インターフェースのレイアウトを切り替え：クラシックまたはガラス風ウィンドウとドック付きの新 Blender レイアウト"
+    },
+    {
+      "key": "cmd.ui.toolbar.large",
+      "text": "ツールバーの大きなアイコン"
+    },
+    {
+      "key": "cmd.ui.toolbar.large.desc",
+      "text": "Blender レイアウトのツールバー大きなアイコンモード（クリック領域が広い）"
+    },
+    {
+      "key": "menu.extra.Сценарии",
+      "text": "シナリオ"
     }
   ]
-}
+}

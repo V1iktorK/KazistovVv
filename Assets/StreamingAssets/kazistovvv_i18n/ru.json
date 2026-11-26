@@ -2223,6 +2223,182 @@
     {
       "key": "cmd.ar.anchor.marker.desc",
       "text": "Непрерывно закреплять стол и робота по QR-маркеру: сцена стоит в пространстве, пока двигают планшет. Выкл — прежнее поведение"
+    },
+    {
+      "key": "blender.shell.title",
+      "text": "KazistovVv · Тренажёр операторов"
+    },
+    {
+      "key": "blender.shell.mode",
+      "text": "Режим: "
+    },
+    {
+      "key": "blender.layout.blender",
+      "text": "Blender"
+    },
+    {
+      "key": "blender.layout.classic",
+      "text": "Классика"
+    },
+    {
+      "key": "blender.theme.dark",
+      "text": "Тёмная"
+    },
+    {
+      "key": "blender.theme.light",
+      "text": "Светлая"
+    },
+    {
+      "key": "blender.theme.current",
+      "text": "Текущая тема: "
+    },
+    {
+      "key": "blender.commands.hint",
+      "text": "Палитра команд: Ctrl+K"
+    },
+    {
+      "key": "blender.commands.open",
+      "text": "Открыть палитру команд"
+    },
+    {
+      "key": "blender.commands.close",
+      "text": "Закрыть палитру"
+    },
+    {
+      "key": "blender.joints.live",
+      "text": "телеметрия активна"
+    },
+    {
+      "key": "blender.joints.nodata",
+      "text": "нет данных: робот не выбран"
+    },
+    {
+      "key": "blender.toasts.title",
+      "text": "Последние сообщения: "
+    },
+    {
+      "key": "blender.queue.take",
+      "text": "Взять задачу из очереди"
+    },
+    {
+      "key": "blender.queue.clear",
+      "text": "Очистить очередь"
+    },
+    {
+      "key": "blender.queue.count",
+      "text": "Задач в очереди: "
+    },
+    {
+      "key": "blender.minimap.robot",
+      "text": "Робот: "
+    },
+    {
+      "key": "blender.minimap.camera",
+      "text": "Камера: "
+    },
+    {
+      "key": "blender.camera.yaw",
+      "text": "Рыскание: "
+    },
+    {
+      "key": "blender.camera.nodata",
+      "text": "нет данных: камера не найдена"
+    },
+    {
+      "key": "blender.timeline.nodata",
+      "text": "нет данных: сценарий не запущен"
+    },
+    {
+      "key": "blender.timeline.running",
+      "text": "Сценарий: "
+    },
+    {
+      "key": "blender.favorites.pin",
+      "text": "id команды для закрепления…"
+    },
+    {
+      "key": "blender.favorites.add",
+      "text": "Закрепить"
+    },
+    {
+      "key": "blender.favorites.count",
+      "text": "Закреплено: "
+    },
+    {
+      "key": "blender.console.count",
+      "text": "Записей журнала: "
+    },
+    {
+      "key": "blender.panel.zones",
+      "text": "Зоны и коллизии"
+    },
+    {
+      "key": "blender.panel.joints",
+      "text": "Суставы HUD"
+    },
+    {
+      "key": "blender.panel.minimap",
+      "text": "Миникарта"
+    },
+    {
+      "key": "blender.panel.theme",
+      "text": "Тема"
+    },
+    {
+      "key": "blender.panel.hotkeys",
+      "text": "Горячие клавиши"
+    },
+    {
+      "key": "blender.panel.gestures",
+      "text": "Жесты"
+    },
+    {
+      "key": "blender.panel.favorites",
+      "text": "Избранное"
+    },
+    {
+      "key": "blender.panel.camera",
+      "text": "Камера-гизмо"
+    },
+    {
+      "key": "blender.panel.timeline",
+      "text": "Таймлайн"
+    },
+    {
+      "key": "blender.panel.queue",
+      "text": "Очередь задач"
+    },
+    {
+      "key": "blender.panel.console",
+      "text": "Консоль"
+    },
+    {
+      "key": "blender.panel.toasts",
+      "text": "Тосты"
+    },
+    {
+      "key": "blender.panel.commands",
+      "text": "Команды"
+    },
+    {
+      "key": "cmd.ui.layout.blender",
+      "text": "Раскладка: Классика/Blender"
+    },
+    {
+      "key": "cmd.ui.layout.blender.desc",
+      "text": "Переключает раскладку интерфейса: классическая или новая Blender со стеклянными окнами и доками"
+    },
+    {
+      "key": "cmd.ui.toolbar.large",
+      "text": "Крупные иконки тулбара"
+    },
+    {
+      "key": "cmd.ui.toolbar.large.desc",
+      "text": "Режим крупных иконок тулбара (крупные цели нажатия) в раскладке Blender"
+    },
+    {
+      "key": "menu.extra.Сценарии",
+      "text": "Сценарии"
     }
   ]
-}
+}
