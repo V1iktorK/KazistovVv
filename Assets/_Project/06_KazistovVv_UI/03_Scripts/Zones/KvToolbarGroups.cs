@@ -127,7 +127,10 @@ namespace KazistovVvUI
                     "view.theme", "lang.cycle", "ui.settings", "ui.palette",
                     "help.hotkeys", "ui.resetlayout", "features.open", "startmenu.show",
                     "tut.toggle", "help.open", "tut.restart", "help.about",
-                    "ui.access"),
+                    "ui.access",
+                    // ВОЛНА BLENDER-РАСКЛАДКИ: переключатель раскладки (Классика/Blender)
+                    // и режим крупных иконок тулбара (крупные цели нажатия).
+                    "ui.layout.blender", "ui.toolbar.large"),
 
                 new KvToolbarGroup("misc", "Прочее", "more",
                     "eta.toggle", "presentation.toggle", "log.open", "demo.quick",

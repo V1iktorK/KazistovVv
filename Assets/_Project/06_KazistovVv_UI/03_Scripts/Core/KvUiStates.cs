@@ -182,11 +182,19 @@ namespace KazistovVvUI
             ReportError(condition, stackTrace);
         }
 
+        /// <summary>
+        /// Сообщение ПОКАЗАНО как отчёт (механизм Report). Событие для новых поверхностей
+        /// (тосты раскладки Blender): плашка ошибок остаётся как была, подписчики получают
+        /// тот же текст отчёта.
+        /// </summary>
+        public static event Action<string> Reported;
+
         /// <summary>Показать ошибку (из лога Unity или из кода).</summary>
         public static void ReportError(string message, string details)
         {
             ErrorCount++;
             LastError = message;
+            if (Reported != null) Reported(message);
             if (instance == null) return;
             if (!KvSettings.ErrorPlate) return;
             instance.ShowError(message, details);

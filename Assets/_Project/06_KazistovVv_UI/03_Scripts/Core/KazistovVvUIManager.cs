@@ -1198,6 +1198,10 @@ namespace KazistovVvUI
         {
             KvCommands.Clear();
 
+            // РАСКЛАДКА BLENDER (утверждённый дизайн «Blender-раскладка + стеклянные окна»):
+            // команды «Раскладка: Классика/Blender» и «Крупные иконки тулбара» (группа ui).
+            KvBlenderCommands.Register();
+
             // --- Робот/инструменты
             KvCommands.Register(new KvCommand
             {
